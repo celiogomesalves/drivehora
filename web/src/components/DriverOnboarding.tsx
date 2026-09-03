@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import type { UserProfile, DriverProfile, DriverVerificationStatus } from '../types/auth';
 import { 
   ShieldCheck, Car, FileText, Camera, CheckCircle2, 
-  UploadCloud, Check, Sparkles, RefreshCw
+  UploadCloud, Check, RefreshCw, AlertCircle, Eye
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { formatPhone, formatCpf, formatPlate } from '../utils/formatters';
+import { formatPhone, formatCpf, formatPlate, validateCpf, validateCnh, validatePlate, validatePhone } from '../utils/formatters';
 import { dbSaveDriverProfile } from '../services/dbService';
 
 interface DriverOnboardingProps {
@@ -30,16 +30,99 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
   const [vehiclePlate, setVehiclePlate] = useState(formatPlate(initialProfile?.vehiclePlate || 'BRA-2E19'));
   const [vehicleColor, setVehicleColor] = useState(initialProfile?.vehicleColor || 'Preto');
 
-  // Documentos
-  const [cnhUploaded, setCnhUploaded] = useState(Boolean(initialProfile?.cnhUrl));
-  const [crlvUploaded, setCrlvUploaded] = useState(Boolean(initialProfile?.crlvUrl));
-  const [selfieUploaded, setSelfieUploaded] = useState(Boolean(initialProfile?.selfieUrl));
+  // Uploads Reais de Documentos (Base64 / Nome do Arquivo)
+  const [cnhFileName, setCnhFileName] = useState<string>(initialProfile?.cnhUrl ? 'cnh_anexada.jpg' : '');
+  const [cnhUrl, setCnhUrl] = useState<string>(initialProfile?.cnhUrl || '');
+
+  const [crlvFileName, setCrlvFileName] = useState<string>(initialProfile?.crlvUrl ? 'crlv_anexado.jpg' : '');
+  const [crlvUrl, setCrlvUrl] = useState<string>(initialProfile?.crlvUrl || '');
+
+  const [selfieFileName, setSelfieFileName] = useState<string>(initialProfile?.selfieUrl ? 'selfie_biometria.jpg' : '');
+  const [selfieUrl, setSelfieUrl] = useState<string>(initialProfile?.selfieUrl || '');
 
   // Status
   const [verificationStatus, setVerificationStatus] = useState<DriverVerificationStatus>(
     initialProfile?.verificationStatus || 'pending_docs'
   );
   const [isSaving, setIsSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Leitor de arquivo real para Base64
+  const handleFileUpload = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    setFileName: (name: string) => void,
+    setUrl: (url: string) => void
+  ) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 10 * 1024 * 1024) {
+        alert('O arquivo selecionado é muito grande. O limite máximo é 10MB.');
+        return;
+      }
+      setFileName(file.name);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setUrl(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Validação da Etapa 1
+  const handleStep1Submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage(null);
+
+    if (!validateCpf(cpf)) {
+      setErrorMessage('CPF inválido. Insira um número de CPF válido.');
+      return;
+    }
+
+    if (!validatePhone(phone)) {
+      setErrorMessage('Telefone inválido. Insira um número válido com DDD.');
+      return;
+    }
+
+    if (!validateCnh(cnhNumber)) {
+      setErrorMessage('Registro de CNH inválido. Verifique o número de 11 dígitos da sua Carteira Nacional de Habilitação.');
+      return;
+    }
+
+    setStep(2);
+  };
+
+  // Validação da Etapa 2
+  const handleStep2Submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage(null);
+
+    if (!validatePlate(vehiclePlate)) {
+      setErrorMessage('Placa do veículo inválida. Insira uma placa válida no padrão Mercosul (ABC1D23) ou Tradicional (ABC-1234).');
+      return;
+    }
+
+    const yearNum = parseInt(vehicleYear.replace(/\D/g, ''));
+    const currentYear = new Date().getFullYear();
+    if (isNaN(yearNum) || yearNum < 2010 || yearNum > currentYear + 1) {
+      setErrorMessage(`Ano do veículo inválido. A plataforma aceita veículos fabricados a partir de 2010 até ${currentYear + 1}.`);
+      return;
+    }
+
+    setStep(3);
+  };
+
+  // Validação e Envio da Etapa 3
+  const handleStep3Submit = async () => {
+    setErrorMessage(null);
+
+    if (!cnhUrl || !crlvUrl || !selfieUrl) {
+      setErrorMessage('Documentação incompleta. É obrigatório anexar os 3 arquivos: Foto da CNH, Documento do Veículo (CRLV) e Selfie Facial.');
+      return;
+    }
+
+    setStep(4);
+    await handleFinishRegistration('under_review');
+  };
 
   const handleFinishRegistration = async (status: DriverVerificationStatus) => {
     setIsSaving(true);
@@ -55,9 +138,9 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
       vehicleYear,
       vehiclePlate,
       vehicleColor,
-      cnhUrl: cnhUploaded ? 'https://drivehora.app/docs/cnh_mock.jpg' : undefined,
-      crlvUrl: crlvUploaded ? 'https://drivehora.app/docs/crlv_mock.jpg' : undefined,
-      selfieUrl: selfieUploaded ? 'https://drivehora.app/docs/selfie_mock.jpg' : undefined,
+      cnhUrl: cnhUrl || undefined,
+      crlvUrl: crlvUrl || undefined,
+      selfieUrl: selfieUrl || undefined,
       verificationStatus: status,
       rating: initialProfile?.rating || 5.0,
       totalRides: initialProfile?.totalRides || 0
@@ -93,9 +176,9 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
           }}>
             <ShieldCheck size={32} />
           </div>
-          <h2 style={{ fontSize: '1.45rem', fontWeight: 800 }}>Credenciamento de Motorista</h2>
+          <h2 style={{ fontSize: '1.45rem', fontWeight: 800 }}>Credenciamento Oficial de Motorista</h2>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            Validação de CNH, Veículo e Biometria para segurança de todos no banco de dados
+            Validação rigorosa de CNH (EAR), CRLV do Veículo e Biometria Facial Antifraude
           </p>
 
           {/* Stepper de progresso */}
@@ -133,14 +216,33 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
           </div>
         </div>
 
+        {/* Alerta de Erro de Validação */}
+        {errorMessage && (
+          <div style={{
+            background: 'rgba(239, 68, 68, 0.15)',
+            border: '1px solid rgba(239, 68, 68, 0.4)',
+            color: '#fca5a5',
+            padding: '12px 16px',
+            borderRadius: '12px',
+            fontSize: '0.85rem',
+            marginBottom: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px'
+          }}>
+            <AlertCircle size={18} style={{ flexShrink: 0 }} />
+            <span>{errorMessage}</span>
+          </div>
+        )}
+
         {/* ETAPA 1: DADOS DA CNH */}
         {step === 1 && (
-          <form onSubmit={(e) => { e.preventDefault(); setStep(2); }} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#10b981' }}>1. Dados Pessoais e CNH</h3>
+          <form onSubmit={handleStep1Submit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#10b981' }}>1. Dados Pessoais e CNH com Validação Oficial</h3>
             
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div className="input-group">
-                <label>CPF</label>
+                <label>CPF do Motorista</label>
                 <input
                   type="text"
                   className="custom-input"
@@ -168,7 +270,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px', gap: '12px' }}>
               <div className="input-group">
-                <label>Número do Registro da CNH</label>
+                <label>Número do Registro da CNH (11 dígitos)</label>
                 <input
                   type="text"
                   className="custom-input"
@@ -204,23 +306,23 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
               fontSize: '0.8rem',
               color: '#d1fae5'
             }}>
-              ℹ️ A CNH deve possuir a observação <strong>EAR (Exerce Atividade Remunerada)</strong> para conformidade legal.
+              ℹ️ A CNH deve ser válida, autêntica e possuir a observação <strong>EAR (Exerce Atividade Remunerada)</strong>.
             </div>
 
             <button type="submit" className="btn-success" style={{ width: '100%', padding: '14px', marginTop: '8px' }}>
-              Avançar para Dados do Veículo ➔
+              Validar CNH e Avançar para Dados do Veículo ➔
             </button>
           </form>
         )}
 
         {/* ETAPA 2: DADOS DO VEÍCULO */}
         {step === 2 && (
-          <form onSubmit={(e) => { e.preventDefault(); setStep(3); }} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <form onSubmit={handleStep2Submit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#10b981' }}>2. Dados do Veículo</h3>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div className="input-group">
-                <label>Marca</label>
+                <label>Marca do Veículo</label>
                 <input
                   type="text"
                   className="custom-input"
@@ -246,7 +348,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
               <div className="input-group">
-                <label>Ano</label>
+                <label>Ano de Fabricação</label>
                 <input
                   type="text"
                   className="custom-input"
@@ -289,98 +391,131 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
                 Voltar
               </button>
               <button type="submit" className="btn-success" style={{ flex: 2 }}>
-                Avançar para Envio de Documentos ➔
+                Validar Veículo e Avançar para Uploads ➔
               </button>
             </div>
           </form>
         )}
 
-        {/* ETAPA 3: UPLOAD DE DOCUMENTOS & SELFIE */}
+        {/* ETAPA 3: UPLOAD REAL DE DOCUMENTOS & SELFIE */}
         {step === 3 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#10b981' }}>3. Envio de Documentos e Validação Biométrica</h3>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#10b981' }}>
+              3. Upload Obrigatório de Documentos e Biometria Facial
+            </h3>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+              Selecione arquivos reais (fotos nítidas em JPG/PNG ou PDF) do seu dispositivo:
+            </p>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               
               {/* Card CNH */}
               <div style={{
                 background: 'rgba(15, 23, 42, 0.8)',
-                border: `1px solid ${cnhUploaded ? '#10b981' : 'var(--border-subtle)'}`,
+                border: `1px solid ${cnhUrl ? '#10b981' : 'var(--border-subtle)'}`,
                 padding: '16px',
                 borderRadius: '14px',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'space-between'
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '12px'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <FileText size={24} color={cnhUploaded ? '#10b981' : '#818cf8'} />
+                  <FileText size={24} color={cnhUrl ? '#10b981' : '#818cf8'} />
                   <div>
-                    <strong style={{ fontSize: '0.9rem' }}>Foto da CNH (Frente e Verso)</strong>
-                    <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Documento aberto e legível</p>
+                    <strong style={{ fontSize: '0.9rem' }}>Foto da CNH Aberta (Frente e Verso) *</strong>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                      {cnhFileName ? `Arquivo: ${cnhFileName}` : 'Formatos aceitos: JPG, PNG, PDF'}
+                    </p>
                   </div>
                 </div>
-                <button
-                  onClick={() => setCnhUploaded(!cnhUploaded)}
-                  className={cnhUploaded ? 'btn-success' : 'btn-outline'}
-                  style={{ padding: '8px 14px', fontSize: '0.8rem' }}
-                >
-                  {cnhUploaded ? <Check size={14} /> : <UploadCloud size={14} />}
-                  <span>{cnhUploaded ? 'Anexado ✅' : 'Anexar'}</span>
-                </button>
+
+                <label className={cnhUrl ? 'btn-success' : 'btn-outline'} style={{ padding: '8px 16px', fontSize: '0.8rem', cursor: 'pointer' }}>
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    style={{ display: 'none' }}
+                    onChange={(e) => handleFileUpload(e, setCnhFileName, setCnhUrl)}
+                  />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {cnhUrl ? <Check size={14} /> : <UploadCloud size={14} />}
+                    <span>{cnhUrl ? 'Arquivo Carregado ✅' : 'Selecionar Arquivo'}</span>
+                  </div>
+                </label>
               </div>
 
               {/* Card CRLV */}
               <div style={{
                 background: 'rgba(15, 23, 42, 0.8)',
-                border: `1px solid ${crlvUploaded ? '#10b981' : 'var(--border-subtle)'}`,
+                border: `1px solid ${crlvUrl ? '#10b981' : 'var(--border-subtle)'}`,
                 padding: '16px',
                 borderRadius: '14px',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'space-between'
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '12px'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <Car size={24} color={crlvUploaded ? '#10b981' : '#818cf8'} />
+                  <Car size={24} color={crlvUrl ? '#10b981' : '#818cf8'} />
                   <div>
-                    <strong style={{ fontSize: '0.9rem' }}>Documento do Veículo (CRLV-e)</strong>
-                    <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Licenciamento do ano em exercício</p>
+                    <strong style={{ fontSize: '0.9rem' }}>Documento do Veículo (CRLV-e) *</strong>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                      {crlvFileName ? `Arquivo: ${crlvFileName}` : 'Licenciamento do ano em exercício'}
+                    </p>
                   </div>
                 </div>
-                <button
-                  onClick={() => setCrlvUploaded(!crlvUploaded)}
-                  className={crlvUploaded ? 'btn-success' : 'btn-outline'}
-                  style={{ padding: '8px 14px', fontSize: '0.8rem' }}
-                >
-                  {crlvUploaded ? <Check size={14} /> : <UploadCloud size={14} />}
-                  <span>{crlvUploaded ? 'Anexado ✅' : 'Anexar'}</span>
-                </button>
+
+                <label className={crlvUrl ? 'btn-success' : 'btn-outline'} style={{ padding: '8px 16px', fontSize: '0.8rem', cursor: 'pointer' }}>
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    style={{ display: 'none' }}
+                    onChange={(e) => handleFileUpload(e, setCrlvFileName, setCrlvUrl)}
+                  />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {crlvUrl ? <Check size={14} /> : <UploadCloud size={14} />}
+                    <span>{crlvUrl ? 'Arquivo Carregado ✅' : 'Selecionar Arquivo'}</span>
+                  </div>
+                </label>
               </div>
 
               {/* Card Selfie com CNH */}
               <div style={{
                 background: 'rgba(15, 23, 42, 0.8)',
-                border: `1px solid ${selfieUploaded ? '#10b981' : 'var(--border-subtle)'}`,
+                border: `1px solid ${selfieUrl ? '#10b981' : 'var(--border-subtle)'}`,
                 padding: '16px',
                 borderRadius: '14px',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'space-between'
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '12px'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <Camera size={24} color={selfieUploaded ? '#10b981' : '#818cf8'} />
+                  <Camera size={24} color={selfieUrl ? '#10b981' : '#818cf8'} />
                   <div>
-                    <strong style={{ fontSize: '0.9rem' }}>Selfie com a CNH em mãos</strong>
-                    <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Reconhecimento facial antifraude</p>
+                    <strong style={{ fontSize: '0.9rem' }}>Selfie Facial segurando a CNH *</strong>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                      {selfieFileName ? `Arquivo: ${selfieFileName}` : 'Reconhecimento facial com documento visível'}
+                    </p>
                   </div>
                 </div>
-                <button
-                  onClick={() => setSelfieUploaded(!selfieUploaded)}
-                  className={selfieUploaded ? 'btn-success' : 'btn-outline'}
-                  style={{ padding: '8px 14px', fontSize: '0.8rem' }}
-                >
-                  {selfieUploaded ? <Check size={14} /> : <Camera size={14} />}
-                  <span>{selfieUploaded ? 'Capturada ✅' : 'Tirar Foto'}</span>
-                </button>
+
+                <label className={selfieUrl ? 'btn-success' : 'btn-outline'} style={{ padding: '8px 16px', fontSize: '0.8rem', cursor: 'pointer' }}>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="user"
+                    style={{ display: 'none' }}
+                    onChange={(e) => handleFileUpload(e, setSelfieFileName, setSelfieUrl)}
+                  />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {selfieUrl ? <Check size={14} /> : <Camera size={14} />}
+                    <span>{selfieUrl ? 'Foto Capturada ✅' : 'Tirar Foto / Carregar'}</span>
+                  </div>
+                </label>
               </div>
 
             </div>
@@ -391,22 +526,19 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
               </button>
               <button
                 type="button"
-                disabled={isSaving}
-                onClick={async () => {
-                  setStep(4);
-                  await handleFinishRegistration('under_review');
-                }}
+                disabled={!cnhUrl || !crlvUrl || !selfieUrl || isSaving}
+                onClick={handleStep3Submit}
                 className="btn-success"
-                style={{ flex: 2 }}
+                style={{ flex: 2, opacity: (!cnhUrl || !crlvUrl || !selfieUrl) ? 0.6 : 1 }}
               >
                 {isSaving ? <RefreshCw size={14} className="animate-spin" /> : null}
-                <span>{isSaving ? 'Gravando...' : 'Enviar Documentos para Análise ➔'}</span>
+                <span>{isSaving ? 'Enviando Documentos...' : 'Enviar Documentos para Validação ➔'}</span>
               </button>
             </div>
           </div>
         )}
 
-        {/* ETAPA 4: STATUS DA ANÁLISE */}
+        {/* ETAPA 4: STATUS REAL E IMPEDITIVO */}
         {step === 4 && (
           <div style={{ textAlign: 'center', padding: '16px 0' }}>
             {verificationStatus === 'approved' ? (
@@ -426,7 +558,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
                 </div>
                 <h3 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#10b981' }}>Credenciamento Aprovado!</h3>
                 <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginTop: '6px' }}>
-                  Seus documentos e veículo ({vehicleBrand} {vehicleModel} • Placa {vehiclePlate}) foram salvos e aprovados com sucesso.
+                  Seus documentos e veículo ({vehicleBrand} {vehicleModel} • Placa {vehiclePlate}) foram auditados e aprovados.
                 </p>
 
                 <div style={{
@@ -438,7 +570,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
                   margin: '20px auto',
                   textAlign: 'left'
                 }}>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Status no Banco:</div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Status no Banco de Dados:</div>
                   <strong style={{ color: '#10b981' }}>Selo de Motorista Verificado ✅</strong>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
                     Você já pode ativar o modo <strong>ONLINE</strong> para receber chamados e faturar 85% por hora de serviço.
@@ -468,35 +600,55 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
                 }}>
                   <RefreshCw size={36} className="animate-spin" />
                 </div>
-                <h3 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#f59e0b' }}>Documentos em Análise</h3>
-                <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginTop: '6px', maxWidth: '480px', margin: '6px auto' }}>
-                  Recebemos os dados do seu veículo <strong>{vehicleBrand} {vehicleModel}</strong> e seus documentos. As informações estão registradas na tabela <code>drivers</code>.
+                <h3 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#f59e0b' }}>Documentos em Análise de Segurança</h3>
+                <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginTop: '6px', maxWidth: '520px', margin: '6px auto' }}>
+                  Seus documentos do veículo <strong>{vehicleBrand} {vehicleModel} (Placa {vehiclePlate})</strong> e CNH foram enviados ao banco de dados com sucesso e estão na fila de auditoria da equipe de moderação.
                 </p>
 
-                {/* Caixa de simulação para testes imediatos */}
                 <div style={{
-                  background: 'rgba(99, 102, 241, 0.1)',
-                  border: '1px dashed rgba(99, 102, 241, 0.4)',
-                  padding: '18px',
-                  borderRadius: '14px',
-                  margin: '24px 0',
-                  textAlign: 'center'
+                  background: 'rgba(15, 23, 42, 0.85)',
+                  border: '1px solid var(--border-subtle)',
+                  padding: '16px',
+                  borderRadius: '12px',
+                  maxWidth: '450px',
+                  margin: '20px auto',
+                  textAlign: 'left'
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', color: '#818cf8', fontWeight: 700, fontSize: '0.9rem', marginBottom: '6px' }}>
-                    <Sparkles size={18} />
-                    <span>Ambiente de Demonstração & Testes</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                    <Eye size={18} color="#f59e0b" />
+                    <strong style={{ fontSize: '0.9rem' }}>Bloqueio de Segurança Ativo:</strong>
                   </div>
-                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '14px' }}>
-                    Para testar o fluxo de atendimento sem esperar a validação manual de retaguarda, clique no botão abaixo para aprovar imediatamente:
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                    O recebimento de chamados de passageiros permanece bloqueado até a validação formal dos documentos pelo administrador para garantir a segurança dos passageiros.
                   </p>
-                  <button
-                    onClick={handleApproveImmediate}
-                    className="btn-success"
-                    style={{ padding: '12px 24px', fontSize: '0.9rem' }}
-                  >
-                    ⚡ Simular Aprovação Imediata (Admin)
-                  </button>
                 </div>
+
+                {/* Se o usuário logado for Super Admin, ele pode simular aprovação para testes */}
+                {user.isAdmin && (
+                  <div style={{
+                    background: 'rgba(99, 102, 241, 0.1)',
+                    border: '1px dashed rgba(99, 102, 241, 0.4)',
+                    padding: '14px',
+                    borderRadius: '12px',
+                    maxWidth: '450px',
+                    margin: '16px auto',
+                    textAlign: 'center'
+                  }}>
+                    <span style={{ fontSize: '0.8rem', color: '#818cf8', fontWeight: 700 }}>
+                      👑 Ação de Super Admin:
+                    </span>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '4px 0 10px' }}>
+                      Como você é o Super-Administrador da plataforma, você pode aprovar este cadastro imediatamente:
+                    </p>
+                    <button
+                      onClick={handleApproveImmediate}
+                      className="btn-success"
+                      style={{ padding: '8px 16px', fontSize: '0.85rem' }}
+                    >
+                      ⚡ Aprovar Imediatamente (Super Admin)
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>

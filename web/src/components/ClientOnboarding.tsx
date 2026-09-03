@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import type { UserProfile, ClientProfile } from '../types/auth';
 import { formatCep, fetchAddressByCep } from '../services/cepService';
-import { formatPhone, formatCpf } from '../utils/formatters';
-import { MapPin, Search, CheckCircle2, Check, RefreshCw } from 'lucide-react';
+import { formatPhone, formatCpf, validateCpf, validatePhone } from '../utils/formatters';
+import { MapPin, Search, CheckCircle2, Check, RefreshCw, AlertCircle } from 'lucide-react';
 import { dbSaveClientProfile } from '../services/dbService';
 
 interface ClientOnboardingProps {
@@ -23,6 +23,7 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ user, onComp
   const [isLoadingCep, setIsLoadingCep] = useState(false);
   const [cepSuccess, setCepSuccess] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Manipular busca automática do CEP
   const handleCepChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -47,6 +48,26 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ user, onComp
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage(null);
+
+    // 1. Validação Real e Impeditiva de CPF
+    if (!validateCpf(cpf)) {
+      setErrorMessage('CPF inválido. Por favor, insira um número de CPF autêntico.');
+      return;
+    }
+
+    // 2. Validação Real e Impeditiva de Telefone
+    if (!validatePhone(phone)) {
+      setErrorMessage('Número de telefone inválido. Insira um número com DDD válido (ex: 11 98765-4321).');
+      return;
+    }
+
+    // 3. Validação de Endereço
+    if (!street || !number || !neighborhood || !city || !state) {
+      setErrorMessage('Por favor, preencha todos os campos obrigatórios do endereço.');
+      return;
+    }
+
     setIsSaving(true);
     const profile: ClientProfile = {
       id: 'client_' + user.id,
@@ -92,6 +113,24 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ user, onComp
             Olá <strong>{user.fullName}</strong>! Precisamos do seu endereço e telefone para agilizar seus chamados no banco de dados.
           </p>
         </div>
+
+        {errorMessage && (
+          <div style={{
+            background: 'rgba(239, 68, 68, 0.15)',
+            border: '1px solid rgba(239, 68, 68, 0.4)',
+            color: '#fca5a5',
+            padding: '12px 16px',
+            borderRadius: '12px',
+            fontSize: '0.85rem',
+            marginBottom: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px'
+          }}>
+            <AlertCircle size={18} style={{ flexShrink: 0 }} />
+            <span>{errorMessage}</span>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           
@@ -237,7 +276,7 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ user, onComp
             style={{ width: '100%', padding: '14px', fontSize: '1rem', marginTop: '10px' }}
           >
             {isSaving ? <RefreshCw size={18} className="animate-spin" /> : <Check size={18} />}
-            <span>{isSaving ? 'Salvando no Banco...' : 'Salvar Cadastro e Acessar DriveHora'}</span>
+            <span>{isSaving ? 'Validando e Gravando...' : 'Salvar Cadastro e Acessar DriveHora'}</span>
           </button>
         </form>
       </div>
