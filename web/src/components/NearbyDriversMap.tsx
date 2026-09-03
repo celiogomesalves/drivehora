@@ -51,8 +51,9 @@ export function NearbyDriversMap({ onSelectDriverToRequest }: NearbyDriversMapPr
     if (isManual) setIsSyncing(true);
     try {
       const all = await dbGetAllDrivers();
-      const online = all.filter(d => d.isOnline);
-      setOnlineDrivers(online);
+      // Filtrar motoristas que estão com modo ONLINE ativo ou credenciados
+      const online = all.filter(d => d.isOnline || d.verificationStatus === 'approved');
+      setOnlineDrivers(online.length > 0 ? online : all);
       setLastSyncTime(new Date());
     } catch (e) {
       console.warn('Erro ao sincronizar motoristas:', e);
@@ -92,8 +93,8 @@ export function NearbyDriversMap({ onSelectDriverToRequest }: NearbyDriversMapPr
       markerZoomAnimation: true
     });
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       maxZoom: 19
     }).addTo(map);
 

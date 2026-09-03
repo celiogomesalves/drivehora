@@ -483,76 +483,46 @@ export const dbGetAllDrivers = async (): Promise<DriverProfile[]> => {
   const sb = getSupabase();
   if (sb) {
     try {
-      const [profilesRes, driversRes] = await Promise.all([
-        sb.from('profiles').select('*').eq('role', 'driver').order('created_at', { ascending: false }),
-        sb.from('drivers').select('*').order('created_at', { ascending: false })
+      const [driversRes, profilesRes] = await Promise.all([
+        sb.from('drivers').select('*').order('created_at', { ascending: false }),
+        sb.from('profiles').select('*')
       ]);
 
-      const driverMap = new Map<string, any>();
-      (driversRes.data || []).forEach((d: any) => {
-        driverMap.set(d.user_id, d);
-      });
-
-      const list: DriverProfile[] = [];
-      const seenUserIds = new Set<string>();
-
+      const profileMap = new Map<string, any>();
       (profilesRes.data || []).forEach((p: any) => {
-        seenUserIds.add(p.id);
-        const d = driverMap.get(p.id);
-        list.push({
-          id: d?.id || 'driver_' + p.id,
-          userId: p.id,
-          cpf: d?.cpf || '',
-          phone: p.phone || d?.phone || '',
-          cnhNumber: d?.cnh_number || '',
-          cnhCategory: d?.cnh_category || 'B',
-          vehicleBrand: d?.vehicle_brand || '',
-          vehicleModel: d?.vehicle_model || '',
-          vehicleYear: d?.vehicle_year || '',
-          vehiclePlate: d?.vehicle_plate || '',
-          vehicleColor: d?.vehicle_color || '',
-          cnhUrl: d?.cnh_url,
-          crlvUrl: d?.crlv_url,
-          selfieUrl: d?.selfie_url,
-          verificationStatus: dataVerificationStatus(d?.verification_status || 'pending_docs'),
-          rating: Number(d?.rating) || 5.0,
-          totalRides: Number(d?.total_rides) || 0,
-          isOnline: Boolean(d?.is_online),
-          currentLat: d?.current_lat ? Number(d.current_lat) : undefined,
-          currentLng: d?.current_lng ? Number(d.current_lng) : undefined
-        });
+        profileMap.set(p.id, p);
       });
 
-      (driversRes.data || []).forEach((d: any) => {
-        if (!seenUserIds.has(d.user_id)) {
-          list.push({
-            id: d.id,
-            userId: d.user_id,
-            cpf: d.cpf || '',
-            phone: d.phone || '',
-            cnhNumber: d.cnh_number || '',
-            cnhCategory: d.cnh_category || 'B',
-            vehicleBrand: d.vehicle_brand || '',
-            vehicleModel: d.vehicle_model || '',
-            vehicleYear: d.vehicle_year || '',
-            vehiclePlate: d.vehicle_plate || '',
-            vehicleColor: d.vehicle_color || '',
-            cnhUrl: d.cnh_url,
-            crlvUrl: d.crlv_url,
-            selfieUrl: d.selfie_url,
-            verificationStatus: dataVerificationStatus(d.verification_status),
-            rating: Number(d.rating) || 5.0,
-            totalRides: Number(d.total_rides) || 0,
-            isOnline: Boolean(d.is_online),
-            currentLat: d.current_lat ? Number(d.current_lat) : undefined,
-            currentLng: d.current_lng ? Number(d.current_lng) : undefined
-          });
-        }
+      const list: DriverProfile[] = (driversRes.data || []).map((d: any) => {
+        const p = profileMap.get(d.user_id);
+        const isOnline = d.is_online === true || d.is_online === 'true' || d.is_online === 1 || Boolean(d.is_online);
+        return {
+          id: d.id,
+          userId: d.user_id,
+          cpf: d.cpf || p?.cpf || '',
+          phone: d.phone || p?.phone || '',
+          cnhNumber: d.cnh_number || '',
+          cnhCategory: d.cnh_category || 'B',
+          vehicleBrand: d.vehicle_brand || 'Motorista',
+          vehicleModel: d.vehicle_model || (p?.full_name ? `${p.full_name}` : 'Parceiro'),
+          vehicleYear: d.vehicle_year || '',
+          vehiclePlate: d.vehicle_plate || 'Mercosul',
+          vehicleColor: d.vehicle_color || 'Prata',
+          cnhUrl: d.cnh_url,
+          crlvUrl: d.crlv_url,
+          selfieUrl: d.selfie_url,
+          verificationStatus: dataVerificationStatus(d.verification_status),
+          rating: Number(d.rating) || 5.0,
+          totalRides: Number(d.total_rides) || 0,
+          isOnline: isOnline,
+          currentLat: d.current_lat ? Number(d.current_lat) : undefined,
+          currentLng: d.current_lng ? Number(d.current_lng) : undefined
+        };
       });
 
       return list;
     } catch (e) {
-      console.warn('Erro ao buscar motoristas:', e);
+      console.warn('Erro ao buscar motoristas no Supabase:', e);
     }
   }
   return [];
