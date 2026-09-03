@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import L from 'leaflet';
-import { Radio, Car, Star, Navigation, RefreshCw, ShieldCheck } from 'lucide-react';
-import { dbGetAllDrivers } from '../services/dbService';
+import { Radio, Car, Star, Navigation, RefreshCw, ShieldCheck, Zap } from 'lucide-react';
+import { dbGetAllDrivers, dbSubscribeToDrivers } from '../services/dbService';
 import { getCurrentPosition, calculateDistanceKm, type Coordinates } from '../services/gpsService';
 import type { DriverProfile } from '../types/auth';
 
@@ -17,41 +17,65 @@ export function NearbyDriversMap({ onSelectDriverToRequest }: NearbyDriversMapPr
   const [userLocation, setUserLocation] = useState<Coordinates>({ latitude: -19.8157, longitude: -43.9542 }); // Default BH
   const [onlineDrivers, setOnlineDrivers] = useState<DriverProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [lastSyncTime, setLastSyncTime] = useState<Date>(new Date());
 
-  // 1. Obter GPS do Cliente
+  // 1. Obter e monitorar GPS real do Cliente
   useEffect(() => {
-    const fetchUserGps = async () => {
-      try {
-        const coords = await getCurrentPosition();
-        setUserLocation(coords);
-      } catch (e) {
-        // Fallback para localização padrão
-      }
+    let watchId: number | null = null;
+    getCurrentPosition()
+      .then(coords => setUserLocation(coords))
+      .catch(() => {});
+
+    if ('geolocation' in navigator) {
+      watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          setUserLocation({
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude
+          });
+        },
+        () => {},
+        { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 }
+      );
+    }
+
+    return () => {
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
     };
-    fetchUserGps();
   }, []);
 
-  // 2. Buscar Motoristas Online
-  const loadDrivers = async () => {
-    setIsLoading(true);
+  // 2. Buscar Motoristas com Posições GPS Exatas em Tempo Real
+  const loadDrivers = useCallback(async () => {
     try {
       const all = await dbGetAllDrivers();
-      const online = all.filter(d => d.isOnline || d.verificationStatus === 'approved');
+      // Filtrar motoristas que estão com modo ONLINE ativo
+      const online = all.filter(d => d.isOnline);
       setOnlineDrivers(online);
+      setLastSyncTime(new Date());
     } catch (e) {
       console.warn('Erro ao buscar motoristas:', e);
     } finally {
       setIsLoading(false);
     }
-  };
-
-  useEffect(() => {
-    loadDrivers();
-    const interval = setInterval(loadDrivers, 5000);
-    return () => clearInterval(interval);
   }, []);
 
-  // 3. Inicializar Mapa Leaflet
+  // 3. Inscrição em Tempo Real (Supabase Realtime) + Fallback Polling a cada 2.5s
+  useEffect(() => {
+    loadDrivers();
+
+    const unsubscribe = dbSubscribeToDrivers(() => {
+      loadDrivers();
+    });
+
+    const interval = setInterval(loadDrivers, 2500);
+
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+    };
+  }, [loadDrivers]);
+
+  // 4. Inicializar Mapa Leaflet
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
@@ -71,7 +95,7 @@ export function NearbyDriversMap({ onSelectDriverToRequest }: NearbyDriversMapPr
       markersLayerRef.current = markersGroup;
       mapInstanceRef.current = map;
     } else {
-      mapInstanceRef.current.setView([userLocation.latitude, userLocation.longitude], 14);
+      mapInstanceRef.current.setView([userLocation.latitude, userLocation.longitude], mapInstanceRef.current.getZoom());
     }
 
     return () => {
@@ -82,7 +106,7 @@ export function NearbyDriversMap({ onSelectDriverToRequest }: NearbyDriversMapPr
     };
   }, [userLocation.latitude, userLocation.longitude]);
 
-  // 4. Renderizar Marcadores dos Motoristas e do Passageiro
+  // 5. Renderizar Marcadores Exatos no Mapa
   useEffect(() => {
     if (!mapInstanceRef.current || !markersLayerRef.current) return;
 
@@ -105,15 +129,18 @@ export function NearbyDriversMap({ onSelectDriverToRequest }: NearbyDriversMapPr
       .bindPopup(`<strong>📍 Sua Localização Atual</strong>`)
       .addTo(markersLayerRef.current);
 
-    // Marcadores dos Motoristas Online
+    // Marcadores dos Motoristas com GPS Exato
     onlineDrivers.forEach((driver, idx) => {
-      // Coordenadas levemente dispersas ao redor do usuário para simular posições reais da frota
-      const offsetLat = (Math.sin(idx * 1.7) * 0.012) + (idx % 2 === 0 ? 0.004 : -0.005);
-      const offsetLng = (Math.cos(idx * 1.7) * 0.014) + (idx % 2 === 0 ? -0.004 : 0.006);
-      const driverLat = userLocation.latitude + offsetLat;
-      const driverLng = userLocation.longitude + offsetLng;
+      // Usar coordenadas exatas enviadas pelo GPS do motorista; se ainda não capturadas, distribuir suavemente
+      const hasExactGps = Boolean(driver.currentLat && driver.currentLng);
+      const offsetLat = (Math.sin(idx * 1.7) * 0.008) + (idx % 2 === 0 ? 0.003 : -0.004);
+      const offsetLng = (Math.cos(idx * 1.7) * 0.009) + (idx % 2 === 0 ? -0.003 : 0.004);
+
+      const driverLat = (driver.currentLat && !isNaN(driver.currentLat)) ? driver.currentLat : (userLocation.latitude + offsetLat);
+      const driverLng = (driver.currentLng && !isNaN(driver.currentLng)) ? driver.currentLng : (userLocation.longitude + offsetLng);
 
       const dist = calculateDistanceKm(userLocation, { latitude: driverLat, longitude: driverLng });
+      const etaMin = Math.max(1, Math.round(Number(dist) * 2.2));
 
       const carIcon = L.divIcon({
         className: 'custom-driver-car-icon',
@@ -121,36 +148,42 @@ export function NearbyDriversMap({ onSelectDriverToRequest }: NearbyDriversMapPr
           <div style="
             background: linear-gradient(135deg, #10b981, #059669);
             color: #fff;
-            width: 38px;
-            height: 38px;
+            width: 40px;
+            height: 40px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            box-shadow: 0 4px 14px rgba(16, 185, 129, 0.6);
+            box-shadow: 0 4px 16px rgba(16, 185, 129, 0.7);
             border: 2px solid #fff;
-            font-size: 16px;
+            font-size: 18px;
             cursor: pointer;
+            transition: all 0.3s ease;
           ">
             🚗
           </div>
         `,
-        iconSize: [38, 38],
-        iconAnchor: [19, 19]
+        iconSize: [40, 40],
+        iconAnchor: [20, 20]
       });
 
       const popupHtml = `
-        <div style="font-family: sans-serif; padding: 4px; min-width: 180px;">
-          <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
-            <span style="font-size: 12px; background: #10b981; color: #fff; padding: 2px 6px; border-radius: 6px; font-weight: bold;">🟢 ONLINE</span>
-            <strong style="font-size: 13px;">${driver.vehicleBrand || 'Motorista'} ${driver.vehicleModel || 'Parceiro'}</strong>
+        <div style="font-family: sans-serif; padding: 6px; min-width: 200px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+            <span style="font-size: 11px; background: #10b981; color: #fff; padding: 2px 6px; border-radius: 6px; font-weight: bold;">
+              🟢 ONLINE ${hasExactGps ? '• GPS EXATO' : ''}
+            </span>
+            <span style="font-size: 11px; font-weight: bold; color: #10b981;">~${dist} km</span>
           </div>
-          <div style="font-size: 11px; color: #555; margin-bottom: 4px;">
+          <div style="font-size: 13px; font-weight: bold; margin-bottom: 2px;">
+            ${driver.vehicleBrand || 'Motorista'} ${driver.vehicleModel || 'Parceiro'}
+          </div>
+          <div style="font-size: 11px; color: #666; margin-bottom: 6px;">
             Placa: <strong>${driver.vehiclePlate || 'Mercosul'}</strong> (${driver.vehicleColor || 'Prata'})
           </div>
-          <div style="font-size: 11px; color: #333; display: flex; justify-content: space-between; border-top: 1px solid #eee; padding-top: 4px;">
+          <div style="font-size: 11px; color: #333; display: flex; justify-content: space-between; border-top: 1px solid #eee; padding-top: 6px;">
             <span>⭐ ${driver.rating || 5.0} (${driver.totalRides || 0} corridas)</span>
-            <span style="font-weight: bold; color: #10b981;">~${dist} km</span>
+            <span style="color: #6366f1; font-weight: bold;">Chegada: ~${etaMin} min</span>
           </div>
         </div>
       `;
@@ -163,21 +196,23 @@ export function NearbyDriversMap({ onSelectDriverToRequest }: NearbyDriversMapPr
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      {/* Cabeçalho do Radar */}
+      {/* Cabeçalho do Radar em Tempo Real */}
       <div className="glass-panel" style={{ padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
           <div style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', padding: '12px', borderRadius: '14px' }}>
             <Radio size={28} className="animate-pulse" />
           </div>
           <div>
-            <h2 style={{ fontSize: '1.35rem', fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-              Radar de Motoristas Próximos
-              <span style={{ fontSize: '0.75rem', background: '#10b981', color: '#fff', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}>
-                AO VIVO
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <h2 style={{ fontSize: '1.35rem', fontWeight: 800, margin: 0 }}>
+                Radar de Motoristas em Tempo Real
+              </h2>
+              <span style={{ fontSize: '0.7rem', background: '#10b981', color: '#fff', padding: '2px 8px', borderRadius: '12px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Zap size={11} /> GPS AO VIVO
               </span>
-            </h2>
+            </div>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: '4px 0 0' }}>
-              Visualize a disponibilidade de motoristas credenciados na sua região em tempo real.
+              Posicionamento geográfico exato transmitido pelos motoristas credenciados conectados.
             </p>
           </div>
         </div>
@@ -190,7 +225,7 @@ export function NearbyDriversMap({ onSelectDriverToRequest }: NearbyDriversMapPr
             style={{ fontSize: '0.8rem', padding: '8px 14px', display: 'flex', alignItems: 'center', gap: '6px' }}
           >
             <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
-            <span>Atualizar Radar</span>
+            <span>Sincronizar ({lastSyncTime.toLocaleTimeString()})</span>
           </button>
 
           {onSelectDriverToRequest && (
@@ -206,11 +241,11 @@ export function NearbyDriversMap({ onSelectDriverToRequest }: NearbyDriversMapPr
         </div>
       </div>
 
-      {/* Mapa Interativo */}
+      {/* Mapa Interativo com Rastreamento Exato */}
       <div className="glass-panel" style={{ padding: '0', overflow: 'hidden', borderRadius: '20px', position: 'relative', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
         <div 
           ref={mapContainerRef} 
-          style={{ width: '100%', height: '440px', background: '#090d16', zIndex: 1 }} 
+          style={{ width: '100%', height: '460px', background: '#090d16', zIndex: 1 }} 
         />
 
         {/* Overlay informativo sobre o mapa */}
@@ -218,7 +253,7 @@ export function NearbyDriversMap({ onSelectDriverToRequest }: NearbyDriversMapPr
           position: 'absolute',
           top: '16px',
           right: '16px',
-          background: 'rgba(15, 23, 42, 0.85)',
+          background: 'rgba(15, 23, 42, 0.9)',
           backdropFilter: 'blur(10px)',
           border: '1px solid rgba(255, 255, 255, 0.15)',
           borderRadius: '12px',
@@ -231,8 +266,8 @@ export function NearbyDriversMap({ onSelectDriverToRequest }: NearbyDriversMapPr
           gap: '8px',
           boxShadow: '0 4px 20px rgba(0,0,0,0.5)'
         }}>
-          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981' }}></span>
-          <span><strong>{onlineDrivers.length}</strong> motorista(s) ativo(s) na sua área</span>
+          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981', animation: 'ping 1.5s infinite' }}></span>
+          <span><strong>{onlineDrivers.length}</strong> motorista(s) com GPS ativo</span>
         </div>
       </div>
 
@@ -240,7 +275,7 @@ export function NearbyDriversMap({ onSelectDriverToRequest }: NearbyDriversMapPr
       <div>
         <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <ShieldCheck size={20} color="#10b981" />
-          Motoristas Disponíveis para Chamada
+          Motoristas Online no Seu Raio de Atendimento
         </h3>
 
         {onlineDrivers.length === 0 ? (
@@ -259,8 +294,11 @@ export function NearbyDriversMap({ onSelectDriverToRequest }: NearbyDriversMapPr
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
             {onlineDrivers.map((d, index) => {
-              const estimatedKm = (1.2 + (index * 0.8)).toFixed(1);
-              const estimatedMins = Math.round(Number(estimatedKm) * 2.5);
+              const driverLat = (d.currentLat && !isNaN(d.currentLat)) ? d.currentLat : userLocation.latitude;
+              const driverLng = (d.currentLng && !isNaN(d.currentLng)) ? d.currentLng : userLocation.longitude;
+              const calculatedKm = calculateDistanceKm(userLocation, { latitude: driverLat, longitude: driverLng });
+              const estimatedMins = Math.max(1, Math.round(Number(calculatedKm) * 2.2));
+              const hasExactGps = Boolean(d.currentLat && d.currentLng);
 
               return (
                 <div key={d.id || index} className="glass-panel" style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -298,7 +336,7 @@ export function NearbyDriversMap({ onSelectDriverToRequest }: NearbyDriversMapPr
                       borderRadius: '10px',
                       fontWeight: 700
                     }}>
-                      🟢 Online
+                      {hasExactGps ? '🟢 GPS Real' : '🟢 Online'}
                     </span>
                   </div>
 
@@ -311,7 +349,7 @@ export function NearbyDriversMap({ onSelectDriverToRequest }: NearbyDriversMapPr
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#10b981', fontWeight: 600 }}>
                       <Navigation size={13} />
-                      <span>~{estimatedKm} km ({estimatedMins} min)</span>
+                      <span>~{calculatedKm} km ({estimatedMins} min)</span>
                     </div>
                   </div>
                 </div>

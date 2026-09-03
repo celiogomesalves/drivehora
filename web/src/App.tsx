@@ -21,7 +21,7 @@ import { getCurrentPosition, reverseGeocode, searchAddressPlaces } from './servi
 import { formatCurrency, formatCurrencyInput, parseCurrencyInput } from './utils/formatters';
 import { 
   dbGetClientProfile, dbGetDriverProfile, 
-  dbCreateRide, dbUpdateRide, dbCancelRide, dbUpdateDriverOnlineStatus, type DbRide 
+  dbCreateRide, dbUpdateRide, dbCancelRide, dbUpdateDriverOnlineStatus, dbUpdateDriverLocation, type DbRide 
 } from './services/dbService';
 
 export function App() {
@@ -428,6 +428,14 @@ export function App() {
           alert(`Não foi possível atualizar o status no banco: ${res.error || 'Falha de comunicação'}`);
           return;
         }
+
+        // Se ativou modo ONLINE, envia imediatamente o GPS real do dispositivo
+        if (nextStatus) {
+          try {
+            const coords = await getCurrentPosition();
+            await dbUpdateDriverLocation(currentUser.id, coords);
+          } catch (e) {}
+        }
       }
       // SÓ efetiva a mudança na interface após confirmação de sucesso do banco!
       setIsDriverOnline(nextStatus);
@@ -437,6 +445,41 @@ export function App() {
       setIsTogglingOnline(false);
     }
   };
+
+  // Transmissão Contínua do GPS Real do Motorista em Tempo Real quando ONLINE
+  useEffect(() => {
+    if (!isDriverOnline || !currentUser) return;
+
+    // Transmissão inicial
+    getCurrentPosition()
+      .then(coords => dbUpdateDriverLocation(currentUser.id, coords))
+      .catch(() => {});
+
+    let watchId: number | null = null;
+    if ('geolocation' in navigator) {
+      watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          const { latitude, longitude } = pos.coords;
+          dbUpdateDriverLocation(currentUser.id, { latitude, longitude });
+        },
+        () => {},
+        { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 }
+      );
+    }
+
+    // Intervalo de segurança a cada 5 segundos
+    const interval = setInterval(async () => {
+      try {
+        const coords = await getCurrentPosition();
+        dbUpdateDriverLocation(currentUser.id, coords);
+      } catch (e) {}
+    }, 5000);
+
+    return () => {
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+      clearInterval(interval);
+    };
+  }, [isDriverOnline, currentUser?.id]);
 
   // ========================================================
   // 1. TELA INICIAL: PÁGINA DE LOGIN OBRIGATÓRIA (SE NÃO LOGADO)

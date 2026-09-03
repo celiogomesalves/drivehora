@@ -60,4 +60,6 @@ export interface DriverProfile {
   rating: number;
   totalRides: number;
   isOnline?: boolean;
+  currentLat?: number;
+  currentLng?: number;
 }

@@ -516,7 +516,10 @@ export const dbGetAllDrivers = async (): Promise<DriverProfile[]> => {
           selfieUrl: d?.selfie_url,
           verificationStatus: dataVerificationStatus(d?.verification_status || 'pending_docs'),
           rating: Number(d?.rating) || 5.0,
-          totalRides: Number(d?.total_rides) || 0
+          totalRides: Number(d?.total_rides) || 0,
+          isOnline: Boolean(d?.is_online),
+          currentLat: d?.current_lat ? Number(d.current_lat) : undefined,
+          currentLng: d?.current_lng ? Number(d.current_lng) : undefined
         });
       });
 
@@ -539,7 +542,10 @@ export const dbGetAllDrivers = async (): Promise<DriverProfile[]> => {
             selfieUrl: d.selfie_url,
             verificationStatus: dataVerificationStatus(d.verification_status),
             rating: Number(d.rating) || 5.0,
-            totalRides: Number(d.total_rides) || 0
+            totalRides: Number(d.total_rides) || 0,
+            isOnline: Boolean(d.is_online),
+            currentLat: d.current_lat ? Number(d.current_lat) : undefined,
+            currentLng: d.current_lng ? Number(d.current_lng) : undefined
           });
         }
       });
@@ -663,3 +669,49 @@ export const dbUpdateDriverOnlineStatus = async (
   }
   return { success: true };
 };
+
+// 12. Atualizar Localização Exata em Tempo Real do Motorista (GPS Tracker)
+export const dbUpdateDriverLocation = async (
+  userId: string,
+  coords: { latitude: number; longitude: number }
+): Promise<{ success: boolean; error?: string }> => {
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      await sb.from('drivers').update({
+        current_lat: coords.latitude,
+        current_lng: coords.longitude
+      }).eq('user_id', userId);
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message };
+    }
+  }
+  return { success: true };
+};
+
+// 13. Assinar Atualizações em Tempo Real de Motoristas (Realtime Supabase)
+export const dbSubscribeToDrivers = (onUpdate: () => void) => {
+  const sb = getSupabase();
+  if (!sb) return () => {};
+
+  try {
+    const channel = sb
+      .channel('drivers-live-gps-channel')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'drivers' },
+        () => {
+          onUpdate();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      sb.removeChannel(channel);
+    };
+  } catch (e) {
+    return () => {};
+  }
+};
+
