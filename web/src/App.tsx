@@ -14,7 +14,7 @@ import { LoginPage } from './components/LoginPage';
 import { ClientOnboarding } from './components/ClientOnboarding';
 import { DriverOnboarding } from './components/DriverOnboarding';
 import { AdminDashboard } from './components/AdminDashboard';
-import { getCurrentPosition, reverseGeocode } from './services/gpsService';
+import { getCurrentPosition, reverseGeocode, searchAddressPlaces } from './services/gpsService';
 import { formatCurrency } from './utils/formatters';
 import { 
   dbGetClientProfile, dbGetDriverProfile, 
@@ -47,9 +47,13 @@ export function App() {
   const [inputSupabaseKey, setInputSupabaseKey] = useState(supabaseConfig.key);
   const [supabaseConnected, setSupabaseConnected] = useState(false);
 
-  // Formulário do cliente
+  // Formulário do cliente & Busca Automática de Endereços
   const [origin, setOrigin] = useState('Av. Paulista, 1000 - Bela Vista');
   const [destination, setDestination] = useState('Aeroporto de Guarulhos (GRU) - Terminal 3');
+  const [originSuggestions, setOriginSuggestions] = useState<string[]>([]);
+  const [destSuggestions, setDestSuggestions] = useState<string[]>([]);
+  const [isSearchingOrigin, setIsSearchingOrigin] = useState(false);
+  const [isSearchingDest, setIsSearchingDest] = useState(false);
   const [hours, setHours] = useState(3);
   const [hourlyRate, setHourlyRate] = useState(60);
   const [isRequesting, setIsRequesting] = useState(false);
@@ -798,28 +802,162 @@ export function App() {
                   </div>
 
                   <form onSubmit={handleRequestRide} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    <div className="input-group">
-                      <label>📍 Ponto de Partida</label>
+                    {/* Campo Partida com Busca Automática ao Digitar */}
+                    <div className="input-group" style={{ position: 'relative' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <label>📍 Ponto de Partida</label>
+                        {isSearchingOrigin && (
+                          <span style={{ fontSize: '0.7rem', color: '#818cf8', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <RefreshCw size={10} className="animate-spin" /> Buscando locais...
+                          </span>
+                        )}
+                      </div>
                       <input
                         type="text"
                         className="custom-input"
                         value={origin}
-                        onChange={(e) => setOrigin(e.target.value)}
-                        placeholder="Ex: Av. Paulista, 1000"
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setOrigin(val);
+                          if (val.trim().length >= 3) {
+                            setIsSearchingOrigin(true);
+                            searchAddressPlaces(val).then(results => {
+                              setOriginSuggestions(results);
+                              setIsSearchingOrigin(false);
+                            });
+                          } else {
+                            setOriginSuggestions([]);
+                          }
+                        }}
+                        onFocus={() => {
+                          if (origin.trim().length >= 3) {
+                            searchAddressPlaces(origin).then(res => setOriginSuggestions(res));
+                          }
+                        }}
+                        placeholder="Ex: Av. Paulista, 1000..."
                         required
                       />
+
+                      {/* Dropdown de Sugestões de Partida */}
+                      {originSuggestions.length > 0 && (
+                        <div style={{
+                          position: 'absolute',
+                          top: '100%',
+                          left: 0,
+                          right: 0,
+                          background: 'rgba(15, 23, 42, 0.98)',
+                          border: '1px solid rgba(99, 102, 241, 0.4)',
+                          borderRadius: '10px',
+                          boxShadow: '0 10px 25px rgba(0,0,0,0.6)',
+                          zIndex: 30,
+                          marginTop: '4px',
+                          overflow: 'hidden'
+                        }}>
+                          {originSuggestions.map((sug, idx) => (
+                            <div
+                              key={idx}
+                              onClick={() => {
+                                setOrigin(sug);
+                                setOriginSuggestions([]);
+                              }}
+                              style={{
+                                padding: '10px 14px',
+                                fontSize: '0.8rem',
+                                color: '#e2e8f0',
+                                cursor: 'pointer',
+                                borderBottom: idx < originSuggestions.length - 1 ? '1px solid rgba(255, 255, 255, 0.06)' : 'none',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px'
+                              }}
+                              onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(99, 102, 241, 0.2)')}
+                              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                            >
+                              <MapPin size={14} color="#818cf8" style={{ flexShrink: 0 }} />
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sug}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
-                    <div className="input-group">
-                      <label>🏁 Destino Principal / Roteiro</label>
+                    {/* Campo Destino com Busca Automática ao Digitar */}
+                    <div className="input-group" style={{ position: 'relative' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <label>🏁 Destino Principal / Roteiro</label>
+                        {isSearchingDest && (
+                          <span style={{ fontSize: '0.7rem', color: '#818cf8', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <RefreshCw size={10} className="animate-spin" /> Buscando locais...
+                          </span>
+                        )}
+                      </div>
                       <input
                         type="text"
                         className="custom-input"
                         value={destination}
-                        onChange={(e) => setDestination(e.target.value)}
-                        placeholder="Ex: Aeroporto, Reuniões no Centro..."
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setDestination(val);
+                          if (val.trim().length >= 3) {
+                            setIsSearchingDest(true);
+                            searchAddressPlaces(val).then(results => {
+                              setDestSuggestions(results);
+                              setIsSearchingDest(false);
+                            });
+                          } else {
+                            setDestSuggestions([]);
+                          }
+                        }}
+                        onFocus={() => {
+                          if (destination.trim().length >= 3) {
+                            searchAddressPlaces(destination).then(res => setDestSuggestions(res));
+                          }
+                        }}
+                        placeholder="Ex: Aeroporto de Guarulhos..."
                         required
                       />
+
+                      {/* Dropdown de Sugestões de Destino */}
+                      {destSuggestions.length > 0 && (
+                        <div style={{
+                          position: 'absolute',
+                          top: '100%',
+                          left: 0,
+                          right: 0,
+                          background: 'rgba(15, 23, 42, 0.98)',
+                          border: '1px solid rgba(16, 185, 129, 0.4)',
+                          borderRadius: '10px',
+                          boxShadow: '0 10px 25px rgba(0,0,0,0.6)',
+                          zIndex: 30,
+                          marginTop: '4px',
+                          overflow: 'hidden'
+                        }}>
+                          {destSuggestions.map((sug, idx) => (
+                            <div
+                              key={idx}
+                              onClick={() => {
+                                setDestination(sug);
+                                setDestSuggestions([]);
+                              }}
+                              style={{
+                                padding: '10px 14px',
+                                fontSize: '0.8rem',
+                                color: '#e2e8f0',
+                                cursor: 'pointer',
+                                borderBottom: idx < destSuggestions.length - 1 ? '1px solid rgba(255, 255, 255, 0.06)' : 'none',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px'
+                              }}
+                              onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(16, 185, 129, 0.2)')}
+                              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                            >
+                              <MapPin size={14} color="#10b981" style={{ flexShrink: 0 }} />
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sug}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
                     {/* Atalhos Rápidos */}

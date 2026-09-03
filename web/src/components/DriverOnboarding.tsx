@@ -362,15 +362,27 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div className="input-group">
-                <label>Marca do Veículo</label>
+                <label>Marca do Veículo (Sugestões ou Digite Livremente)</label>
                 <input
                   type="text"
+                  list="popular-car-brands"
                   className="custom-input"
                   value={vehicleBrand}
                   onChange={(e) => setVehicleBrand(e.target.value)}
-                  placeholder="Ex: Toyota, Honda, Hyundai"
+                  placeholder="Selecione ou digite (ex: Toyota, BYD...)"
                   required
                 />
+                <datalist id="popular-car-brands">
+                  {[
+                    'Toyota', 'Honda', 'Volkswagen', 'Chevrolet', 'Hyundai', 
+                    'Fiat', 'Jeep', 'Nissan', 'Renault', 'Ford', 
+                    'BMW', 'Mercedes-Benz', 'Audi', 'Volvo', 'BYD', 
+                    'GWM', 'Caoa Chery', 'Peugeot', 'Citroën', 'Kia', 
+                    'Mitsubishi', 'Land Rover', 'Porsche', 'Ram', 'Lexus'
+                  ].map(brand => (
+                    <option key={brand} value={brand} />
+                  ))}
+                </datalist>
               </div>
 
               <div className="input-group">
