@@ -1184,7 +1184,29 @@ export function App() {
                       </p>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      {isUserAdmin && (
+                        <button
+                          onClick={() => setActiveTab('admin')}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '6px 12px',
+                            borderRadius: '10px',
+                            border: '1px solid rgba(245, 158, 11, 0.5)',
+                            background: 'rgba(245, 158, 11, 0.15)',
+                            color: '#f59e0b',
+                            fontWeight: 700,
+                            fontSize: '0.75rem',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <Crown size={14} />
+                          <span>Painel Administrativo</span>
+                        </button>
+                      )}
+
                       <button
                         onClick={() => setShowDriverProfileEdit(true)}
                         className="btn-outline"
