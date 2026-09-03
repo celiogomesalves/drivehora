@@ -1,36 +1,37 @@
-// Vercel Serverless Function - Sincronização Global de Credenciais Supabase
-// Permite que a configuração realizada por 1 administrador seja compartilhada com todos os usuários
+// Vercel Serverless Function: Central de Configuração Global do Supabase
 
-let cachedConfig = {
-  url: process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "",
-  key: process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || ""
+let inMemoryConfig = {
+  url: 'https://dnebvxvzlsudndjybaoe.supabase.co',
+  key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRuZWJ2eHZ6bHN1ZG5kanliYW9lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0NTA2NjIsImV4cCI6MjEwNDAyNjY2Mn0.LZXJEozYDXVHV9UiUg4y275f-ZA0hZgzTbfExBKcq38'
 };
 
-export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+export default function handler(req, res) {
+  // CORS Headers
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
+  );
 
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
   }
 
-  if (req.method === "POST") {
-    try {
-      const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-      const { url, key } = body || {};
-      if (url && key) {
-        cachedConfig = {
-          url: String(url).trim(),
-          key: String(key).trim()
-        };
-      }
-      return res.status(200).json({ success: true, ...cachedConfig });
-    } catch (e) {
-      return res.status(400).json({ error: "Invalid payload" });
+  if (req.method === 'POST') {
+    const { url, key } = req.body || {};
+    if (url && key) {
+      inMemoryConfig = { url: url.trim(), key: key.trim() };
+      return res.status(200).json({ success: true, message: 'Configuração do Supabase salva com sucesso globalmente!' });
     }
+    return res.status(400).json({ error: 'URL e Chave do Supabase são obrigatórias.' });
   }
 
-  // GET: Retornar configuração atual
-  return res.status(200).json(cachedConfig);
+  if (req.method === 'GET') {
+    return res.status(200).json(inMemoryConfig);
+  }
+
+  res.status(405).json({ error: 'Método não permitido.' });
 }

@@ -1,21 +1,24 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// Variáveis globais em cache
-let globalUrl = import.meta.env.VITE_SUPABASE_URL || '';
-let globalKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+export const DEFAULT_SUPABASE_URL = 'https://dnebvxvzlsudndjybaoe.supabase.co';
+export const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRuZWJ2eHZ6bHN1ZG5kanliYW9lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0NTA2NjIsImV4cCI6MjEwNDAyNjY2Mn0.LZXJEozYDXVHV9UiUg4y275f-ZA0hZgzTbfExBKcq38';
 
-// Obter credenciais globais (Environment > LocalStorage > Cache)
+// Variáveis globais em cache (Nativo com fallback padrão de produção)
+let globalUrl = import.meta.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
+let globalKey = import.meta.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY;
+
+// Obter credenciais globais (LocalStorage > Environment > Fallback Padrão)
 export const getSupabaseCredentials = () => {
   const storageUrl = localStorage.getItem('drivehora_supabase_url') || '';
   const storageKey = localStorage.getItem('drivehora_supabase_key') || '';
 
-  const url = globalUrl || storageUrl;
-  const key = globalKey || storageKey;
+  const url = storageUrl || globalUrl || DEFAULT_SUPABASE_URL;
+  const key = storageKey || globalKey || DEFAULT_SUPABASE_ANON_KEY;
 
   return { url, key, isConfigured: Boolean(url && key) };
 };
 
-// Salvar credenciais globalmente e sincronizar com todos os usuários
+// Salvar credenciais globalmente (quando o Super Admin quiser trocar no futuro)
 export const saveSupabaseCredentials = async (url: string, key: string) => {
   const cleanUrl = url.trim();
   const cleanKey = key.trim();
@@ -26,7 +29,7 @@ export const saveSupabaseCredentials = async (url: string, key: string) => {
   localStorage.setItem('drivehora_supabase_url', cleanUrl);
   localStorage.setItem('drivehora_supabase_key', cleanKey);
 
-  // 1. Sincronizar com a API Serverless Vercel / Backend Node
+  // Sincronizar com a API Serverless Vercel / Backend Node
   try {
     await fetch('/api/config/supabase', {
       method: 'POST',
@@ -88,7 +91,7 @@ export const initGlobalSupabaseConfig = async (): Promise<boolean> => {
     }
   } catch (e) {}
 
-  // 2. Se já estiver no localStorage, retorna true
+  // 2. Usar padrão nativo de produção
   const creds = getSupabaseCredentials();
   return creds.isConfigured;
 };
