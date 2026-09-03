@@ -461,6 +461,23 @@ export const dbUpdateRide = async (
   }
 };
 
+// 7.1 Cancelar Corrida pelo Passageiro
+export const dbCancelRide = async (rideId: string): Promise<void> => {
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      await sb.from('rides').update({ status: 'cancelled' }).eq('id', rideId);
+      return;
+    } catch (e) {
+      console.warn('Erro ao cancelar corrida no Supabase:', e);
+    }
+  }
+
+  try {
+    await fetch(`/api/rides/${rideId}/cancel`, { method: 'POST' });
+  } catch (e) {}
+};
+
 // 8. Buscar todos os motoristas cadastrados (unindo profiles e drivers)
 export const dbGetAllDrivers = async (): Promise<DriverProfile[]> => {
   const sb = getSupabase();

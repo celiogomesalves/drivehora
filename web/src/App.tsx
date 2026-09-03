@@ -4,7 +4,7 @@ import {
   Smartphone, Users, RefreshCw, CheckCircle2, 
   Radio, Award, PlayCircle, Sparkles, Compass, Database, 
   X, Check, LogOut, MapPin, Crown, AlertTriangle, UserCheck,
-  BellRing, Volume2, VolumeX
+  BellRing, Volume2, VolumeX, Ban, AlertOctagon
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import confetti from 'canvas-confetti';
@@ -15,11 +15,13 @@ import { LoginPage } from './components/LoginPage';
 import { ClientOnboarding } from './components/ClientOnboarding';
 import { DriverOnboarding } from './components/DriverOnboarding';
 import { AdminDashboard } from './components/AdminDashboard';
+import { NearbyDriversMap } from './components/NearbyDriversMap';
+import { LiveRideTrackerMap } from './components/LiveRideTrackerMap';
 import { getCurrentPosition, reverseGeocode, searchAddressPlaces } from './services/gpsService';
 import { formatCurrency, formatCurrencyInput, parseCurrencyInput } from './utils/formatters';
 import { 
   dbGetClientProfile, dbGetDriverProfile, 
-  dbCreateRide, dbUpdateRide, dbUpdateDriverOnlineStatus, type DbRide 
+  dbCreateRide, dbUpdateRide, dbCancelRide, dbUpdateDriverOnlineStatus, type DbRide 
 } from './services/dbService';
 
 export function App() {
@@ -59,6 +61,17 @@ export function App() {
   const [hourlyRate, setHourlyRate] = useState(60);
   const [isRequesting, setIsRequesting] = useState(false);
   const [isLocatingGPS, setIsLocatingGPS] = useState(false);
+
+  // Cliente: Sub-aba (Solicitar Corrida ou Radar de Motoristas Próximos)
+  const [clientSubTab, setClientSubTab] = useState<'request' | 'nearby_radar'>('request');
+  const [now, setNow] = useState(Date.now());
+  const [dismissedCancellationId, setDismissedCancellationId] = useState<string | null>(null);
+
+  // Timer de 1 segundo para atualizar contadores regressivos
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Motorista & Alertas em Tempo Real
   const [isDriverOnline, setIsDriverOnline] = useState(false);
@@ -351,6 +364,16 @@ export function App() {
     setIsRequesting(false);
   };
 
+  // Cancelar corrida pelo passageiro (com validação de até 5 minutos após aceite)
+  const handleCancelRideByClient = async (rideId: string) => {
+    const confirmed = window.confirm('Deseja realmente cancelar esta solicitação de corrida?');
+    if (!confirmed) return;
+
+    await dbCancelRide(rideId);
+    setCurrentRideId(null);
+    fetchRides();
+  };
+
   // Ações do Motorista
   const handleAcceptRide = async (rideId: string) => {
     const driverId = currentUser?.id || 'driver_demo_01';
@@ -436,6 +459,20 @@ export function App() {
     (rides.length > 0 && rides[0].status === 'searching' ? rides[0] : null);
   const pendingRides = rides.filter(r => r.status === 'searching');
   const myDriverRides = rides.filter(r => (r.status === 'accepted' || r.status === 'in_progress') && (r.driverId === currentUser?.id || !r.driverId));
+
+  // Corrida cancelada recente para alertar o motorista
+  const cancelledRideForDriver = rides.find(
+    r => r.status === 'cancelled' && r.driverId === currentUser?.id
+  );
+
+  // Contador de 5 minutos para cancelamento gratuito pelo cliente
+  const acceptedTimestamp = activeClientRide?.acceptedAt || activeClientRide?.createdAt || Date.now();
+  const secondsSinceAccepted = Math.floor((now - acceptedTimestamp) / 1000);
+  const cancelSecondsRemaining = Math.max(0, 300 - secondsSinceAccepted);
+  const cancelMinutes = Math.floor(cancelSecondsRemaining / 60);
+  const cancelSecs = cancelSecondsRemaining % 60;
+  const formattedCountdown = `${String(cancelMinutes).padStart(2, '0')}:${String(cancelSecs).padStart(2, '0')}`;
+  const canCancelAccepted = cancelSecondsRemaining > 0;
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -967,24 +1004,48 @@ export function App() {
                 onComplete={(cp) => setClientProfile(cp)}
               />
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }}>
-                {/* Form de Solicitação */}
-                <div className="glass-panel" style={{ padding: '28px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <div style={{
-                        background: 'rgba(99, 102, 241, 0.15)',
-                        padding: '10px',
-                        borderRadius: '12px',
-                        color: '#818cf8'
-                      }}>
-                        <Navigation size={22} />
-                      </div>
-                      <div>
-                        <h2 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Contratar Motorista</h2>
-                        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Defina o tempo que precisará do veículo</p>
-                      </div>
-                    </div>
+              <div>
+                {/* Switcher de Sub-Abas do Passageiro */}
+                <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+                  <button
+                    onClick={() => setClientSubTab('request')}
+                    className={clientSubTab === 'request' ? 'btn-primary' : 'btn-outline'}
+                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', fontSize: '0.9rem', borderRadius: '14px' }}
+                  >
+                    <Car size={18} />
+                    <span>Solicitar Corrida</span>
+                  </button>
+                  <button
+                    onClick={() => setClientSubTab('nearby_radar')}
+                    className={clientSubTab === 'nearby_radar' ? 'btn-primary' : 'btn-outline'}
+                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', fontSize: '0.9rem', borderRadius: '14px' }}
+                  >
+                    <Radio size={18} className="animate-pulse" />
+                    <span>Motoristas Próximos (Radar)</span>
+                  </button>
+                </div>
+
+                {clientSubTab === 'nearby_radar' ? (
+                  <NearbyDriversMap onSelectDriverToRequest={() => setClientSubTab('request')} />
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }}>
+                    {/* Form de Solicitação */}
+                    <div className="glass-panel" style={{ padding: '28px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div style={{
+                            background: 'rgba(99, 102, 241, 0.15)',
+                            padding: '10px',
+                            borderRadius: '12px',
+                            color: '#818cf8'
+                          }}>
+                            <Navigation size={22} />
+                          </div>
+                          <div>
+                            <h2 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Contratar Motorista</h2>
+                            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Defina o tempo que precisará do veículo</p>
+                          </div>
+                        </div>
 
                     {/* Botão de GPS */}
                     <button
@@ -1429,45 +1490,98 @@ export function App() {
                         </div>
                       </div>
 
-                      {/* Ações interativas */}
+                      {/* Ações Exclusivas do Passageiro */}
                       {activeClientRide.status === 'searching' && (
-                        <div style={{ marginTop: '20px', padding: '14px', background: 'rgba(99, 102, 241, 0.08)', borderRadius: '12px', border: '1px dashed rgba(99, 102, 241, 0.3)' }}>
-                          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '10px' }}>
-                            💡 <strong>Simulação em tempo real:</strong> Aceite esta corrida na aba <strong>Motorista</strong> ou clique no botão abaixo:
-                          </p>
+                        <div style={{ marginTop: '20px' }}>
                           <button
-                            onClick={() => handleAcceptRide(activeClientRide.id)}
-                            className="btn-success"
-                            style={{ width: '100%', fontSize: '0.85rem', padding: '8px' }}
+                            type="button"
+                            onClick={() => handleCancelRideByClient(activeClientRide.id)}
+                            className="btn-outline"
+                            style={{
+                              width: '100%',
+                              padding: '12px',
+                              color: '#ef4444',
+                              borderColor: 'rgba(239, 68, 68, 0.4)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '8px',
+                              fontWeight: 700
+                            }}
                           >
-                            Simular Aceite do Motorista
+                            <Ban size={16} />
+                            <span>Cancelar Solicitação</span>
                           </button>
                         </div>
                       )}
 
                       {activeClientRide.status === 'accepted' && (
-                        <div style={{ marginTop: '20px', display: 'flex', gap: '10px' }}>
-                          <button
-                            onClick={() => handleStartRide(activeClientRide.id)}
-                            className="btn-primary"
-                            style={{ flex: 1, fontSize: '0.85rem' }}
-                          >
-                            <PlayCircle size={16} />
-                            Iniciar Viagem
-                          </button>
+                        <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                          <div style={{
+                            background: canCancelAccepted ? 'rgba(245, 158, 11, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                            border: `1px solid ${canCancelAccepted ? 'rgba(245, 158, 11, 0.4)' : 'rgba(239, 68, 68, 0.4)'}`,
+                            borderRadius: '12px',
+                            padding: '14px',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center'
+                          }}>
+                            <div>
+                              <div style={{ fontSize: '0.75rem', color: canCancelAccepted ? '#f59e0b' : '#ef4444', fontWeight: 700 }}>
+                                {canCancelAccepted ? '⏱️ TEMPO LIMITE DE CANCELAMENTO' : '⚠️ PRAZO DE CANCELAMENTO EXPIRADO'}
+                              </div>
+                              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                                {canCancelAccepted 
+                                  ? 'Você tem até 5 minutos após o aceite para cancelar a chamada gratuitamente.' 
+                                  : 'O prazo de 5 minutos expirou. O motorista já está em deslocamento até seu local.'}
+                              </div>
+                            </div>
+                            {canCancelAccepted && (
+                              <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#f59e0b', fontFamily: 'monospace' }}>
+                                {formattedCountdown}
+                              </div>
+                            )}
+                          </div>
+
+                          {canCancelAccepted && (
+                            <button
+                              type="button"
+                              onClick={() => handleCancelRideByClient(activeClientRide.id)}
+                              className="btn-outline"
+                              style={{
+                                width: '100%',
+                                padding: '12px',
+                                color: '#ef4444',
+                                borderColor: 'rgba(239, 68, 68, 0.4)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '8px',
+                                fontWeight: 700
+                              }}
+                            >
+                              <Ban size={16} />
+                              <span>Cancelar Corrida ({formattedCountdown} restantes)</span>
+                            </button>
+                          )}
                         </div>
                       )}
 
                       {activeClientRide.status === 'in_progress' && (
                         <div style={{ marginTop: '20px' }}>
-                          <button
-                            onClick={() => handleFinishRide(activeClientRide.id)}
-                            className="btn-success"
-                            style={{ width: '100%', fontSize: '0.9rem' }}
-                          >
-                            <CheckCircle2 size={16} />
-                            Finalizar Corrida e Efetuar Repasse
-                          </button>
+                          <LiveRideTrackerMap ride={activeClientRide} />
+                          <div style={{
+                            background: 'rgba(16, 185, 129, 0.1)',
+                            border: '1px solid rgba(16, 185, 129, 0.3)',
+                            borderRadius: '12px',
+                            padding: '12px',
+                            fontSize: '0.8rem',
+                            color: '#10b981',
+                            marginTop: '12px',
+                            textAlign: 'center'
+                          }}>
+                            ✅ <strong>Corrida em andamento:</strong> Acompanhe a rota no mapa em tempo real. O motorista concluirá o período contratado ao final.
+                          </div>
                         </div>
                       )}
                     </div>
@@ -1498,6 +1612,8 @@ export function App() {
             )}
           </div>
         )}
+      </div>
+    )}
 
         {/* TAB 2: MOTORISTA */}
         {activeTab === 'driver' && (
@@ -1531,9 +1647,47 @@ export function App() {
                 />
               </div>
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }}>
-                {/* Painel do Motorista */}
-                <div className="glass-panel" style={{ padding: '28px' }}>
+              <div>
+                {/* Banner de Aviso de Cancelamento pelo Passageiro */}
+                {cancelledRideForDriver && cancelledRideForDriver.id !== dismissedCancellationId && (
+                  <div style={{
+                    background: 'rgba(239, 68, 68, 0.15)',
+                    border: '1px solid rgba(239, 68, 68, 0.5)',
+                    borderRadius: '16px',
+                    padding: '16px 20px',
+                    marginBottom: '20px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: '14px',
+                    boxShadow: '0 4px 20px rgba(239, 68, 68, 0.2)'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{ background: '#ef4444', color: '#fff', padding: '10px', borderRadius: '12px' }}>
+                        <AlertOctagon size={22} />
+                      </div>
+                      <div>
+                        <strong style={{ color: '#fff', fontSize: '1rem', display: 'block' }}>
+                          Atenção: Corrida Cancelada pelo Passageiro
+                        </strong>
+                        <span style={{ fontSize: '0.85rem', color: '#fca5a5' }}>
+                          O passageiro cancelou a solicitação #{cancelledRideForDriver.id.slice(-6)} ({cancelledRideForDriver.origin} ➔ {cancelledRideForDriver.destination}).
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setDismissedCancellationId(cancelledRideForDriver.id)}
+                      className="btn-outline"
+                      style={{ fontSize: '0.8rem', padding: '8px 14px', color: '#fff', borderColor: 'rgba(255,255,255,0.2)' }}
+                    >
+                      Entendido / Fechar
+                    </button>
+                  </div>
+                )}
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }}>
+                  {/* Painel do Motorista */}
+                  <div className="glass-panel" style={{ padding: '28px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -1819,6 +1973,7 @@ export function App() {
                   )}
                 </div>
               </div>
+            </div>
             )}
           </div>
         )}
