@@ -7,11 +7,13 @@ import { dbSaveClientProfile, dbCheckSupabaseStatus } from '../services/dbServic
 
 interface ClientOnboardingProps {
   user: UserProfile;
+  initialProfile?: ClientProfile | null;
   onComplete: (clientProfile: ClientProfile) => void;
 }
 
 export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ 
   user, 
+  initialProfile,
   onComplete 
 }) => {
   // 💾 Recuperar rascunho de cliente salvo em memória interna
@@ -25,17 +27,17 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({
   };
   const draft = getSavedDraft();
 
-  const [phone, setPhone] = useState(draft?.phone || formatPhone(user.phone || ''));
-  const [cpf, setCpf] = useState(draft?.cpf || '');
-  const [cep, setCep] = useState(draft?.cep || '');
-  const [street, setStreet] = useState(draft?.street || '');
-  const [number, setNumber] = useState(draft?.number || '');
-  const [complement, setComplement] = useState(draft?.complement || '');
-  const [neighborhood, setNeighborhood] = useState(draft?.neighborhood || '');
-  const [city, setCity] = useState(draft?.city || '');
-  const [state, setState] = useState(draft?.state || '');
+  const [phone, setPhone] = useState(draft?.phone || initialProfile?.phone || formatPhone(user.phone || ''));
+  const [cpf, setCpf] = useState(draft?.cpf || initialProfile?.cpf || '');
+  const [cep, setCep] = useState(draft?.cep || initialProfile?.cep || '');
+  const [street, setStreet] = useState(draft?.street || initialProfile?.street || '');
+  const [number, setNumber] = useState(draft?.number || initialProfile?.number || '');
+  const [complement, setComplement] = useState(draft?.complement || initialProfile?.complement || '');
+  const [neighborhood, setNeighborhood] = useState(draft?.neighborhood || initialProfile?.neighborhood || '');
+  const [city, setCity] = useState(draft?.city || initialProfile?.city || '');
+  const [state, setState] = useState(draft?.state || initialProfile?.state || '');
   const [isLoadingCep, setIsLoadingCep] = useState(false);
-  const [cepSuccess, setCepSuccess] = useState(Boolean(draft?.street));
+  const [cepSuccess, setCepSuccess] = useState(Boolean(draft?.street || initialProfile?.street));
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 

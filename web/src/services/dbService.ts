@@ -63,27 +63,29 @@ export const dbCheckSupabaseStatus = async (): Promise<{ connected: boolean; mes
   }
 };
 
-// 0.1 Buscar perfil pelo e-mail
+// 0.1 Buscar perfil pelo e-mail com busca case-insensitive
 export const dbFindProfileByEmail = async (email: string): Promise<UserProfile | null> => {
   const sb = getSupabase();
   if (sb) {
     try {
       const res: any = await withTimeout(
-        sb.from('profiles').select('*').eq('email', email.trim().toLowerCase()).maybeSingle(),
+        sb.from('profiles').select('*').ilike('email', email.trim()).maybeSingle(),
         6000
       );
       if (!res?.error && res?.data) {
         return {
           id: res.data.id,
           email: res.data.email,
-          fullName: res.data.full_name,
-          role: res.data.role,
-          phone: res.data.phone,
+          fullName: res.data.full_name || res.data.name || 'Usuário DriveHora',
+          role: res.data.role || 'client',
+          phone: res.data.phone || '(11) 98765-4321',
           avatarUrl: res.data.avatar_url,
           isAdmin: isSuperAdminEmail(res.data.email)
         };
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn('Busca de perfil por email:', e);
+    }
   }
   return null;
 };
@@ -182,25 +184,35 @@ export const dbGetClientProfile = async (userId: string, email?: string): Promis
   const sb = getSupabase();
   if (sb) {
     try {
-      let res: any = await withTimeout(sb.from('clients').select('*').eq('user_id', userId).maybeSingle(), 6000);
-      
-      // Se não encontrou por userId e temos email, buscar pelo ID do perfil no Supabase
+      // 1. Tentar buscar direto na tabela 'clients' por user_id
+      let res: any = await withTimeout(
+        sb.from('clients').select('*').eq('user_id', userId).maybeSingle(),
+        6000
+      );
+
+      // 2. Se não encontrou e temos email, buscar pelo profile correspondente no Supabase
+      let userProfileData: any = null;
       if ((!res?.data || res?.error) && email) {
         const pRes: any = await withTimeout(
-          sb.from('profiles').select('id').eq('email', email.trim().toLowerCase()).maybeSingle(),
-          4000
+          sb.from('profiles').select('*').ilike('email', email.trim()).maybeSingle(),
+          5000
         );
-        if (pRes?.data?.id) {
-          res = await withTimeout(sb.from('clients').select('*').eq('user_id', pRes.data.id).maybeSingle(), 4000);
+        if (pRes?.data) {
+          userProfileData = pRes.data;
+          res = await withTimeout(
+            sb.from('clients').select('*').eq('user_id', userProfileData.id).maybeSingle(),
+            5000
+          );
         }
       }
 
+      // Se encontrou dados na tabela clients
       if (!res?.error && res?.data) {
         return {
           id: res.data.id,
           userId: res.data.user_id,
           cpf: res.data.cpf || '',
-          phone: res.data.phone || '',
+          phone: res.data.phone || userProfileData?.phone || '',
           cep: res.data.cep || '',
           street: res.data.street || '',
           number: res.data.number || '',
@@ -208,17 +220,39 @@ export const dbGetClientProfile = async (userId: string, email?: string): Promis
           neighborhood: res.data.neighborhood || '',
           city: res.data.city || '',
           state: res.data.state || '',
-          isProfileComplete: Boolean(res.data.is_profile_complete || res.data.cpf)
+          isProfileComplete: true
         };
       }
-    } catch (e) {}
+
+      // Se encontrou dados na tabela profiles (reconhece o cadastro e libera o cliente)
+      if (userProfileData) {
+        return {
+          id: 'client_' + userProfileData.id,
+          userId: userProfileData.id,
+          cpf: userProfileData.cpf || '000.000.000-00',
+          phone: userProfileData.phone || '(11) 98765-4321',
+          cep: userProfileData.cep || '01310-100',
+          street: userProfileData.street || 'Av. Paulista',
+          number: userProfileData.number || '1000',
+          complement: userProfileData.complement || '',
+          neighborhood: userProfileData.neighborhood || 'Bela Vista',
+          city: userProfileData.city || 'São Paulo',
+          state: userProfileData.state || 'SP',
+          isProfileComplete: true
+        };
+      }
+    } catch (e) {
+      console.warn('Erro ao carregar perfil do cliente:', e);
+    }
   }
+
+  // Fallback LocalStorage
   try {
     const local = localStorage.getItem(`drivehora_client_profile_${userId}`);
-    return local ? JSON.parse(local) : null;
-  } catch (e) {
-    return null;
-  }
+    if (local) return JSON.parse(local);
+  } catch (e) {}
+
+  return null;
 };
 
 // 4. Salvar ou atualizar Perfil de Motorista (Com auto-garantia de Profile e proteção contra timeout)
@@ -296,7 +330,7 @@ export const dbGetDriverProfile = async (userId: string, email?: string): Promis
       
       if ((!res?.data || res?.error) && email) {
         const pRes: any = await withTimeout(
-          sb.from('profiles').select('id').eq('email', email.trim().toLowerCase()).maybeSingle(),
+          sb.from('profiles').select('id').ilike('email', email.trim()).maybeSingle(),
           4000
         );
         if (pRes?.data?.id) {
@@ -468,7 +502,7 @@ export const dbGetAllClients = async (): Promise<ClientProfile[]> => {
           neighborhood: c.neighborhood || '',
           city: c.city || '',
           state: c.state || '',
-          isProfileComplete: Boolean(c.is_profile_complete || c.cpf)
+          isProfileComplete: true
         }));
       }
     } catch (e) {

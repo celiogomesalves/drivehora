@@ -708,6 +708,7 @@ export function App() {
             {!isUserAdmin && currentUser.role === 'client' && (!clientProfile || !clientProfile.isProfileComplete) ? (
               <ClientOnboarding
                 user={currentUser}
+                initialProfile={clientProfile}
                 onComplete={(cp) => setClientProfile(cp)}
               />
             ) : (
