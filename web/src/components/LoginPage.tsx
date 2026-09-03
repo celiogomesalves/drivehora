@@ -3,7 +3,7 @@ import type { UserRole, UserProfile } from '../types/auth';
 import { isSuperAdminEmail } from '../types/auth';
 import { Users, Car, LogIn, Mail, Lock, User, Phone, ShieldCheck, Sparkles, Clock, DollarSign } from 'lucide-react';
 import { formatPhone } from '../utils/formatters';
-import { dbSaveProfile } from '../services/dbService';
+import { dbSaveProfile, dbFindProfileByEmail, generateUserIdFromEmail } from '../services/dbService';
 
 interface LoginPageProps {
   onLoginSuccess: (user: UserProfile) => void;
@@ -22,17 +22,21 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     e.preventDefault();
     setIsLoading(true);
 
-    const cleanEmail = email.trim() || (selectedRole === 'client' ? 'passageiro@drivehora.com' : 'motorista@drivehora.com');
+    const cleanEmail = email.trim().toLowerCase() || (selectedRole === 'client' ? 'passageiro@drivehora.com' : 'motorista@drivehora.com');
     const isAdmin = isSuperAdminEmail(cleanEmail);
 
+    // 🔍 Buscar se o usuário já possui cadastro prévio no banco
+    const existingProfile = await dbFindProfileByEmail(cleanEmail);
+    const userId = existingProfile?.id || generateUserIdFromEmail(cleanEmail);
+
     const user: UserProfile = {
-      id: 'usr_' + (isSignUp ? 'new_' : '') + Math.random().toString(36).substring(2, 8),
+      id: userId,
       email: cleanEmail,
-      fullName: fullName.trim() || (selectedRole === 'client' ? 'Passageiro DriveHora' : 'Motorista Parceiro'),
+      fullName: fullName.trim() || existingProfile?.fullName || (selectedRole === 'client' ? 'Passageiro DriveHora' : 'Motorista Parceiro'),
       role: selectedRole,
-      phone: phone || '(11) 98765-4321',
+      phone: phone || existingProfile?.phone || '(11) 98765-4321',
       isAdmin: isAdmin,
-      createdAt: new Date().toISOString()
+      createdAt: existingProfile?.createdAt || new Date().toISOString()
     };
 
     await dbSaveProfile(user);

@@ -36,7 +36,7 @@ export interface ClientProfile {
   isProfileComplete: boolean;
 }
 
-export type DriverVerificationStatus = 'pending_docs' | 'under_review' | 'approved' | 'rejected';
+export type DriverVerificationStatus = 'pending_docs' | 'under_review' | 'approved' | 'rejected' | 'suspended';
 
 export interface DriverProfile {
   id: string;

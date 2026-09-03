@@ -1,5 +1,6 @@
 import { getSupabase } from '../supabase';
 import type { UserProfile, ClientProfile, DriverProfile, DriverVerificationStatus } from '../types/auth';
+import { isSuperAdminEmail } from '../types/auth';
 
 export interface DbRide {
   id: string;
@@ -33,6 +34,18 @@ const withTimeout = async (promise: any, timeoutMs = 12000): Promise<any> => {
   ]);
 };
 
+// Gerador determinístico de ID baseado no e-mail (garante consistência entre logins)
+export const generateUserIdFromEmail = (email: string): string => {
+  const clean = email.toLowerCase().trim();
+  let hash = 0;
+  for (let i = 0; i < clean.length; i++) {
+    hash = (hash << 5) - hash + clean.charCodeAt(i);
+    hash |= 0;
+  }
+  const safeStr = clean.replace(/[^a-z0-9]/g, '').slice(0, 16);
+  return `usr_${safeStr}_${Math.abs(hash).toString(36)}`;
+};
+
 // 0. Testar status da conexão com o banco Supabase
 export const dbCheckSupabaseStatus = async (): Promise<{ connected: boolean; message?: string }> => {
   const sb = getSupabase();
@@ -50,6 +63,31 @@ export const dbCheckSupabaseStatus = async (): Promise<{ connected: boolean; mes
   }
 };
 
+// 0.1 Buscar perfil pelo e-mail
+export const dbFindProfileByEmail = async (email: string): Promise<UserProfile | null> => {
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      const res: any = await withTimeout(
+        sb.from('profiles').select('*').eq('email', email.trim().toLowerCase()).maybeSingle(),
+        6000
+      );
+      if (!res?.error && res?.data) {
+        return {
+          id: res.data.id,
+          email: res.data.email,
+          fullName: res.data.full_name,
+          role: res.data.role,
+          phone: res.data.phone,
+          avatarUrl: res.data.avatar_url,
+          isAdmin: isSuperAdminEmail(res.data.email)
+        };
+      }
+    } catch (e) {}
+  }
+  return null;
+};
+
 // 1. Salvar ou atualizar Perfil de Usuário
 export const dbSaveProfile = async (profile: UserProfile): Promise<{ success: boolean; error?: string }> => {
   try {
@@ -61,7 +99,7 @@ export const dbSaveProfile = async (profile: UserProfile): Promise<{ success: bo
     try {
       const res: any = await withTimeout(sb.from('profiles').upsert({
         id: profile.id,
-        email: profile.email,
+        email: profile.email.toLowerCase().trim(),
         full_name: profile.fullName,
         role: profile.role,
         phone: profile.phone,
@@ -96,7 +134,6 @@ export const dbSaveClientProfile = async (
   }
 
   try {
-    // Garantir que a tabela 'profiles' possui o registro do usuário para não violar a Foreign Key
     let current = userProfile;
     if (!current) {
       const saved = localStorage.getItem('drivehora_current_user');
@@ -107,7 +144,7 @@ export const dbSaveClientProfile = async (
 
     await withTimeout(sb.from('profiles').upsert({
       id: client.userId,
-      email: current?.email || `client_${client.userId}@drivehora.com`,
+      email: (current?.email || `client_${client.userId}@drivehora.com`).toLowerCase().trim(),
       full_name: current?.fullName || 'Passageiro DriveHora',
       role: 'client',
       phone: client.phone || current?.phone || '(11) 98765-4321',
@@ -126,7 +163,7 @@ export const dbSaveClientProfile = async (
       neighborhood: client.neighborhood,
       city: client.city,
       state: client.state,
-      is_profile_complete: client.isProfileComplete
+      is_profile_complete: true
     }), 8000);
 
     if (res?.error) {
@@ -140,12 +177,24 @@ export const dbSaveClientProfile = async (
   }
 };
 
-// 3. Obter Perfil de Cliente
-export const dbGetClientProfile = async (userId: string): Promise<ClientProfile | null> => {
+// 3. Obter Perfil de Cliente (com busca resiliente por userId e email)
+export const dbGetClientProfile = async (userId: string, email?: string): Promise<ClientProfile | null> => {
   const sb = getSupabase();
   if (sb) {
     try {
-      const res: any = await withTimeout(sb.from('clients').select('*').eq('user_id', userId).maybeSingle(), 6000);
+      let res: any = await withTimeout(sb.from('clients').select('*').eq('user_id', userId).maybeSingle(), 6000);
+      
+      // Se não encontrou por userId e temos email, buscar pelo ID do perfil no Supabase
+      if ((!res?.data || res?.error) && email) {
+        const pRes: any = await withTimeout(
+          sb.from('profiles').select('id').eq('email', email.trim().toLowerCase()).maybeSingle(),
+          4000
+        );
+        if (pRes?.data?.id) {
+          res = await withTimeout(sb.from('clients').select('*').eq('user_id', pRes.data.id).maybeSingle(), 4000);
+        }
+      }
+
       if (!res?.error && res?.data) {
         return {
           id: res.data.id,
@@ -159,7 +208,7 @@ export const dbGetClientProfile = async (userId: string): Promise<ClientProfile 
           neighborhood: res.data.neighborhood || '',
           city: res.data.city || '',
           state: res.data.state || '',
-          isProfileComplete: Boolean(res.data.is_profile_complete)
+          isProfileComplete: Boolean(res.data.is_profile_complete || res.data.cpf)
         };
       }
     } catch (e) {}
@@ -177,7 +226,6 @@ export const dbSaveDriverProfile = async (
   driver: DriverProfile, 
   userProfile?: UserProfile | null
 ): Promise<{ success: boolean; error?: string }> => {
-  // Salvar no localStorage de forma segura (sem estourar cota)
   try {
     const lightweightDriver = { ...driver, cnhUrl: undefined, crlvUrl: undefined, selfieUrl: undefined };
     localStorage.setItem(`drivehora_driver_profile_${driver.userId}`, JSON.stringify(lightweightDriver));
@@ -191,7 +239,6 @@ export const dbSaveDriverProfile = async (
   }
 
   try {
-    // 1. Garantir que a tabela 'profiles' possui o registro antes de inserir em 'drivers'
     let current = userProfile;
     if (!current) {
       const saved = localStorage.getItem('drivehora_current_user');
@@ -202,14 +249,13 @@ export const dbSaveDriverProfile = async (
 
     await withTimeout(sb.from('profiles').upsert({
       id: driver.userId,
-      email: current?.email || `driver_${driver.userId}@drivehora.com`,
+      email: (current?.email || `driver_${driver.userId}@drivehora.com`).toLowerCase().trim(),
       full_name: current?.fullName || 'Motorista Parceiro',
       role: 'driver',
       phone: driver.phone || current?.phone || '(11) 98765-4321',
       updated_at: new Date().toISOString()
     }), 8000);
 
-    // 2. Inserir ou atualizar na tabela 'drivers'
     const res: any = await withTimeout(sb.from('drivers').upsert({
       id: driver.id,
       user_id: driver.userId,
@@ -241,12 +287,23 @@ export const dbSaveDriverProfile = async (
   }
 };
 
-// 5. Obter Perfil de Motorista
-export const dbGetDriverProfile = async (userId: string): Promise<DriverProfile | null> => {
+// 5. Obter Perfil de Motorista (com busca resiliente por userId e email)
+export const dbGetDriverProfile = async (userId: string, email?: string): Promise<DriverProfile | null> => {
   const sb = getSupabase();
   if (sb) {
     try {
-      const res: any = await withTimeout(sb.from('drivers').select('*').eq('user_id', userId).maybeSingle(), 6000);
+      let res: any = await withTimeout(sb.from('drivers').select('*').eq('user_id', userId).maybeSingle(), 6000);
+      
+      if ((!res?.data || res?.error) && email) {
+        const pRes: any = await withTimeout(
+          sb.from('profiles').select('id').eq('email', email.trim().toLowerCase()).maybeSingle(),
+          4000
+        );
+        if (pRes?.data?.id) {
+          res = await withTimeout(sb.from('drivers').select('*').eq('user_id', pRes.data.id).maybeSingle(), 4000);
+        }
+      }
+
       if (!res?.error && res?.data) {
         return {
           id: res.data.id,
@@ -263,7 +320,7 @@ export const dbGetDriverProfile = async (userId: string): Promise<DriverProfile 
           cnhUrl: res.data.cnh_url,
           crlvUrl: res.data.crlv_url,
           selfieUrl: res.data.selfie_url,
-          verificationStatus: res.data.verification_status || 'pending_docs',
+          verificationStatus: dataVerificationStatus(res.data.verification_status),
           rating: Number(res.data.rating) || 5.0,
           totalRides: Number(res.data.total_rides) || 0
         };
@@ -276,6 +333,13 @@ export const dbGetDriverProfile = async (userId: string): Promise<DriverProfile 
   } catch (e) {
     return null;
   }
+};
+
+const dataVerificationStatus = (status: string): DriverVerificationStatus => {
+  if (status === 'approved' || status === 'under_review' || status === 'rejected' || status === 'suspended') {
+    return status;
+  }
+  return 'pending_docs';
 };
 
 // 6. Criar Corrida
@@ -306,7 +370,6 @@ export const dbCreateRide = async (ride: DbRide): Promise<void> => {
     }
   }
 
-  // Fallback API ou memória
   try {
     await fetch('/api/rides', {
       method: 'POST',
@@ -339,7 +402,6 @@ export const dbUpdateRide = async (
     }
   }
 
-  // Fallback API
   if (updates.status === 'accepted' && updates.driverId) {
     await fetch(`/api/rides/${rideId}/accept`, {
       method: 'POST',
@@ -352,10 +414,6 @@ export const dbUpdateRide = async (
     await fetch(`/api/rides/${rideId}/finish`, { method: 'POST' });
   }
 };
-
-// ========================================================
-// RECURSOS EXCLUSIVOS DO PAINEL DE ADMINISTRAÇÃO
-// ========================================================
 
 // 8. Buscar todos os motoristas cadastrados
 export const dbGetAllDrivers = async (): Promise<DriverProfile[]> => {
@@ -379,7 +437,7 @@ export const dbGetAllDrivers = async (): Promise<DriverProfile[]> => {
           cnhUrl: d.cnh_url,
           crlvUrl: d.crlv_url,
           selfieUrl: d.selfie_url,
-          verificationStatus: d.verification_status || 'pending_docs',
+          verificationStatus: dataVerificationStatus(d.verification_status),
           rating: Number(d.rating) || 5.0,
           totalRides: Number(d.total_rides) || 0
         }));
@@ -410,7 +468,7 @@ export const dbGetAllClients = async (): Promise<ClientProfile[]> => {
           neighborhood: c.neighborhood || '',
           city: c.city || '',
           state: c.state || '',
-          isProfileComplete: Boolean(c.is_profile_complete)
+          isProfileComplete: Boolean(c.is_profile_complete || c.cpf)
         }));
       }
     } catch (e) {
