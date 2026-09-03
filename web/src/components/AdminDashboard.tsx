@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { formatCurrency, formatPhone, formatCpf, formatPlate } from '../utils/formatters';
 import { dbGetAllDrivers, dbGetAllClients, dbAdminUpdateDriverStatus, type DbRide } from '../services/dbService';
+import { getSupabase } from '../supabase';
 
 interface AdminDashboardProps {
   rides: DbRide[];
@@ -26,18 +27,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [driverFilter, setDriverFilter] = useState<'all' | 'under_review' | 'approved' | 'pending_docs'>('all');
 
   const loadAdminData = async () => {
-    setIsLoading(true);
     const [driverList, clientList] = await Promise.all([
       dbGetAllDrivers(),
       dbGetAllClients()
     ]);
     setDrivers(driverList);
     setClients(clientList);
-    setIsLoading(false);
   };
 
   useEffect(() => {
-    loadAdminData();
+    setIsLoading(true);
+    loadAdminData().finally(() => setIsLoading(false));
+
+    const sb = getSupabase();
+    let channel: any = null;
+    if (sb) {
+      channel = sb
+        .channel('public:admin_realtime')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => loadAdminData())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, () => loadAdminData())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'drivers' }, () => loadAdminData())
+        .subscribe();
+    }
+
+    const interval = setInterval(() => {
+      loadAdminData();
+    }, 3500);
+
+    return () => {
+      clearInterval(interval);
+      if (channel && sb) sb.removeChannel(channel);
+    };
   }, []);
 
   const handleUpdateStatus = async (driverId: string, status: DriverVerificationStatus) => {
@@ -452,7 +472,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* SUB-ABA 3: CLIENTES */}
       {activeSubTab === 'clients' && (
         <div className="glass-panel" style={{ padding: '24px' }}>
-          <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '16px' }}>Clientes / Passageiros Cadastrados</h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 700 }}>Clientes / Passageiros Cadastrados ({clients.length})</h3>
+            <button
+              onClick={() => loadAdminData()}
+              className="btn-outline"
+              style={{ fontSize: '0.8rem', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} /> Atualizar
+            </button>
+          </div>
+
           {clients.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
               <Users size={40} style={{ margin: '0 auto 10px', opacity: 0.5 }} />
@@ -465,15 +495,48 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   background: 'rgba(15, 23, 42, 0.85)',
                   border: '1px solid var(--border-subtle)',
                   borderRadius: '14px',
-                  padding: '16px'
+                  padding: '18px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px'
                 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <strong style={{ fontSize: '0.95rem' }}>Telefone: {formatPhone(c.phone)}</strong>
-                    <span style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 700 }}>Perfil Completo ✅</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <strong style={{ fontSize: '1.05rem', color: '#fff' }}>
+                        {c.fullName || 'Passageiro DriveHora'}
+                      </strong>
+                      {c.email && (
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                          • {c.email}
+                        </span>
+                      )}
+                    </div>
+                    <span style={{
+                      fontSize: '0.75rem',
+                      padding: '3px 8px',
+                      borderRadius: '6px',
+                      background: 'rgba(16, 185, 129, 0.15)',
+                      color: '#10b981',
+                      fontWeight: 700
+                    }}>
+                      {c.isProfileComplete ? 'Perfil Ativo ✅' : 'Cadastrado 👤'}
+                    </span>
                   </div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                    CPF: {formatCpf(c.cpf)} • CEP: {c.cep} • {c.street}, {c.number} {c.complement ? `(${c.complement})` : ''} - {c.neighborhood}, {c.city}/{c.state}
+
+                  <div style={{ fontSize: '0.85rem', color: '#cbd5e1', display: 'flex', flexWrap: 'wrap', gap: '14px' }}>
+                    <span>📞 Telefone: <strong>{formatPhone(c.phone) || 'Não informado'}</strong></span>
+                    {c.cpf && <span>🆔 CPF: <strong>{formatCpf(c.cpf)}</strong></span>}
                   </div>
+
+                  {(c.street || c.city || c.neighborhood) && (
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                      📍 {c.street ? `${c.street}, ${c.number || 'S/N'}` : ''} 
+                      {c.complement ? ` (${c.complement})` : ''} 
+                      {c.neighborhood ? ` - ${c.neighborhood}` : ''} 
+                      {c.city ? ` - ${c.city}/${c.state}` : ''} 
+                      {c.cep ? ` • CEP: ${c.cep}` : ''}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

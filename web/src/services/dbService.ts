@@ -90,7 +90,7 @@ export const dbFindProfileByEmail = async (email: string): Promise<UserProfile |
   return null;
 };
 
-// 1. Salvar ou atualizar Perfil de Usuário
+// 1. Salvar ou atualizar Perfil de Usuário (E sincronizar automaticamente em clients ou drivers)
 export const dbSaveProfile = async (profile: UserProfile): Promise<{ success: boolean; error?: string }> => {
   try {
     localStorage.setItem(`drivehora_profile_${profile.id}`, JSON.stringify(profile));
@@ -99,19 +99,33 @@ export const dbSaveProfile = async (profile: UserProfile): Promise<{ success: bo
   const sb = getSupabase();
   if (sb) {
     try {
-      const res: any = await withTimeout(sb.from('profiles').upsert({
+      await withTimeout(sb.from('profiles').upsert({
         id: profile.id,
         email: profile.email.toLowerCase().trim(),
         full_name: profile.fullName,
         role: profile.role,
-        phone: profile.phone,
+        phone: profile.phone || '',
         avatar_url: profile.avatarUrl,
         updated_at: new Date().toISOString()
       }), 8000);
-      if (res?.error) {
-        console.warn('Erro ao salvar profile no Supabase:', res.error);
-        return { success: false, error: res.error.message };
+
+      // Sincronizar automaticamente na tabela clients para o admin visualizar
+      if (profile.role === 'client') {
+        await withTimeout(sb.from('clients').upsert({
+          id: 'client_' + profile.id,
+          user_id: profile.id,
+          phone: profile.phone || '',
+          is_profile_complete: true
+        }), 8000);
+      } else if (profile.role === 'driver') {
+        await withTimeout(sb.from('drivers').upsert({
+          id: 'driver_' + profile.id,
+          user_id: profile.id,
+          phone: profile.phone || '',
+          verification_status: 'pending_docs'
+        }), 8000);
       }
+
       return { success: true };
     } catch (e: any) {
       console.warn('Erro ao salvar profile no Supabase:', e);
@@ -180,13 +194,11 @@ export const dbGetClientProfile = async (userId: string, email?: string): Promis
   const sb = getSupabase();
   if (sb) {
     try {
-      // 1. Tentar buscar direto na tabela 'clients' por user_id
       let res: any = await withTimeout(
         sb.from('clients').select('*').eq('user_id', userId).maybeSingle(),
         6000
       );
 
-      // 2. Se não encontrou e temos email, buscar pelo profile correspondente no Supabase
       let userProfileData: any = null;
       if ((!res?.data || res?.error) && email) {
         const pRes: any = await withTimeout(
@@ -202,11 +214,12 @@ export const dbGetClientProfile = async (userId: string, email?: string): Promis
         }
       }
 
-      // Se encontrou dados na tabela clients
       if (!res?.error && res?.data) {
         return {
           id: res.data.id,
           userId: res.data.user_id,
+          fullName: userProfileData?.full_name,
+          email: userProfileData?.email,
           cpf: res.data.cpf || '',
           phone: res.data.phone || userProfileData?.phone || '',
           cep: res.data.cep || '',
@@ -220,20 +233,21 @@ export const dbGetClientProfile = async (userId: string, email?: string): Promis
         };
       }
 
-      // Se encontrou dados na tabela profiles (reconhece o cadastro e libera o cliente)
       if (userProfileData) {
         return {
           id: 'client_' + userProfileData.id,
           userId: userProfileData.id,
+          fullName: userProfileData.full_name,
+          email: userProfileData.email,
           cpf: userProfileData.cpf || '',
           phone: userProfileData.phone || '',
           cep: userProfileData.cep || '',
-          street: userProfileData.street || 'Av. Paulista',
-          number: userProfileData.number || '1000',
+          street: userProfileData.street || '',
+          number: userProfileData.number || '',
           complement: userProfileData.complement || '',
-          neighborhood: userProfileData.neighborhood || 'Bela Vista',
-          city: userProfileData.city || 'São Paulo',
-          state: userProfileData.state || 'SP',
+          neighborhood: userProfileData.neighborhood || '',
+          city: userProfileData.city || '',
+          state: userProfileData.state || '',
           isProfileComplete: true
         };
       }
@@ -242,7 +256,6 @@ export const dbGetClientProfile = async (userId: string, email?: string): Promis
     }
   }
 
-  // Fallback LocalStorage
   try {
     const local = localStorage.getItem(`drivehora_client_profile_${userId}`);
     if (local) return JSON.parse(local);
@@ -251,7 +264,7 @@ export const dbGetClientProfile = async (userId: string, email?: string): Promis
   return null;
 };
 
-// 4. Salvar ou atualizar Perfil de Motorista (Com auto-garantia de Profile e proteção contra timeout)
+// 4. Salvar ou atualizar Perfil de Motorista
 export const dbSaveDriverProfile = async (
   driver: DriverProfile, 
   userProfile?: UserProfile | null
@@ -265,7 +278,7 @@ export const dbSaveDriverProfile = async (
 
   const sb = getSupabase();
   if (!sb) {
-    return { success: false, error: 'Banco de dados Supabase desconectado. Conecte o banco de dados antes de enviar os documentos.' };
+    return { success: false, error: 'Banco de dados Supabase desconectado.' };
   }
 
   try {
@@ -317,7 +330,7 @@ export const dbSaveDriverProfile = async (
   }
 };
 
-// 5. Obter Perfil de Motorista (com busca resiliente por userId e email)
+// 5. Obter Perfil de Motorista
 export const dbGetDriverProfile = async (userId: string, email?: string): Promise<DriverProfile | null> => {
   const sb = getSupabase();
   if (sb) {
@@ -445,33 +458,73 @@ export const dbUpdateRide = async (
   }
 };
 
-// 8. Buscar todos os motoristas cadastrados
+// 8. Buscar todos os motoristas cadastrados (unindo profiles e drivers)
 export const dbGetAllDrivers = async (): Promise<DriverProfile[]> => {
   const sb = getSupabase();
   if (sb) {
     try {
-      const { data, error } = await sb.from('drivers').select('*').order('created_at', { ascending: false });
-      if (!error && data) {
-        return data.map((d: any) => ({
-          id: d.id,
-          userId: d.user_id,
-          cpf: d.cpf || '',
-          phone: d.phone || '',
-          cnhNumber: d.cnh_number || '',
-          cnhCategory: d.cnh_category || 'B',
-          vehicleBrand: d.vehicle_brand || '',
-          vehicleModel: d.vehicle_model || '',
-          vehicleYear: d.vehicle_year || '',
-          vehiclePlate: d.vehicle_plate || '',
-          vehicleColor: d.vehicle_color || '',
-          cnhUrl: d.cnh_url,
-          crlvUrl: d.crlv_url,
-          selfieUrl: d.selfie_url,
-          verificationStatus: dataVerificationStatus(d.verification_status),
-          rating: Number(d.rating) || 5.0,
-          totalRides: Number(d.total_rides) || 0
-        }));
-      }
+      const [profilesRes, driversRes] = await Promise.all([
+        sb.from('profiles').select('*').eq('role', 'driver').order('created_at', { ascending: false }),
+        sb.from('drivers').select('*').order('created_at', { ascending: false })
+      ]);
+
+      const driverMap = new Map<string, any>();
+      (driversRes.data || []).forEach((d: any) => {
+        driverMap.set(d.user_id, d);
+      });
+
+      const list: DriverProfile[] = [];
+      const seenUserIds = new Set<string>();
+
+      (profilesRes.data || []).forEach((p: any) => {
+        seenUserIds.add(p.id);
+        const d = driverMap.get(p.id);
+        list.push({
+          id: d?.id || 'driver_' + p.id,
+          userId: p.id,
+          cpf: d?.cpf || '',
+          phone: p.phone || d?.phone || '',
+          cnhNumber: d?.cnh_number || '',
+          cnhCategory: d?.cnh_category || 'B',
+          vehicleBrand: d?.vehicle_brand || '',
+          vehicleModel: d?.vehicle_model || '',
+          vehicleYear: d?.vehicle_year || '',
+          vehiclePlate: d?.vehicle_plate || '',
+          vehicleColor: d?.vehicle_color || '',
+          cnhUrl: d?.cnh_url,
+          crlvUrl: d?.crlv_url,
+          selfieUrl: d?.selfie_url,
+          verificationStatus: dataVerificationStatus(d?.verification_status || 'pending_docs'),
+          rating: Number(d?.rating) || 5.0,
+          totalRides: Number(d?.total_rides) || 0
+        });
+      });
+
+      (driversRes.data || []).forEach((d: any) => {
+        if (!seenUserIds.has(d.user_id)) {
+          list.push({
+            id: d.id,
+            userId: d.user_id,
+            cpf: d.cpf || '',
+            phone: d.phone || '',
+            cnhNumber: d.cnh_number || '',
+            cnhCategory: d.cnh_category || 'B',
+            vehicleBrand: d.vehicle_brand || '',
+            vehicleModel: d.vehicle_model || '',
+            vehicleYear: d.vehicle_year || '',
+            vehiclePlate: d.vehicle_plate || '',
+            vehicleColor: d.vehicle_color || '',
+            cnhUrl: d.cnh_url,
+            crlvUrl: d.crlv_url,
+            selfieUrl: d.selfie_url,
+            verificationStatus: dataVerificationStatus(d.verification_status),
+            rating: Number(d.rating) || 5.0,
+            totalRides: Number(d.total_rides) || 0
+          });
+        }
+      });
+
+      return list;
     } catch (e) {
       console.warn('Erro ao buscar motoristas:', e);
     }
@@ -479,30 +532,69 @@ export const dbGetAllDrivers = async (): Promise<DriverProfile[]> => {
   return [];
 };
 
-// 9. Buscar todos os clientes cadastrados
+// 9. Buscar todos os clientes cadastrados (unindo profiles e clients para o Admin Dashboard)
 export const dbGetAllClients = async (): Promise<ClientProfile[]> => {
   const sb = getSupabase();
   if (sb) {
     try {
-      const { data, error } = await sb.from('clients').select('*').order('created_at', { ascending: false });
-      if (!error && data) {
-        return data.map((c: any) => ({
-          id: c.id,
-          userId: c.user_id,
-          cpf: c.cpf || '',
-          phone: c.phone || '',
-          cep: c.cep || '',
-          street: c.street || '',
-          number: c.number || '',
-          complement: c.complement || '',
-          neighborhood: c.neighborhood || '',
-          city: c.city || '',
-          state: c.state || '',
-          isProfileComplete: true
-        }));
-      }
+      const [profilesRes, clientsRes] = await Promise.all([
+        sb.from('profiles').select('*').eq('role', 'client').order('created_at', { ascending: false }),
+        sb.from('clients').select('*').order('created_at', { ascending: false })
+      ]);
+
+      const clientMap = new Map<string, any>();
+      (clientsRes.data || []).forEach((c: any) => {
+        clientMap.set(c.user_id, c);
+      });
+
+      const list: ClientProfile[] = [];
+      const seenUserIds = new Set<string>();
+
+      (profilesRes.data || []).forEach((p: any) => {
+        seenUserIds.add(p.id);
+        const c = clientMap.get(p.id);
+        list.push({
+          id: c?.id || 'client_' + p.id,
+          userId: p.id,
+          fullName: p.full_name,
+          email: p.email,
+          cpf: c?.cpf || '',
+          phone: p.phone || c?.phone || '',
+          cep: c?.cep || '',
+          street: c?.street || '',
+          number: c?.number || '',
+          complement: c?.complement || '',
+          neighborhood: c?.neighborhood || '',
+          city: c?.city || '',
+          state: c?.state || '',
+          isProfileComplete: Boolean(c?.is_profile_complete || true),
+          createdAt: p.created_at || p.updated_at
+        });
+      });
+
+      (clientsRes.data || []).forEach((c: any) => {
+        if (!seenUserIds.has(c.user_id)) {
+          list.push({
+            id: c.id,
+            userId: c.user_id,
+            cpf: c.cpf || '',
+            phone: c.phone || '',
+            cep: c.cep || '',
+            street: c.street || '',
+            number: c.number || '',
+            complement: c.complement || '',
+            neighborhood: c.neighborhood || '',
+            city: c.city || '',
+            state: c.state || '',
+            isProfileComplete: true,
+            createdAt: c.created_at
+          });
+        }
+      });
+
+      return list;
     } catch (e) {
-      console.warn('Erro ao buscar clientes:', e);
+      console.warn('Erro ao buscar clientes no Supabase:', e);
     }
   }
   return [];

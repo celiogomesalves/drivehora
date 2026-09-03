@@ -24,6 +24,8 @@ export interface UserProfile {
 export interface ClientProfile {
   id: string;
   userId: string;
+  fullName?: string;
+  email?: string;
   cpf: string;
   phone: string;
   cep: string;
@@ -34,6 +36,7 @@ export interface ClientProfile {
   city: string;
   state: string;
   isProfileComplete: boolean;
+  createdAt?: string;
 }
 
 export type DriverVerificationStatus = 'pending_docs' | 'under_review' | 'approved' | 'rejected' | 'suspended';
