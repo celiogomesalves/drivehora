@@ -25,13 +25,30 @@ export interface DbRide {
   finishedAt?: number;
 }
 
+// 0. Testar status da conexão com o banco Supabase
+export const dbCheckSupabaseStatus = async (): Promise<{ connected: boolean; message?: string }> => {
+  const sb = getSupabase();
+  if (!sb) {
+    return { connected: false, message: 'Credenciais do Supabase não configuradas no sistema.' };
+  }
+  try {
+    const { error } = await sb.from('profiles').select('id').limit(1);
+    if (error) {
+      return { connected: false, message: `Erro ao conectar com Supabase: ${error.message}` };
+    }
+    return { connected: true };
+  } catch (e: any) {
+    return { connected: false, message: e.message || 'Falha de conexão com o banco de dados.' };
+  }
+};
+
 // 1. Salvar ou atualizar Perfil de Usuário
-export const dbSaveProfile = async (profile: UserProfile): Promise<void> => {
+export const dbSaveProfile = async (profile: UserProfile): Promise<{ success: boolean; error?: string }> => {
   localStorage.setItem(`drivehora_profile_${profile.id}`, JSON.stringify(profile));
   const sb = getSupabase();
   if (sb) {
     try {
-      await sb.from('profiles').upsert({
+      const { error } = await sb.from('profiles').upsert({
         id: profile.id,
         email: profile.email,
         full_name: profile.fullName,
@@ -40,35 +57,49 @@ export const dbSaveProfile = async (profile: UserProfile): Promise<void> => {
         avatar_url: profile.avatarUrl,
         updated_at: new Date().toISOString()
       });
-    } catch (e) {
+      if (error) {
+        console.warn('Erro ao salvar profile no Supabase:', error);
+        return { success: false, error: error.message };
+      }
+      return { success: true };
+    } catch (e: any) {
       console.warn('Erro ao salvar profile no Supabase:', e);
+      return { success: false, error: e.message };
     }
   }
+  return { success: true };
 };
 
 // 2. Salvar ou atualizar Perfil de Cliente (Passageiro)
-export const dbSaveClientProfile = async (client: ClientProfile): Promise<void> => {
+export const dbSaveClientProfile = async (client: ClientProfile): Promise<{ success: boolean; error?: string }> => {
   localStorage.setItem(`drivehora_client_profile_${client.userId}`, JSON.stringify(client));
   const sb = getSupabase();
-  if (sb) {
-    try {
-      await sb.from('clients').upsert({
-        id: client.id,
-        user_id: client.userId,
-        cpf: client.cpf,
-        phone: client.phone,
-        cep: client.cep,
-        street: client.street,
-        number: client.number,
-        complement: client.complement,
-        neighborhood: client.neighborhood,
-        city: client.city,
-        state: client.state,
-        is_profile_complete: client.isProfileComplete
-      });
-    } catch (e) {
-      console.warn('Erro ao salvar client no Supabase:', e);
+  if (!sb) {
+    return { success: false, error: 'Banco de dados Supabase desconectado. Conecte o banco antes de enviar.' };
+  }
+  try {
+    const { error } = await sb.from('clients').upsert({
+      id: client.id,
+      user_id: client.userId,
+      cpf: client.cpf,
+      phone: client.phone,
+      cep: client.cep,
+      street: client.street,
+      number: client.number,
+      complement: client.complement,
+      neighborhood: client.neighborhood,
+      city: client.city,
+      state: client.state,
+      is_profile_complete: client.isProfileComplete
+    });
+    if (error) {
+      console.warn('Erro ao salvar client no Supabase:', error);
+      return { success: false, error: error.message };
     }
+    return { success: true };
+  } catch (e: any) {
+    console.warn('Erro ao salvar client no Supabase:', e);
+    return { success: false, error: e.message };
   }
 };
 
@@ -100,34 +131,43 @@ export const dbGetClientProfile = async (userId: string): Promise<ClientProfile 
   return local ? JSON.parse(local) : null;
 };
 
-// 4. Salvar ou atualizar Perfil de Motorista
-export const dbSaveDriverProfile = async (driver: DriverProfile): Promise<void> => {
+// 4. Salvar ou atualizar Perfil de Motorista (Com checagem estrita de banco)
+export const dbSaveDriverProfile = async (driver: DriverProfile): Promise<{ success: boolean; error?: string }> => {
   localStorage.setItem(`drivehora_driver_profile_${driver.userId}`, JSON.stringify(driver));
   const sb = getSupabase();
-  if (sb) {
-    try {
-      await sb.from('drivers').upsert({
-        id: driver.id,
-        user_id: driver.userId,
-        cpf: driver.cpf,
-        phone: driver.phone,
-        cnh_number: driver.cnhNumber,
-        cnh_category: driver.cnhCategory,
-        vehicle_brand: driver.vehicleBrand,
-        vehicle_model: driver.vehicleModel,
-        vehicle_year: driver.vehicleYear,
-        vehicle_plate: driver.vehiclePlate,
-        vehicle_color: driver.vehicleColor,
-        cnh_url: driver.cnhUrl,
-        crlv_url: driver.crlvUrl,
-        selfie_url: driver.selfieUrl,
-        verification_status: driver.verificationStatus,
-        rating: driver.rating,
-        total_rides: driver.totalRides
-      });
-    } catch (e) {
-      console.warn('Erro ao salvar driver no Supabase:', e);
+  if (!sb) {
+    return { success: false, error: 'Banco de dados Supabase desconectado. Conecte o banco de dados antes de enviar os documentos.' };
+  }
+
+  try {
+    const { error } = await sb.from('drivers').upsert({
+      id: driver.id,
+      user_id: driver.userId,
+      cpf: driver.cpf,
+      phone: driver.phone,
+      cnh_number: driver.cnhNumber,
+      cnh_category: driver.cnhCategory,
+      vehicle_brand: driver.vehicleBrand,
+      vehicle_model: driver.vehicleModel,
+      vehicle_year: driver.vehicleYear,
+      vehicle_plate: driver.vehiclePlate,
+      vehicle_color: driver.vehicleColor,
+      cnh_url: driver.cnhUrl,
+      crlv_url: driver.crlvUrl,
+      selfie_url: driver.selfieUrl,
+      verification_status: driver.verificationStatus,
+      rating: driver.rating,
+      total_rides: driver.totalRides
+    });
+
+    if (error) {
+      console.warn('Erro ao salvar driver no Supabase:', error);
+      return { success: false, error: `Erro no Supabase: ${error.message}` };
     }
+    return { success: true };
+  } catch (e: any) {
+    console.warn('Erro ao salvar driver no Supabase:', e);
+    return { success: false, error: e.message || 'Falha ao salvar no banco de dados.' };
   }
 };
 

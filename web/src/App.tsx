@@ -761,6 +761,7 @@ export function App() {
               <ClientOnboarding
                 user={currentUser}
                 onComplete={(cp) => setClientProfile(cp)}
+                onOpenSupabaseConfig={() => setShowConfigModal(true)}
               />
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }}>
@@ -1141,6 +1142,7 @@ export function App() {
                 user={currentUser}
                 initialProfile={driverProfile}
                 onComplete={(dp) => setDriverProfile(dp)}
+                onOpenSupabaseConfig={() => setShowConfigModal(true)}
               />
             ) : showDriverProfileEdit ? (
               <div>
@@ -1159,6 +1161,7 @@ export function App() {
                     setDriverProfile(dp);
                     setShowDriverProfileEdit(false);
                   }}
+                  onOpenSupabaseConfig={() => setShowConfigModal(true)}
                 />
               </div>
             ) : (

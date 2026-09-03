@@ -2,15 +2,20 @@ import React, { useState } from 'react';
 import type { UserProfile, ClientProfile } from '../types/auth';
 import { formatCep, fetchAddressByCep } from '../services/cepService';
 import { formatPhone, formatCpf, validateCpf, validatePhone } from '../utils/formatters';
-import { MapPin, Search, CheckCircle2, Check, RefreshCw, AlertCircle } from 'lucide-react';
-import { dbSaveClientProfile } from '../services/dbService';
+import { MapPin, Search, CheckCircle2, Check, RefreshCw, AlertCircle, Database } from 'lucide-react';
+import { dbSaveClientProfile, dbCheckSupabaseStatus } from '../services/dbService';
 
 interface ClientOnboardingProps {
   user: UserProfile;
   onComplete: (clientProfile: ClientProfile) => void;
+  onOpenSupabaseConfig?: () => void;
 }
 
-export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ user, onComplete }) => {
+export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ 
+  user, 
+  onComplete,
+  onOpenSupabaseConfig 
+}) => {
   const [phone, setPhone] = useState(formatPhone(user.phone || ''));
   const [cpf, setCpf] = useState('');
   const [cep, setCep] = useState('');
@@ -24,6 +29,7 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ user, onComp
   const [cepSuccess, setCepSuccess] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isDbError, setIsDbError] = useState(false);
 
   // Manipular busca automática do CEP
   const handleCepChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -49,6 +55,7 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ user, onComp
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
+    setIsDbError(false);
 
     // 1. Validação Real e Impeditiva de CPF
     if (!validateCpf(cpf)) {
@@ -68,7 +75,16 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ user, onComp
       return;
     }
 
+    // 4. Checagem de Conexão com o Banco Supabase
     setIsSaving(true);
+    const dbStatus = await dbCheckSupabaseStatus();
+    if (!dbStatus.connected) {
+      setIsSaving(false);
+      setIsDbError(true);
+      setErrorMessage(`⚠️ Impossível cadastrar cliente: Não há conexão com o banco de dados Supabase (${dbStatus.message || 'Desconectado'}). Conecte o banco primeiro.`);
+      return;
+    }
+
     const profile: ClientProfile = {
       id: 'client_' + user.id,
       userId: user.id,
@@ -84,8 +100,15 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ user, onComp
       isProfileComplete: true
     };
 
-    await dbSaveClientProfile(profile);
+    const res = await dbSaveClientProfile(profile);
     setIsSaving(false);
+
+    if (!res.success) {
+      setIsDbError(true);
+      setErrorMessage(`Falha ao salvar no banco: ${res.error}`);
+      return;
+    }
+
     onComplete(profile);
   };
 
@@ -119,16 +142,31 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ user, onComp
             background: 'rgba(239, 68, 68, 0.15)',
             border: '1px solid rgba(239, 68, 68, 0.4)',
             color: '#fca5a5',
-            padding: '12px 16px',
+            padding: '14px 16px',
             borderRadius: '12px',
             fontSize: '0.85rem',
             marginBottom: '16px',
             display: 'flex',
             alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
             gap: '10px'
           }}>
-            <AlertCircle size={18} style={{ flexShrink: 0 }} />
-            <span>{errorMessage}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <AlertCircle size={20} style={{ flexShrink: 0 }} />
+              <span>{errorMessage}</span>
+            </div>
+
+            {isDbError && onOpenSupabaseConfig && (
+              <button
+                type="button"
+                onClick={onOpenSupabaseConfig}
+                className="btn-primary"
+                style={{ fontSize: '0.75rem', padding: '6px 12px' }}
+              >
+                <Database size={14} /> Conectar Banco
+              </button>
+            )}
           </div>
         )}
 
@@ -276,7 +314,7 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ user, onComp
             style={{ width: '100%', padding: '14px', fontSize: '1rem', marginTop: '10px' }}
           >
             {isSaving ? <RefreshCw size={18} className="animate-spin" /> : <Check size={18} />}
-            <span>{isSaving ? 'Validando e Gravando...' : 'Salvar Cadastro e Acessar DriveHora'}</span>
+            <span>{isSaving ? 'Gravando no Banco de Dados...' : 'Salvar no Banco e Acessar DriveHora'}</span>
           </button>
         </form>
       </div>

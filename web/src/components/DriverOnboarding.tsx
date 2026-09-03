@@ -2,19 +2,25 @@ import React, { useState } from 'react';
 import type { UserProfile, DriverProfile, DriverVerificationStatus } from '../types/auth';
 import { 
   ShieldCheck, Car, FileText, Camera, CheckCircle2, 
-  UploadCloud, Check, RefreshCw, AlertCircle, Eye
+  UploadCloud, Check, RefreshCw, AlertCircle, Eye, Database, Edit3
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { formatPhone, formatCpf, formatPlate, validateCpf, validateCnh, validatePlate, validatePhone } from '../utils/formatters';
-import { dbSaveDriverProfile } from '../services/dbService';
+import { dbSaveDriverProfile, dbCheckSupabaseStatus } from '../services/dbService';
 
 interface DriverOnboardingProps {
   user: UserProfile;
   initialProfile?: DriverProfile | null;
   onComplete: (driverProfile: DriverProfile) => void;
+  onOpenSupabaseConfig?: () => void;
 }
 
-export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initialProfile, onComplete }) => {
+export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ 
+  user, 
+  initialProfile, 
+  onComplete,
+  onOpenSupabaseConfig 
+}) => {
   const [step, setStep] = useState<number>(initialProfile?.verificationStatus === 'under_review' ? 4 : 1);
   
   // Dados Pessoais & CNH
@@ -23,10 +29,13 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
   const [cnhNumber, setCnhNumber] = useState(initialProfile?.cnhNumber || '');
   const [cnhCategory, setCnhCategory] = useState(initialProfile?.cnhCategory || 'B');
 
-  // Dados do Veículo
+  // Dados do Veículo (Dropdown de anos a partir de 2010)
+  const currentYear = new Date().getFullYear();
+  const availableYears = Array.from({ length: currentYear + 2 - 2010 }, (_, i) => String(currentYear + 1 - i));
+
   const [vehicleBrand, setVehicleBrand] = useState(initialProfile?.vehicleBrand || 'Toyota');
   const [vehicleModel, setVehicleModel] = useState(initialProfile?.vehicleModel || 'Corolla XEi');
-  const [vehicleYear, setVehicleYear] = useState(initialProfile?.vehicleYear || '2023');
+  const [vehicleYear, setVehicleYear] = useState(initialProfile?.vehicleYear || String(currentYear));
   const [vehiclePlate, setVehiclePlate] = useState(formatPlate(initialProfile?.vehiclePlate || 'BRA-2E19'));
   const [vehicleColor, setVehicleColor] = useState(initialProfile?.vehicleColor || 'Preto');
 
@@ -46,6 +55,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
   );
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isDbError, setIsDbError] = useState(false);
 
   // Leitor de arquivo real para Base64
   const handleFileUpload = (
@@ -72,6 +82,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
   const handleStep1Submit = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
+    setIsDbError(false);
 
     if (!validateCpf(cpf)) {
       setErrorMessage('CPF inválido. Insira um número de CPF válido.');
@@ -95,37 +106,49 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
   const handleStep2Submit = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
+    setIsDbError(false);
 
     if (!validatePlate(vehiclePlate)) {
       setErrorMessage('Placa do veículo inválida. Insira uma placa válida no padrão Mercosul (ABC1D23) ou Tradicional (ABC-1234).');
       return;
     }
 
-    const yearNum = parseInt(vehicleYear.replace(/\D/g, ''));
-    const currentYear = new Date().getFullYear();
-    if (isNaN(yearNum) || yearNum < 2010 || yearNum > currentYear + 1) {
-      setErrorMessage(`Ano do veículo inválido. A plataforma aceita veículos fabricados a partir de 2010 até ${currentYear + 1}.`);
-      return;
-    }
-
     setStep(3);
   };
 
-  // Validação e Envio da Etapa 3
+  // Validação e Envio da Etapa 3 com Verificação Obrigatória do Banco
   const handleStep3Submit = async () => {
     setErrorMessage(null);
+    setIsDbError(false);
 
     if (!cnhUrl || !crlvUrl || !selfieUrl) {
       setErrorMessage('Documentação incompleta. É obrigatório anexar os 3 arquivos: Foto da CNH, Documento do Veículo (CRLV) e Selfie Facial.');
       return;
     }
 
+    // 🔒 Verificação estrita de conexão com o Banco Supabase
+    setIsSaving(true);
+    const dbStatus = await dbCheckSupabaseStatus();
+    if (!dbStatus.connected) {
+      setIsSaving(false);
+      setIsDbError(true);
+      setErrorMessage(`⚠️ Impossível enviar documentos: Não há conexão com o banco de dados Supabase (${dbStatus.message || 'Desconectado'}). Conecte o banco primeiro para gravar seus documentos.`);
+      return;
+    }
+
+    const saveResult = await handleFinishRegistration('under_review');
+    setIsSaving(false);
+
+    if (!saveResult.success) {
+      setIsDbError(true);
+      setErrorMessage(`Falha ao gravar no banco: ${saveResult.error}`);
+      return;
+    }
+
     setStep(4);
-    await handleFinishRegistration('under_review');
   };
 
-  const handleFinishRegistration = async (status: DriverVerificationStatus) => {
-    setIsSaving(true);
+  const handleFinishRegistration = async (status: DriverVerificationStatus): Promise<{ success: boolean; error?: string }> => {
     const profile: DriverProfile = {
       id: 'driver_' + user.id,
       userId: user.id,
@@ -146,10 +169,12 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
       totalRides: initialProfile?.totalRides || 0
     };
 
-    await dbSaveDriverProfile(profile);
-    setIsSaving(false);
-    setVerificationStatus(status);
-    onComplete(profile);
+    const res = await dbSaveDriverProfile(profile);
+    if (res.success) {
+      setVerificationStatus(status);
+      onComplete(profile);
+    }
+    return res;
   };
 
   const handleApproveImmediate = async () => {
@@ -178,7 +203,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
           </div>
           <h2 style={{ fontSize: '1.45rem', fontWeight: 800 }}>Credenciamento Oficial de Motorista</h2>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            Validação rigorosa de CNH (EAR), CRLV do Veículo e Biometria Facial Antifraude
+            Validação rigorosa de CNH (EAR), CRLV do Veículo e Biometria Facial no Banco de Dados
           </p>
 
           {/* Stepper de progresso */}
@@ -216,22 +241,37 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
           </div>
         </div>
 
-        {/* Alerta de Erro de Validação */}
+        {/* Alerta de Erro de Validação ou Banco */}
         {errorMessage && (
           <div style={{
             background: 'rgba(239, 68, 68, 0.15)',
             border: '1px solid rgba(239, 68, 68, 0.4)',
             color: '#fca5a5',
-            padding: '12px 16px',
+            padding: '14px 16px',
             borderRadius: '12px',
             fontSize: '0.85rem',
             marginBottom: '16px',
             display: 'flex',
             alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
             gap: '10px'
           }}>
-            <AlertCircle size={18} style={{ flexShrink: 0 }} />
-            <span>{errorMessage}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <AlertCircle size={20} style={{ flexShrink: 0 }} />
+              <span>{errorMessage}</span>
+            </div>
+
+            {isDbError && onOpenSupabaseConfig && (
+              <button
+                type="button"
+                onClick={onOpenSupabaseConfig}
+                className="btn-primary"
+                style={{ fontSize: '0.75rem', padding: '6px 12px' }}
+              >
+                <Database size={14} /> Conectar Banco
+              </button>
+            )}
           </div>
         )}
 
@@ -315,7 +355,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
           </form>
         )}
 
-        {/* ETAPA 2: DADOS DO VEÍCULO */}
+        {/* ETAPA 2: DADOS DO VEÍCULO COM DROPDOWN DE ANOS (A PARTIR DE 2010) */}
         {step === 2 && (
           <form onSubmit={handleStep2Submit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#10b981' }}>2. Dados do Veículo</h3>
@@ -347,17 +387,21 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+              {/* Dropdown de Ano de Fabricação a partir de 2010 */}
               <div className="input-group">
                 <label>Ano de Fabricação</label>
-                <input
-                  type="text"
+                <select
                   className="custom-input"
                   value={vehicleYear}
-                  onChange={(e) => setVehicleYear(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                  placeholder="2023"
-                  maxLength={4}
+                  onChange={(e) => setVehicleYear(e.target.value)}
                   required
-                />
+                >
+                  {availableYears.map(year => (
+                    <option key={year} value={year}>
+                      {year}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="input-group">
@@ -397,7 +441,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
           </form>
         )}
 
-        {/* ETAPA 3: UPLOAD REAL DE DOCUMENTOS & SELFIE */}
+        {/* ETAPA 3: UPLOAD REAL DE DOCUMENTOS & SELFIE COM BLOQUEIO DE BANCO */}
         {step === 3 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#10b981' }}>
@@ -532,13 +576,13 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
                 style={{ flex: 2, opacity: (!cnhUrl || !crlvUrl || !selfieUrl) ? 0.6 : 1 }}
               >
                 {isSaving ? <RefreshCw size={14} className="animate-spin" /> : null}
-                <span>{isSaving ? 'Enviando Documentos...' : 'Enviar Documentos para Validação ➔'}</span>
+                <span>{isSaving ? 'Gravando no Banco de Dados...' : 'Salvar no Banco e Enviar para Validação ➔'}</span>
               </button>
             </div>
           </div>
         )}
 
-        {/* ETAPA 4: STATUS REAL E IMPEDITIVO */}
+        {/* ETAPA 4: STATUS REAL E OPÇÃO DE ALTERAR/REENVIAR DOCUMENTOS */}
         {step === 4 && (
           <div style={{ textAlign: 'center', padding: '16px 0' }}>
             {verificationStatus === 'approved' ? (
@@ -556,9 +600,9 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
                 }}>
                   <CheckCircle2 size={40} />
                 </div>
-                <h3 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#10b981' }}>Credenciamento Aprovado!</h3>
+                <h3 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#10b981' }}>Credenciamento Aprovado no Banco!</h3>
                 <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginTop: '6px' }}>
-                  Seus documentos e veículo ({vehicleBrand} {vehicleModel} • Placa {vehiclePlate}) foram auditados e aprovados.
+                  Seus documentos e veículo ({vehicleBrand} {vehicleModel} • {vehicleYear} • Placa {vehiclePlate}) estão ativos no banco.
                 </p>
 
                 <div style={{
@@ -577,13 +621,22 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
                   </div>
                 </div>
 
-                <button
-                  onClick={() => handleFinishRegistration('approved')}
-                  className="btn-success"
-                  style={{ width: '100%', maxWidth: '350px', padding: '14px', fontSize: '1rem' }}
-                >
-                  Ir para o Painel do Motorista
-                </button>
+                <div style={{ display: 'flex', gap: '10px', maxWidth: '400px', margin: '0 auto', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => setStep(1)}
+                    className="btn-outline"
+                    style={{ flex: 1, padding: '12px', fontSize: '0.85rem' }}
+                  >
+                    <Edit3 size={14} /> Alterar / Reenviar Documentos
+                  </button>
+                  <button
+                    onClick={() => handleFinishRegistration('approved')}
+                    className="btn-success"
+                    style={{ flex: 1, padding: '12px', fontSize: '0.85rem' }}
+                  >
+                    Ir para o Painel do Motorista
+                  </button>
+                </div>
               </div>
             ) : (
               <div>
@@ -600,9 +653,9 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
                 }}>
                   <RefreshCw size={36} className="animate-spin" />
                 </div>
-                <h3 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#f59e0b' }}>Documentos em Análise de Segurança</h3>
+                <h3 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#f59e0b' }}>Documentos Salvos no Banco (Em Análise)</h3>
                 <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginTop: '6px', maxWidth: '520px', margin: '6px auto' }}>
-                  Seus documentos do veículo <strong>{vehicleBrand} {vehicleModel} (Placa {vehiclePlate})</strong> e CNH foram enviados ao banco de dados com sucesso e estão na fila de auditoria da equipe de moderação.
+                  Seus documentos do veículo <strong>{vehicleBrand} {vehicleModel} ({vehicleYear}) • Placa {vehiclePlate}</strong> foram registrados com sucesso no banco de dados e estão aguardando liberação.
                 </p>
 
                 <div style={{
@@ -621,6 +674,21 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
                   <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
                     O recebimento de chamados de passageiros permanece bloqueado até a validação formal dos documentos pelo administrador para garantir a segurança dos passageiros.
                   </p>
+                </div>
+
+                {/* Botão para Alterar / Reenviar Documentos */}
+                <div style={{ maxWidth: '450px', margin: '14px auto' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStep(1);
+                      setErrorMessage(null);
+                    }}
+                    className="btn-outline"
+                    style={{ width: '100%', padding: '12px', fontSize: '0.85rem' }}
+                  >
+                    <Edit3 size={14} /> ✏️ Alterar / Reenviar Documentos ao Banco
+                  </button>
                 </div>
 
                 {/* Se o usuário logado for Super Admin, ele pode simular aprovação para testes */}
