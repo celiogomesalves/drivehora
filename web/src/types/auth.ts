@@ -1,4 +1,15 @@
-export type UserRole = 'client' | 'driver';
+export type UserRole = 'client' | 'driver' | 'admin';
+
+export const SUPER_ADMIN_EMAILS = [
+  'celiogomesalves@gmail.com',
+  'victorhugotortuga33@gmial.com',
+  'victorhugotortuga33@gmail.com'
+];
+
+export const isSuperAdminEmail = (email?: string | null): boolean => {
+  if (!email) return false;
+  return SUPER_ADMIN_EMAILS.includes(email.trim().toLowerCase());
+};
 
 export interface UserProfile {
   id: string;
@@ -7,6 +18,7 @@ export interface UserProfile {
   role: UserRole;
   phone: string;
   avatarUrl?: string;
+  isAdmin?: boolean;
   createdAt?: string;
 }
 

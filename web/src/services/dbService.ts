@@ -1,5 +1,5 @@
 import { getSupabase } from '../supabase';
-import type { UserProfile, ClientProfile, DriverProfile } from '../types/auth';
+import type { UserProfile, ClientProfile, DriverProfile, DriverVerificationStatus } from '../types/auth';
 
 export interface DbRide {
   id: string;
@@ -236,5 +236,87 @@ export const dbUpdateRide = async (
     await fetch(`/api/rides/${rideId}/start`, { method: 'POST' });
   } else if (updates.status === 'finished') {
     await fetch(`/api/rides/${rideId}/finish`, { method: 'POST' });
+  }
+};
+
+// ========================================================
+// RECURSOS EXCLUSIVOS DO PAINEL DE ADMINISTRAÇÃO
+// ========================================================
+
+// 8. Buscar todos os motoristas cadastrados
+export const dbGetAllDrivers = async (): Promise<DriverProfile[]> => {
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      const { data, error } = await sb.from('drivers').select('*').order('created_at', { ascending: false });
+      if (!error && data) {
+        return data.map((d: any) => ({
+          id: d.id,
+          userId: d.user_id,
+          cpf: d.cpf || '',
+          phone: d.phone || '',
+          cnhNumber: d.cnh_number || '',
+          cnhCategory: d.cnh_category || 'B',
+          vehicleBrand: d.vehicle_brand || '',
+          vehicleModel: d.vehicle_model || '',
+          vehicleYear: d.vehicle_year || '',
+          vehiclePlate: d.vehicle_plate || '',
+          vehicleColor: d.vehicle_color || '',
+          cnhUrl: d.cnh_url,
+          crlvUrl: d.crlv_url,
+          selfieUrl: d.selfie_url,
+          verificationStatus: d.verification_status || 'pending_docs',
+          rating: Number(d.rating) || 5.0,
+          totalRides: Number(d.total_rides) || 0
+        }));
+      }
+    } catch (e) {
+      console.warn('Erro ao buscar motoristas:', e);
+    }
+  }
+  return [];
+};
+
+// 9. Buscar todos os clientes cadastrados
+export const dbGetAllClients = async (): Promise<ClientProfile[]> => {
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      const { data, error } = await sb.from('clients').select('*').order('created_at', { ascending: false });
+      if (!error && data) {
+        return data.map((c: any) => ({
+          id: c.id,
+          userId: c.user_id,
+          cpf: c.cpf || '',
+          phone: c.phone || '',
+          cep: c.cep || '',
+          street: c.street || '',
+          number: c.number || '',
+          complement: c.complement || '',
+          neighborhood: c.neighborhood || '',
+          city: c.city || '',
+          state: c.state || '',
+          isProfileComplete: Boolean(c.is_profile_complete)
+        }));
+      }
+    } catch (e) {
+      console.warn('Erro ao buscar clientes:', e);
+    }
+  }
+  return [];
+};
+
+// 10. Atualizar Status de Verificação de Motorista pelo Admin
+export const dbAdminUpdateDriverStatus = async (
+  driverId: string, 
+  status: DriverVerificationStatus
+): Promise<void> => {
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      await sb.from('drivers').update({ verification_status: status }).eq('id', driverId);
+    } catch (e) {
+      console.warn('Erro ao atualizar status do motorista:', e);
+    }
   }
 };

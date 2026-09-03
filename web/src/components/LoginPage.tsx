@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { UserRole, UserProfile } from '../types/auth';
-import { Users, Car, LogIn, Mail, Lock, User, Phone, ShieldCheck, Sparkles, Database, Clock, DollarSign } from 'lucide-react';
+import { isSuperAdminEmail } from '../types/auth';
+import { Users, Car, LogIn, Mail, Lock, User, Phone, ShieldCheck, Sparkles, Database, Clock, DollarSign, Crown } from 'lucide-react';
 import { formatPhone } from '../utils/formatters';
 import { dbSaveProfile } from '../services/dbService';
 
@@ -27,12 +28,16 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     e.preventDefault();
     setIsLoading(true);
 
+    const cleanEmail = email.trim() || (selectedRole === 'client' ? 'passageiro@drivehora.com' : 'motorista@drivehora.com');
+    const isAdmin = isSuperAdminEmail(cleanEmail);
+
     const user: UserProfile = {
       id: 'usr_' + (isSignUp ? 'new_' : '') + Math.random().toString(36).substring(2, 8),
-      email: email.trim() || (selectedRole === 'client' ? 'passageiro@drivehora.com' : 'motorista@drivehora.com'),
-      fullName: fullName.trim() || (selectedRole === 'client' ? 'Passageiro DriveHora' : 'Motorista Parceiro'),
-      role: selectedRole,
+      email: cleanEmail,
+      fullName: fullName.trim() || (isAdmin ? 'Administrador do Sistema' : selectedRole === 'client' ? 'Passageiro DriveHora' : 'Motorista Parceiro'),
+      role: isAdmin ? 'driver' : selectedRole,
       phone: phone || '(11) 98765-4321',
+      isAdmin: isAdmin,
       createdAt: new Date().toISOString()
     };
 
@@ -42,16 +47,31 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     onLoginSuccess(user);
   };
 
-  const handleQuickDemo = async (role: UserRole) => {
+  const handleQuickDemo = async (role: UserRole | 'admin') => {
     setIsLoading(true);
-    const demoUser: UserProfile = {
-      id: role === 'client' ? 'client_demo_01' : 'driver_demo_01',
-      email: role === 'client' ? 'passageiro.demo@drivehora.com' : 'motorista.demo@drivehora.com',
-      fullName: role === 'client' ? 'Carlos Eduardo (Passageiro)' : 'Roberto Silva (Motorista)',
-      role: role,
-      phone: '(11) 99123-4567',
-      createdAt: new Date().toISOString()
-    };
+    let demoUser: UserProfile;
+
+    if (role === 'admin') {
+      demoUser = {
+        id: 'admin_celio_01',
+        email: 'celiogomesalves@gmail.com',
+        fullName: 'Célio Alves (Super Admin)',
+        role: 'driver',
+        phone: '(11) 98765-4321',
+        isAdmin: true,
+        createdAt: new Date().toISOString()
+      };
+    } else {
+      demoUser = {
+        id: role === 'client' ? 'client_demo_01' : 'driver_demo_01',
+        email: role === 'client' ? 'passageiro.demo@drivehora.com' : 'motorista.demo@drivehora.com',
+        fullName: role === 'client' ? 'Carlos Eduardo (Passageiro)' : 'Roberto Silva (Motorista)',
+        role: role,
+        phone: '(11) 99123-4567',
+        isAdmin: false,
+        createdAt: new Date().toISOString()
+      };
+    }
 
     await dbSaveProfile(demoUser);
     localStorage.setItem('drivehora_current_user', JSON.stringify(demoUser));
@@ -378,27 +398,53 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           {/* Divisor */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '22px 0 16px' }}>
             <div style={{ flex: 1, height: '1px', background: 'var(--border-subtle)' }} />
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Ou teste rápido (1 clique)</span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Atalhos de Acesso Rápido</span>
             <div style={{ flex: 1, height: '1px', background: 'var(--border-subtle)' }} />
           </div>
 
           {/* Botões de Acesso Rápido */}
-          <div style={{ display: 'flex', gap: '10px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={() => handleQuickDemo('client')}
+                className="btn-outline"
+                style={{ flex: 1, fontSize: '0.8rem', padding: '10px' }}
+              >
+                🚀 Passageiro Demo
+              </button>
+              <button
+                type="button"
+                onClick={() => handleQuickDemo('driver')}
+                className="btn-outline"
+                style={{ flex: 1, fontSize: '0.8rem', padding: '10px' }}
+              >
+                🚗 Motorista Demo
+              </button>
+            </div>
+
+            {/* Atalho Super Admin */}
             <button
               type="button"
-              onClick={() => handleQuickDemo('client')}
-              className="btn-outline"
-              style={{ flex: 1, fontSize: '0.8rem', padding: '12px' }}
+              onClick={() => handleQuickDemo('admin')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                padding: '10px',
+                borderRadius: '12px',
+                border: '1px solid rgba(245, 158, 11, 0.4)',
+                background: 'rgba(245, 158, 11, 0.1)',
+                color: '#f59e0b',
+                fontWeight: 700,
+                fontSize: '0.8rem',
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
             >
-              🚀 Passageiro Demo
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQuickDemo('driver')}
-              className="btn-outline"
-              style={{ flex: 1, fontSize: '0.8rem', padding: '12px' }}
-            >
-              🚗 Motorista Demo
+              <Crown size={16} />
+              <span>Entrar como Super Admin (celiogomesalves@gmail.com)</span>
             </button>
           </div>
         </div>

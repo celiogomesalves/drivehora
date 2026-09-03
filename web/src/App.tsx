@@ -3,15 +3,17 @@ import {
   Car, Clock, DollarSign, Navigation, ShieldCheck, 
   Smartphone, Users, RefreshCw, CheckCircle2, 
   Radio, Award, PlayCircle, Sparkles, Compass, Database, 
-  X, Check, LogOut, MapPin
+  X, Check, LogOut, MapPin, Crown, AlertTriangle, UserCheck
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import confetti from 'canvas-confetti';
 import { getSupabase, getSupabaseCredentials, saveSupabaseCredentials, initGlobalSupabaseConfig } from './supabase';
 import type { UserProfile, ClientProfile, DriverProfile } from './types/auth';
+import { isSuperAdminEmail } from './types/auth';
 import { LoginPage } from './components/LoginPage';
 import { ClientOnboarding } from './components/ClientOnboarding';
 import { DriverOnboarding } from './components/DriverOnboarding';
+import { AdminDashboard } from './components/AdminDashboard';
 import { getCurrentPosition, reverseGeocode } from './services/gpsService';
 import { formatCurrency } from './utils/formatters';
 import { 
@@ -20,19 +22,23 @@ import {
 } from './services/dbService';
 
 export function App() {
-  const [activeTab, setActiveTab] = useState<'client' | 'driver' | 'dual' | 'mobile'>('client');
+  const [activeTab, setActiveTab] = useState<'client' | 'driver' | 'admin' | 'dual' | 'mobile'>('client');
   const [rides, setRides] = useState<DbRide[]>([]);
   const [currentRideId, setCurrentRideId] = useState<string | null>(null);
 
   // Autenticação & Sessão
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
     const saved = localStorage.getItem('drivehora_current_user');
-    return saved ? JSON.parse(saved) : null;
+    if (!saved) return null;
+    const parsed = JSON.parse(saved);
+    if (isSuperAdminEmail(parsed.email)) parsed.isAdmin = true;
+    return parsed;
   });
 
   // Perfis Onboarding
   const [clientProfile, setClientProfile] = useState<ClientProfile | null>(null);
   const [driverProfile, setDriverProfile] = useState<DriverProfile | null>(null);
+  const [showDriverProfileEdit, setShowDriverProfileEdit] = useState(false);
 
   // Supabase state & modal
   const [supabaseConfig, setSupabaseConfig] = useState(getSupabaseCredentials());
@@ -50,11 +56,13 @@ export function App() {
   const [isLocatingGPS, setIsLocatingGPS] = useState(false);
 
   // Motorista
-  const [isDriverOnline, setIsDriverOnline] = useState(true);
+  const [isDriverOnline, setIsDriverOnline] = useState(false);
   const [driverEarnings, setDriverEarnings] = useState(0);
 
   // Informações de rede local
   const localNetworkUrl = `http://192.168.18.71:5173`;
+
+  const isUserAdmin = Boolean(currentUser?.isAdmin || isSuperAdminEmail(currentUser?.email));
 
   // Cálculos financeiros
   const totalAmount = hours * hourlyRate;
@@ -72,7 +80,11 @@ export function App() {
       } else {
         const dp = await dbGetDriverProfile(currentUser.id);
         setDriverProfile(dp);
-        setActiveTab('driver');
+        if (isUserAdmin) {
+          setActiveTab('admin');
+        } else {
+          setActiveTab('driver');
+        }
       }
     };
     loadUserProfiles();
@@ -273,6 +285,20 @@ export function App() {
     fetchRides();
   };
 
+  // Alternar modo online do motorista com validação
+  const handleToggleDriverOnline = () => {
+    if (!isDriverOnline) {
+      // Para ficar ONLINE e receber chamados, o cadastro deve estar validado
+      const isApproved = driverProfile?.verificationStatus === 'approved';
+      if (!isApproved) {
+        alert('Atenção: Para ativar o modo ONLINE e receber solicitações de corridas, é necessário que seus dados de CNH, Veículo e Documentos estejam cadastrados e aprovados.');
+        setShowDriverProfileEdit(true);
+        return;
+      }
+    }
+    setIsDriverOnline(!isDriverOnline);
+  };
+
   // ========================================================
   // 1. TELA INICIAL: PÁGINA DE LOGIN OBRIGATÓRIA (SE NÃO LOGADO)
   // ========================================================
@@ -409,17 +435,36 @@ export function App() {
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span style={{ fontSize: '1.25rem', fontWeight: 800, color: '#fff' }}>DriveHora</span>
-                <span style={{
-                  fontSize: '0.65rem',
-                  textTransform: 'uppercase',
-                  fontWeight: 700,
-                  letterSpacing: '0.05em',
-                  background: 'rgba(99, 102, 241, 0.2)',
-                  color: '#818cf8',
-                  padding: '2px 8px',
-                  borderRadius: '12px',
-                  border: '1px solid rgba(99, 102, 241, 0.3)'
-                }}>MVP v1.0</span>
+                {isUserAdmin ? (
+                  <span style={{
+                    fontSize: '0.65rem',
+                    textTransform: 'uppercase',
+                    fontWeight: 800,
+                    letterSpacing: '0.05em',
+                    background: 'rgba(245, 158, 11, 0.2)',
+                    color: '#f59e0b',
+                    padding: '2px 8px',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(245, 158, 11, 0.4)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}>
+                    <Crown size={12} /> Admin
+                  </span>
+                ) : (
+                  <span style={{
+                    fontSize: '0.65rem',
+                    textTransform: 'uppercase',
+                    fontWeight: 700,
+                    letterSpacing: '0.05em',
+                    background: 'rgba(99, 102, 241, 0.2)',
+                    color: '#818cf8',
+                    padding: '2px 8px',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(99, 102, 241, 0.3)'
+                  }}>MVP v1.0</span>
+                )}
               </div>
               <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Motorista particular sob demanda por hora</p>
             </div>
@@ -432,8 +477,33 @@ export function App() {
             padding: '4px',
             borderRadius: '14px',
             border: '1px solid var(--border-subtle)',
-            gap: '4px'
+            gap: '4px',
+            flexWrap: 'wrap'
           }}>
+            {/* Aba Admin (Exclusiva para Super Admins) */}
+            {isUserAdmin && (
+              <button
+                onClick={() => setActiveTab('admin')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '8px 14px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '0.85rem',
+                  fontWeight: 700,
+                  background: activeTab === 'admin' ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'transparent',
+                  color: activeTab === 'admin' ? '#000' : '#f59e0b',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <Crown size={16} />
+                <span>Painel Admin</span>
+              </button>
+            )}
+
             <button
               onClick={() => setActiveTab('client')}
               style={{
@@ -456,7 +526,10 @@ export function App() {
             </button>
 
             <button
-              onClick={() => setActiveTab('driver')}
+              onClick={() => {
+                setActiveTab('driver');
+                setShowDriverProfileEdit(false);
+              }}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -543,22 +616,22 @@ export function App() {
                 width: '26px',
                 height: '26px',
                 borderRadius: '50%',
-                background: currentUser.role === 'driver' ? '#10b981' : '#6366f1',
-                color: '#fff',
+                background: isUserAdmin ? '#f59e0b' : currentUser.role === 'driver' ? '#10b981' : '#6366f1',
+                color: isUserAdmin ? '#000' : '#fff',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 fontSize: '0.8rem',
-                fontWeight: 700
+                fontWeight: 800
               }}>
-                {currentUser.fullName.charAt(0)}
+                {isUserAdmin ? '👑' : currentUser.fullName.charAt(0)}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <span style={{ fontSize: '0.8rem', fontWeight: 700, maxWidth: '130px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {currentUser.fullName}
+                  {currentUser.fullName.split(' ')[0]}
                 </span>
-                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
-                  {currentUser.role === 'client' ? 'Passageiro' : 'Motorista'}
+                <span style={{ fontSize: '0.65rem', color: isUserAdmin ? '#f59e0b' : 'var(--text-muted)' }}>
+                  {isUserAdmin ? 'Super Admin' : currentUser.role === 'client' ? 'Passageiro' : 'Motorista'}
                 </span>
               </div>
               <button
@@ -672,10 +745,19 @@ export function App() {
       {/* Main Container */}
       <main style={{ flex: 1, maxWidth: '1200px', margin: '0 auto', width: '100%', padding: '24px 16px' }}>
         
+        {/* TAB 0: PAINEL EXCLUSIVO DO ADMIN */}
+        {activeTab === 'admin' && isUserAdmin && (
+          <AdminDashboard
+            rides={rides}
+            onOpenSupabaseConfig={() => setShowConfigModal(true)}
+            supabaseConnected={supabaseConnected}
+          />
+        )}
+
         {/* TAB 1: CLIENTE (PASSAGEIRO) */}
         {activeTab === 'client' && (
           <div>
-            {currentUser.role === 'client' && (!clientProfile || !clientProfile.isProfileComplete) ? (
+            {!isUserAdmin && currentUser.role === 'client' && (!clientProfile || !clientProfile.isProfileComplete) ? (
               <ClientOnboarding
                 user={currentUser}
                 onComplete={(cp) => setClientProfile(cp)}
@@ -1053,12 +1135,32 @@ export function App() {
         {/* TAB 2: MOTORISTA */}
         {activeTab === 'driver' && (
           <div>
-            {(!driverProfile || driverProfile.verificationStatus !== 'approved') ? (
+            {/* Se o motorista não for admin e ainda não foi aprovado, exibe onboarding */}
+            {!isUserAdmin && (!driverProfile || driverProfile.verificationStatus !== 'approved') ? (
               <DriverOnboarding
                 user={currentUser}
                 initialProfile={driverProfile}
                 onComplete={(dp) => setDriverProfile(dp)}
               />
+            ) : showDriverProfileEdit ? (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <button onClick={() => setShowDriverProfileEdit(false)} className="btn-outline">
+                    ⬅️ Voltar ao Painel do Motorista
+                  </button>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                    {isUserAdmin ? 'Perfil do Motorista (Super Admin)' : 'Edição Cadastral'}
+                  </span>
+                </div>
+                <DriverOnboarding
+                  user={currentUser}
+                  initialProfile={driverProfile}
+                  onComplete={(dp) => {
+                    setDriverProfile(dp);
+                    setShowDriverProfileEdit(false);
+                  }}
+                />
+              </div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }}>
                 {/* Painel do Motorista */}
@@ -1067,38 +1169,75 @@ export function App() {
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <h2 style={{ fontSize: '1.3rem', fontWeight: 700 }}>Painel do Motorista</h2>
-                        <span style={{ fontSize: '0.7rem', color: '#10b981', background: 'rgba(16, 185, 129, 0.15)', padding: '2px 8px', borderRadius: '10px', fontWeight: 700 }}>
-                          Verificado ✅
-                        </span>
+                        {driverProfile?.verificationStatus === 'approved' ? (
+                          <span style={{ fontSize: '0.7rem', color: '#10b981', background: 'rgba(16, 185, 129, 0.15)', padding: '2px 8px', borderRadius: '10px', fontWeight: 700 }}>
+                            Verificado ✅
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: '0.7rem', color: '#f59e0b', background: 'rgba(245, 158, 11, 0.15)', padding: '2px 8px', borderRadius: '10px', fontWeight: 700 }}>
+                            Admin (Cadastro Pendente)
+                          </span>
+                        )}
                       </div>
                       <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                        {driverProfile.vehicleBrand} {driverProfile.vehicleModel} • {driverProfile.vehiclePlate}
+                        {driverProfile?.vehicleBrand ? `${driverProfile.vehicleBrand} ${driverProfile.vehicleModel} • ${driverProfile.vehiclePlate}` : 'Complete seu veículo para atender chamados'}
                       </p>
                     </div>
 
-                    <button
-                      onClick={() => setIsDriverOnline(!isDriverOnline)}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        padding: '8px 16px',
-                        borderRadius: '24px',
-                        border: 'none',
-                        cursor: 'pointer',
-                        fontWeight: 700,
-                        fontSize: '0.85rem',
-                        background: isDriverOnline ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
-                        color: isDriverOnline ? '#10b981' : '#ef4444',
-                        borderWidth: '1px',
-                        borderStyle: 'solid',
-                        borderColor: isDriverOnline ? '#10b981' : '#ef4444'
-                      }}
-                    >
-                      <Radio size={16} className={isDriverOnline ? 'animate-pulse' : ''} />
-                      <span>{isDriverOnline ? 'ONLINE' : 'OFFLINE'}</span>
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <button
+                        onClick={() => setShowDriverProfileEdit(true)}
+                        className="btn-outline"
+                        style={{ fontSize: '0.75rem', padding: '6px 10px' }}
+                        title="Editar / Cadastrar dados do veículo e CNH"
+                      >
+                        <UserCheck size={14} />
+                        <span>Meus Documentos</span>
+                      </button>
+
+                      <button
+                        onClick={handleToggleDriverOnline}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          padding: '8px 16px',
+                          borderRadius: '24px',
+                          border: 'none',
+                          cursor: 'pointer',
+                          fontWeight: 700,
+                          fontSize: '0.85rem',
+                          background: isDriverOnline ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                          color: isDriverOnline ? '#10b981' : '#ef4444',
+                          borderWidth: '1px',
+                          borderStyle: 'solid',
+                          borderColor: isDriverOnline ? '#10b981' : '#ef4444'
+                        }}
+                      >
+                        <Radio size={16} className={isDriverOnline ? 'animate-pulse' : ''} />
+                        <span>{isDriverOnline ? 'ONLINE' : 'OFFLINE'}</span>
+                      </button>
+                    </div>
                   </div>
+
+                  {/* Alerta de Validação de Documentos para Admin */}
+                  {driverProfile?.verificationStatus !== 'approved' && (
+                    <div style={{
+                      background: 'rgba(245, 158, 11, 0.1)',
+                      border: '1px solid rgba(245, 158, 11, 0.3)',
+                      padding: '14px',
+                      borderRadius: '12px',
+                      marginBottom: '20px',
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '12px'
+                    }}>
+                      <AlertTriangle size={20} color="#f59e0b" style={{ flexShrink: 0, marginTop: '2px' }} />
+                      <div style={{ fontSize: '0.8rem', color: '#fde68a' }}>
+                        <strong>Requisito de Atendimento:</strong> Como administrador, você possui acesso irrestrito às telas do sistema. Porém, para <strong>ativar o modo ONLINE e receber chamados de passageiros</strong>, clique em <em>"Meus Documentos"</em> e preencha os dados do veículo e CNH.
+                      </div>
+                    </div>
+                  )}
 
                   {/* Cards de Métricas */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '24px' }}>
