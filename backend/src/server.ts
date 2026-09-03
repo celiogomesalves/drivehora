@@ -49,12 +49,31 @@ app.use(express.json());
 
 const COMMISSION = 0.15;
 
+// Configuração Global de Supabase persistida no backend
+let globalSupabaseConfig = {
+  url: process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "",
+  key: process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || ""
+};
+
+app.get(["/config/supabase", "/api/config/supabase"], (_, res) => {
+  res.json(globalSupabaseConfig);
+});
+
+app.post(["/config/supabase", "/api/config/supabase"], (req, res) => {
+  const { url, key } = req.body;
+  if (url) globalSupabaseConfig.url = String(url).trim();
+  if (key) globalSupabaseConfig.key = String(key).trim();
+  console.log("Configuração do Supabase atualizada globalmente no servidor.");
+  res.json({ ok: true, config: globalSupabaseConfig });
+});
+
 app.get("/health", (_, res) => {
   res.json({
     ok: true,
     service: "DriveHora API",
     mode: useFirestore ? "firebase-firestore" : "local-memory",
-    activeRides: memoryRides.size
+    activeRides: memoryRides.size,
+    supabaseConfigured: Boolean(globalSupabaseConfig.url && globalSupabaseConfig.key)
   });
 });
 

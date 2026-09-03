@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import confetti from 'canvas-confetti';
-import { getSupabase, getSupabaseCredentials, saveSupabaseCredentials } from './supabase';
+import { getSupabase, getSupabaseCredentials, saveSupabaseCredentials, initGlobalSupabaseConfig } from './supabase';
 import type { UserProfile, ClientProfile, DriverProfile } from './types/auth';
 import { LoginPage } from './components/LoginPage';
 import { ClientOnboarding } from './components/ClientOnboarding';
@@ -160,9 +160,19 @@ export function App() {
     }
   };
 
-  // Configurar Realtime do Supabase
+  // Inicializar e configurar Realtime do Supabase
   useEffect(() => {
-    checkSupabaseConnection();
+    const bootstrap = async () => {
+      await initGlobalSupabaseConfig();
+      const updated = getSupabaseCredentials();
+      setSupabaseConfig(updated);
+      setInputSupabaseUrl(updated.url);
+      setInputSupabaseKey(updated.key);
+      await checkSupabaseConnection();
+      fetchRides();
+    };
+    bootstrap();
+
     const sb = getSupabase();
     let channel: any = null;
 
@@ -175,7 +185,6 @@ export function App() {
         .subscribe();
     }
 
-    fetchRides();
     const interval = setInterval(() => {
       fetchRides();
     }, 3000);
@@ -186,13 +195,13 @@ export function App() {
     };
   }, [supabaseConnected]);
 
-  // Salvar credenciais Supabase
-  const handleSaveConfig = () => {
-    saveSupabaseCredentials(inputSupabaseUrl, inputSupabaseKey);
+  // Salvar credenciais Supabase globalmente para todos os usuários
+  const handleSaveConfig = async () => {
+    await saveSupabaseCredentials(inputSupabaseUrl, inputSupabaseKey);
     const updated = getSupabaseCredentials();
     setSupabaseConfig(updated);
     setShowConfigModal(false);
-    checkSupabaseConnection();
+    await checkSupabaseConnection();
     fetchRides();
   };
 
