@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { formatPhone, formatCpf, formatPlate } from '../utils/formatters';
+import { dbSaveDriverProfile } from '../services/dbService';
 
 interface DriverOnboardingProps {
   user: UserProfile;
@@ -38,8 +39,10 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
   const [verificationStatus, setVerificationStatus] = useState<DriverVerificationStatus>(
     initialProfile?.verificationStatus || 'pending_docs'
   );
+  const [isSaving, setIsSaving] = useState(false);
 
-  const handleFinishRegistration = (status: DriverVerificationStatus) => {
+  const handleFinishRegistration = async (status: DriverVerificationStatus) => {
+    setIsSaving(true);
     const profile: DriverProfile = {
       id: 'driver_' + user.id,
       userId: user.id,
@@ -60,19 +63,20 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
       totalRides: initialProfile?.totalRides || 0
     };
 
-    localStorage.setItem(`drivehora_driver_profile_${user.id}`, JSON.stringify(profile));
+    await dbSaveDriverProfile(profile);
+    setIsSaving(false);
     setVerificationStatus(status);
     onComplete(profile);
   };
 
-  const handleApproveImmediate = () => {
+  const handleApproveImmediate = async () => {
     confetti({ particleCount: 100, spread: 80, origin: { y: 0.5 } });
-    handleFinishRegistration('approved');
+    await handleFinishRegistration('approved');
   };
 
   return (
-    <div style={{ maxWidth: '720px', margin: '0 auto', width: '100%' }}>
-      <div className="glass-panel" style={{ padding: '36px' }}>
+    <div style={{ maxWidth: '720px', margin: '30px auto', width: '100%' }}>
+      <div className="glass-panel" style={{ padding: '36px', boxShadow: 'var(--shadow-lg)' }}>
         
         {/* Cabeçalho do Onboarding */}
         <div style={{ textAlign: 'center', marginBottom: '28px' }}>
@@ -91,7 +95,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
           </div>
           <h2 style={{ fontSize: '1.45rem', fontWeight: 800 }}>Credenciamento de Motorista</h2>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            Validação de CNH, Veículo e Biometria para segurança de todos
+            Validação de CNH, Veículo e Biometria para segurança de todos no banco de dados
           </p>
 
           {/* Stepper de progresso */}
@@ -387,14 +391,16 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
               </button>
               <button
                 type="button"
-                onClick={() => {
+                disabled={isSaving}
+                onClick={async () => {
                   setStep(4);
-                  handleFinishRegistration('under_review');
+                  await handleFinishRegistration('under_review');
                 }}
                 className="btn-success"
                 style={{ flex: 2 }}
               >
-                Enviar Documentos para Análise ➔
+                {isSaving ? <RefreshCw size={14} className="animate-spin" /> : null}
+                <span>{isSaving ? 'Gravando...' : 'Enviar Documentos para Análise ➔'}</span>
               </button>
             </div>
           </div>
@@ -420,7 +426,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
                 </div>
                 <h3 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#10b981' }}>Credenciamento Aprovado!</h3>
                 <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginTop: '6px' }}>
-                  Seus documentos e veículo ({vehicleBrand} {vehicleModel} • Placa {vehiclePlate}) foram aprovados com sucesso.
+                  Seus documentos e veículo ({vehicleBrand} {vehicleModel} • Placa {vehiclePlate}) foram salvos e aprovados com sucesso.
                 </p>
 
                 <div style={{
@@ -432,7 +438,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
                   margin: '20px auto',
                   textAlign: 'left'
                 }}>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Status da Conta:</div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Status no Banco:</div>
                   <strong style={{ color: '#10b981' }}>Selo de Motorista Verificado ✅</strong>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
                     Você já pode ativar o modo <strong>ONLINE</strong> para receber chamados e faturar 85% por hora de serviço.
@@ -464,7 +470,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
                 </div>
                 <h3 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#f59e0b' }}>Documentos em Análise</h3>
                 <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginTop: '6px', maxWidth: '480px', margin: '6px auto' }}>
-                  Recebemos os dados do seu veículo <strong>{vehicleBrand} {vehicleModel}</strong> e seus documentos. Nossa equipe está validando as informações.
+                  Recebemos os dados do seu veículo <strong>{vehicleBrand} {vehicleModel}</strong> e seus documentos. As informações estão registradas na tabela <code>drivers</code>.
                 </p>
 
                 {/* Caixa de simulação para testes imediatos */}

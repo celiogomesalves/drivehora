@@ -3,39 +3,25 @@ import {
   Car, Clock, DollarSign, Navigation, ShieldCheck, 
   Smartphone, Users, RefreshCw, CheckCircle2, 
   Radio, Award, PlayCircle, Sparkles, Compass, Database, 
-  X, Check, LogOut, User, MapPin
+  X, Check, LogOut, MapPin
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import confetti from 'canvas-confetti';
 import { getSupabase, getSupabaseCredentials, saveSupabaseCredentials } from './supabase';
 import type { UserProfile, ClientProfile, DriverProfile } from './types/auth';
-import { AuthModal } from './components/AuthModal';
+import { LoginPage } from './components/LoginPage';
 import { ClientOnboarding } from './components/ClientOnboarding';
 import { DriverOnboarding } from './components/DriverOnboarding';
 import { getCurrentPosition, reverseGeocode } from './services/gpsService';
 import { formatCurrency } from './utils/formatters';
-
-interface Ride {
-  id: string;
-  clientId: string;
-  driverId?: string;
-  origin: string;
-  destination: string;
-  hours: number;
-  hourlyRate: number;
-  total: number;
-  commission: number;
-  driverNet: number;
-  status: 'searching' | 'accepted' | 'in_progress' | 'finished' | 'cancelled';
-  createdAt: number;
-  acceptedAt?: number;
-  startedAt?: number;
-  finishedAt?: number;
-}
+import { 
+  dbGetClientProfile, dbGetDriverProfile, 
+  dbCreateRide, dbUpdateRide, type DbRide 
+} from './services/dbService';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<'client' | 'driver' | 'dual' | 'mobile'>('client');
-  const [rides, setRides] = useState<Ride[]>([]);
+  const [rides, setRides] = useState<DbRide[]>([]);
   const [currentRideId, setCurrentRideId] = useState<string | null>(null);
 
   // Autenticação & Sessão
@@ -43,20 +29,10 @@ export function App() {
     const saved = localStorage.getItem('drivehora_current_user');
     return saved ? JSON.parse(saved) : null;
   });
-  const [showAuthModal, setShowAuthModal] = useState(false);
 
   // Perfis Onboarding
-  const [clientProfile, setClientProfile] = useState<ClientProfile | null>(() => {
-    if (!currentUser) return null;
-    const saved = localStorage.getItem(`drivehora_client_profile_${currentUser.id}`);
-    return saved ? JSON.parse(saved) : null;
-  });
-
-  const [driverProfile, setDriverProfile] = useState<DriverProfile | null>(() => {
-    if (!currentUser) return null;
-    const saved = localStorage.getItem(`drivehora_driver_profile_${currentUser.id}`);
-    return saved ? JSON.parse(saved) : null;
-  });
+  const [clientProfile, setClientProfile] = useState<ClientProfile | null>(null);
+  const [driverProfile, setDriverProfile] = useState<DriverProfile | null>(null);
 
   // Supabase state & modal
   const [supabaseConfig, setSupabaseConfig] = useState(getSupabaseCredentials());
@@ -85,6 +61,23 @@ export function App() {
   const platformFee = Number((totalAmount * 0.15).toFixed(2));
   const driverNet = Number((totalAmount * 0.85).toFixed(2));
 
+  // Carregar perfis do banco sempre que o usuário mudar
+  useEffect(() => {
+    const loadUserProfiles = async () => {
+      if (!currentUser) return;
+      if (currentUser.role === 'client') {
+        const cp = await dbGetClientProfile(currentUser.id);
+        setClientProfile(cp);
+        setActiveTab('client');
+      } else {
+        const dp = await dbGetDriverProfile(currentUser.id);
+        setDriverProfile(dp);
+        setActiveTab('driver');
+      }
+    };
+    loadUserProfiles();
+  }, [currentUser]);
+
   // Verificar conexão Supabase
   const checkSupabaseConnection = async () => {
     const sb = getSupabase();
@@ -94,11 +87,7 @@ export function App() {
     }
     try {
       const { error } = await sb.from('rides').select('id').limit(1);
-      if (!error) {
-        setSupabaseConnected(true);
-      } else {
-        setSupabaseConnected(false);
-      }
+      setSupabaseConnected(!error);
     } catch {
       setSupabaseConnected(false);
     }
@@ -111,10 +100,12 @@ export function App() {
       try {
         const { data, error } = await sb.from('rides').select('*').order('created_at', { ascending: false }).limit(50);
         if (!error && data) {
-          const formatted: Ride[] = data.map((d: any) => ({
+          const formatted: DbRide[] = data.map((d: any) => ({
             id: d.id,
             clientId: d.client_id,
+            clientName: d.client_name,
             driverId: d.driver_id,
+            driverName: d.driver_name,
             origin: d.origin,
             destination: d.destination,
             hours: Number(d.hours),
@@ -145,8 +136,8 @@ export function App() {
       if (res.ok) {
         const data = await res.json();
         setRides(data);
-        const finished = data.filter((r: Ride) => r.status === 'finished');
-        const sum = finished.reduce((acc: number, cur: Ride) => acc + (cur.driverNet || 0), 0);
+        const finished = data.filter((r: DbRide) => r.status === 'finished');
+        const sum = finished.reduce((acc: number, cur: DbRide) => acc + (cur.driverNet || 0), 0);
         setDriverEarnings(sum);
       }
     } catch (e) {
@@ -205,20 +196,7 @@ export function App() {
     fetchRides();
   };
 
-  // Login do Usuário
-  const handleUserLogin = (user: UserProfile) => {
-    setCurrentUser(user);
-    if (user.role === 'client') {
-      setActiveTab('client');
-      const savedClient = localStorage.getItem(`drivehora_client_profile_${user.id}`);
-      setClientProfile(savedClient ? JSON.parse(savedClient) : null);
-    } else {
-      setActiveTab('driver');
-      const savedDriver = localStorage.getItem(`drivehora_driver_profile_${user.id}`);
-      setDriverProfile(savedDriver ? JSON.parse(savedDriver) : null);
-    }
-  };
-
+  // Logout do Usuário -> Volta imediatamente para a Página de Login
   const handleLogout = () => {
     localStorage.removeItem('drivehora_current_user');
     setCurrentUser(null);
@@ -233,137 +211,160 @@ export function App() {
 
     setIsRequesting(true);
     const rideId = 'ride_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
-    const clientId = currentUser?.id || ('cliente_' + Math.random().toString(36).substring(2, 6));
+    const clientId = currentUser?.id || ('client_' + Math.random().toString(36).substring(2, 6));
 
-    const sb = getSupabase();
-    if (sb && supabaseConnected) {
-      try {
-        const { error } = await sb.from('rides').insert([{
-          id: rideId,
-          client_id: clientId,
-          origin,
-          destination,
-          hours,
-          hourly_rate: hourlyRate,
-          total: totalAmount,
-          commission: platformFee,
-          driver_net: driverNet,
-          status: 'searching'
-        }]);
+    const newRide: DbRide = {
+      id: rideId,
+      clientId,
+      clientName: currentUser?.fullName || 'Passageiro',
+      origin,
+      destination,
+      hours,
+      hourlyRate,
+      total: totalAmount,
+      commission: platformFee,
+      driverNet: driverNet,
+      status: 'searching',
+      createdAt: Date.now()
+    };
 
-        if (!error) {
-          setCurrentRideId(rideId);
-          fetchRides();
-          setIsRequesting(false);
-          return;
-        }
-      } catch (err) {
-        console.warn('Erro ao inserir no Supabase, tentando via API:', err);
-      }
-    }
-
-    // Fallback API Node.js
-    try {
-      const res = await fetch('/api/rides', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId, origin, destination, hours, hourlyRate })
-      });
-      if (res.ok) {
-        const newRide: Ride = await res.json();
-        setCurrentRideId(newRide.id);
-        fetchRides();
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsRequesting(false);
-    }
+    await dbCreateRide(newRide);
+    setCurrentRideId(rideId);
+    await fetchRides();
+    setIsRequesting(false);
   };
 
   // Ações do Motorista
   const handleAcceptRide = async (rideId: string) => {
-    const driverId = currentUser?.id || 'motorista_vip_01';
-    const sb = getSupabase();
-    if (sb && supabaseConnected) {
-      await sb.from('rides').update({
-        driver_id: driverId,
-        status: 'accepted',
-        accepted_at: new Date().toISOString()
-      }).eq('id', rideId);
-      fetchRides();
-      return;
-    }
-
-    try {
-      const res = await fetch(`/api/rides/${rideId}/accept`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ driverId })
-      });
-      if (res.ok) fetchRides();
-    } catch (e) {
-      console.error(e);
-    }
+    const driverId = currentUser?.id || 'driver_demo_01';
+    const driverName = currentUser?.fullName || 'Motorista Parceiro';
+    await dbUpdateRide(rideId, {
+      driverId,
+      driverName,
+      status: 'accepted',
+      acceptedAt: Date.now()
+    });
+    fetchRides();
   };
 
   const handleStartRide = async (rideId: string) => {
-    const sb = getSupabase();
-    if (sb && supabaseConnected) {
-      await sb.from('rides').update({
-        status: 'in_progress',
-        started_at: new Date().toISOString()
-      }).eq('id', rideId);
-      fetchRides();
-      return;
-    }
-
-    try {
-      const res = await fetch(`/api/rides/${rideId}/start`, { method: 'POST' });
-      if (res.ok) fetchRides();
-    } catch (e) {
-      console.error(e);
-    }
+    await dbUpdateRide(rideId, {
+      status: 'in_progress',
+      startedAt: Date.now()
+    });
+    fetchRides();
   };
 
   const handleFinishRide = async (rideId: string) => {
-    const sb = getSupabase();
-    if (sb && supabaseConnected) {
-      await sb.from('rides').update({
-        status: 'finished',
-        finished_at: new Date().toISOString()
-      }).eq('id', rideId);
-      confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
-      fetchRides();
-      return;
-    }
-
-    try {
-      const res = await fetch(`/api/rides/${rideId}/finish`, { method: 'POST' });
-      if (res.ok) {
-        confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
-        fetchRides();
-      }
-    } catch (e) {
-      console.error(e);
-    }
+    await dbUpdateRide(rideId, {
+      status: 'finished',
+      finishedAt: Date.now()
+    });
+    confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
+    fetchRides();
   };
 
-  const activeClientRide = rides.find(r => r.id === currentRideId) || rides[0];
+  // ========================================================
+  // 1. TELA INICIAL: PÁGINA DE LOGIN OBRIGATÓRIA (SE NÃO LOGADO)
+  // ========================================================
+  if (!currentUser) {
+    return (
+      <>
+        <LoginPage
+          onLoginSuccess={(user) => setCurrentUser(user)}
+          onOpenSupabaseConfig={() => setShowConfigModal(true)}
+          supabaseConnected={supabaseConnected}
+        />
+
+        {/* Supabase Config Modal */}
+        {showConfigModal && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.75)',
+            backdropFilter: 'blur(10px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 200,
+            padding: '20px'
+          }}>
+            <div className="glass-panel" style={{ maxWidth: '520px', width: '100%', padding: '28px', position: 'relative' }}>
+              <button
+                onClick={() => setShowConfigModal(false)}
+                style={{ position: 'absolute', top: '20px', right: '20px', background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
+              >
+                <X size={20} />
+              </button>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+                <div style={{ background: 'rgba(16, 185, 129, 0.2)', padding: '8px', borderRadius: '10px', color: '#10b981' }}>
+                  <Database size={20} />
+                </div>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: 700 }}>Conectar Banco Supabase</h3>
+              </div>
+
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '20px' }}>
+                Cole as credenciais do seu projeto Supabase abaixo para habilitar o banco de dados em nuvem e sincronização em tempo real (Realtime):
+              </p>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div className="input-group">
+                  <label>URL do Projeto Supabase (Project URL)</label>
+                  <input
+                    type="text"
+                    className="custom-input"
+                    value={inputSupabaseUrl}
+                    onChange={(e) => setInputSupabaseUrl(e.target.value)}
+                    placeholder="https://xyzcompany.supabase.co"
+                  />
+                </div>
+
+                <div className="input-group">
+                  <label>Chave Pública Anon (Anon Public Key)</label>
+                  <input
+                    type="password"
+                    className="custom-input"
+                    value={inputSupabaseKey}
+                    onChange={(e) => setInputSupabaseKey(e.target.value)}
+                    placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  />
+                </div>
+
+                <div style={{ background: 'rgba(99, 102, 241, 0.1)', padding: '12px', borderRadius: '10px', fontSize: '0.75rem', color: '#cbd5e1' }}>
+                  💡 <strong>Dica:</strong> O script completo de tabelas (<code>profiles</code>, <code>clients</code>, <code>drivers</code>, <code>rides</code>) está em <code>supabase/schema.sql</code>!
+                </div>
+
+                <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                  <button onClick={handleSaveConfig} className="btn-success" style={{ flex: 1 }}>
+                    <Check size={16} /> Salvar e Conectar
+                  </button>
+                  <button onClick={() => setShowConfigModal(false)} className="btn-outline" style={{ flex: 1 }}>
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  }
+
+  // ========================================================
+  // 2. TELA DO SISTEMA LOGADO
+  // ========================================================
+  const activeClientRide = rides.find(r => r.id === currentRideId) || rides.find(r => r.clientId === currentUser?.id) || rides[0];
   const pendingRides = rides.filter(r => r.status === 'searching');
-  const myDriverRides = rides.filter(r => r.status === 'accepted' || r.status === 'in_progress');
+  const myDriverRides = rides.filter(r => (r.status === 'accepted' || r.status === 'in_progress') && (r.driverId === currentUser?.id || !r.driverId));
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       
-      {/* Modal de Autenticação */}
-      <AuthModal
-        isOpen={showAuthModal}
-        onClose={() => setShowAuthModal(false)}
-        onLoginSuccess={handleUserLogin}
-      />
-
-      {/* Top Header */}
+      {/* Top Header Logado */}
       <header style={{
         background: 'rgba(9, 13, 22, 0.85)',
         backdropFilter: 'blur(20px)',
@@ -520,51 +521,45 @@ export function App() {
 
           {/* Usuário & Configurações */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            {currentUser ? (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              background: 'rgba(15, 23, 42, 0.8)',
+              padding: '6px 12px',
+              borderRadius: '20px',
+              border: '1px solid var(--border-subtle)'
+            }}>
               <div style={{
+                width: '26px',
+                height: '26px',
+                borderRadius: '50%',
+                background: currentUser.role === 'driver' ? '#10b981' : '#6366f1',
+                color: '#fff',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px',
-                background: 'rgba(15, 23, 42, 0.8)',
-                padding: '6px 12px',
-                borderRadius: '20px',
-                border: '1px solid var(--border-subtle)'
+                justifyContent: 'center',
+                fontSize: '0.8rem',
+                fontWeight: 700
               }}>
-                <div style={{
-                  width: '24px',
-                  height: '24px',
-                  borderRadius: '50%',
-                  background: currentUser.role === 'driver' ? '#10b981' : '#6366f1',
-                  color: '#fff',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '0.75rem',
-                  fontWeight: 700
-                }}>
-                  {currentUser.fullName.charAt(0)}
-                </div>
-                <span style={{ fontSize: '0.8rem', fontWeight: 600, maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {currentUser.fullName.split(' ')[0]}
-                </span>
-                <button
-                  onClick={handleLogout}
-                  title="Sair da Conta"
-                  style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-                >
-                  <LogOut size={14} />
-                </button>
+                {currentUser.fullName.charAt(0)}
               </div>
-            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, maxWidth: '130px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {currentUser.fullName}
+                </span>
+                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                  {currentUser.role === 'client' ? 'Passageiro' : 'Motorista'}
+                </span>
+              </div>
               <button
-                onClick={() => setShowAuthModal(true)}
-                className="btn-primary"
-                style={{ padding: '8px 14px', fontSize: '0.8rem' }}
+                onClick={handleLogout}
+                title="Sair e voltar ao Login"
+                style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', marginLeft: '4px' }}
               >
-                <User size={14} />
-                <span>Entrar / Cadastrar</span>
+                <LogOut size={16} />
               </button>
-            )}
+            </div>
 
             {/* Supabase Button */}
             <button
@@ -590,7 +585,7 @@ export function App() {
         </div>
       </header>
 
-      {/* Supabase Modal */}
+      {/* Supabase Config Modal */}
       {showConfigModal && (
         <div style={{
           position: 'fixed',
@@ -622,7 +617,7 @@ export function App() {
             </div>
 
             <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '20px' }}>
-              Cole as credenciais do seu projeto Supabase abaixo para habilitar o banco de dados em nuvem e sincronização em tempo real (Realtime):
+              Cole as credenciais do seu projeto Supabase abaixo para sincronização em tempo real (Realtime):
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -649,7 +644,7 @@ export function App() {
               </div>
 
               <div style={{ background: 'rgba(99, 102, 241, 0.1)', padding: '12px', borderRadius: '10px', fontSize: '0.75rem', color: '#cbd5e1' }}>
-                💡 <strong>Dica:</strong> O script atualizado com as tabelas de <code>profiles</code>, <code>clients</code> e <code>drivers</code> está no arquivo <code>supabase/schema.sql</code>!
+                💡 <strong>Dica:</strong> O script de criação das tabelas no PostgreSQL está em <code>supabase/schema.sql</code>!
               </div>
 
               <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
@@ -668,10 +663,10 @@ export function App() {
       {/* Main Container */}
       <main style={{ flex: 1, maxWidth: '1200px', margin: '0 auto', width: '100%', padding: '24px 16px' }}>
         
-        {/* TAB 1: CLIENTE */}
+        {/* TAB 1: CLIENTE (PASSAGEIRO) */}
         {activeTab === 'client' && (
           <div>
-            {currentUser?.role === 'client' && (!clientProfile || !clientProfile.isProfileComplete) ? (
+            {currentUser.role === 'client' && (!clientProfile || !clientProfile.isProfileComplete) ? (
               <ClientOnboarding
                 user={currentUser}
                 onComplete={(cp) => setClientProfile(cp)}
@@ -860,7 +855,7 @@ export function App() {
                       {isRequesting ? (
                         <>
                           <RefreshCw size={18} className="animate-spin" />
-                          <span>Enviando solicitação...</span>
+                          <span>Gravando no Banco de Dados...</span>
                         </>
                       ) : (
                         <>
@@ -904,7 +899,7 @@ export function App() {
                             {activeClientRide.status === 'accepted' && (
                               <>
                                 <CheckCircle2 color="#f59e0b" size={20} />
-                                <span>Motorista aceitou! A caminho</span>
+                                <span>Motorista ({activeClientRide.driverName || 'Parceiro'}) aceitou! A caminho</span>
                               </>
                             )}
                             {activeClientRide.status === 'in_progress' && (
@@ -980,7 +975,7 @@ export function App() {
                       {activeClientRide.status === 'searching' && (
                         <div style={{ marginTop: '20px', padding: '14px', background: 'rgba(99, 102, 241, 0.08)', borderRadius: '12px', border: '1px dashed rgba(99, 102, 241, 0.3)' }}>
                           <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '10px' }}>
-                            💡 <strong>Simulação de teste:</strong> Aceite esta corrida na aba <strong>Motorista</strong> ou clique abaixo:
+                            💡 <strong>Simulação em tempo real:</strong> Aceite esta corrida na aba <strong>Motorista</strong> ou clique no botão abaixo:
                           </p>
                           <button
                             onClick={() => handleAcceptRide(activeClientRide.id)}
@@ -1051,13 +1046,7 @@ export function App() {
           <div>
             {(!driverProfile || driverProfile.verificationStatus !== 'approved') ? (
               <DriverOnboarding
-                user={currentUser || {
-                  id: 'driver_demo',
-                  email: 'motorista@drivehora.com',
-                  fullName: 'Motorista Parceiro',
-                  role: 'driver',
-                  phone: '(11) 98765-4321'
-                }}
+                user={currentUser}
                 initialProfile={driverProfile}
                 onComplete={(dp) => setDriverProfile(dp)}
               />
@@ -1207,6 +1196,9 @@ export function App() {
                           </div>
 
                           <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', marginBottom: '4px' }}>
+                            <strong>Passageiro:</strong> {r.clientName || 'Cliente'}
+                          </div>
+                          <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', marginBottom: '4px' }}>
                             <strong>Partida:</strong> {r.origin}
                           </div>
                           <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', marginBottom: '12px' }}>
@@ -1298,7 +1290,7 @@ export function App() {
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <Sparkles size={20} color="#818cf8" />
                 <span style={{ fontSize: '0.9rem', color: '#e2e8f0' }}>
-                  <strong>Modo Simulador de Interação em Tempo Real:</strong> Teste o fluxo de contratação do passageiro e o aceite do motorista lado a lado!
+                  <strong>Simulador Dual (Passageiro vs Motorista):</strong> Observe a persistência no banco de dados sincronizando ambos os lados em tempo real!
                 </span>
               </div>
             </div>
@@ -1365,7 +1357,7 @@ export function App() {
 
                 {activeClientRide && (
                   <div style={{ marginTop: '16px', padding: '12px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Status da solicitação:</div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Status no Banco:</div>
                     <strong style={{ color: '#818cf8', fontSize: '0.95rem' }}>{activeClientRide.status.toUpperCase()}</strong>
                   </div>
                 )}
@@ -1520,7 +1512,7 @@ export function App() {
           <span>© 2026 DriveHora — Todos os direitos reservados</span>
           <div style={{ display: 'flex', gap: '16px' }}>
             <span>Regra: 15% Plataforma / 85% Motorista</span>
-            <span>Banco: <strong>{supabaseConnected ? 'Supabase Realtime' : 'Memória / API'}</strong></span>
+            <span>Banco: <strong>{supabaseConnected ? 'Supabase Realtime' : 'Memória / Local'}</strong></span>
           </div>
         </div>
       </footer>

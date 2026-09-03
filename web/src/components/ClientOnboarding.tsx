@@ -3,6 +3,7 @@ import type { UserProfile, ClientProfile } from '../types/auth';
 import { formatCep, fetchAddressByCep } from '../services/cepService';
 import { formatPhone, formatCpf } from '../utils/formatters';
 import { MapPin, Search, CheckCircle2, Check, RefreshCw } from 'lucide-react';
+import { dbSaveClientProfile } from '../services/dbService';
 
 interface ClientOnboardingProps {
   user: UserProfile;
@@ -21,6 +22,7 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ user, onComp
   const [state, setState] = useState('');
   const [isLoadingCep, setIsLoadingCep] = useState(false);
   const [cepSuccess, setCepSuccess] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Manipular busca automática do CEP
   const handleCepChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -43,8 +45,9 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ user, onComp
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSaving(true);
     const profile: ClientProfile = {
       id: 'client_' + user.id,
       userId: user.id,
@@ -60,13 +63,14 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ user, onComp
       isProfileComplete: true
     };
 
-    localStorage.setItem(`drivehora_client_profile_${user.id}`, JSON.stringify(profile));
+    await dbSaveClientProfile(profile);
+    setIsSaving(false);
     onComplete(profile);
   };
 
   return (
-    <div style={{ maxWidth: '650px', margin: '0 auto', width: '100%' }}>
-      <div className="glass-panel" style={{ padding: '36px' }}>
+    <div style={{ maxWidth: '650px', margin: '30px auto', width: '100%' }}>
+      <div className="glass-panel" style={{ padding: '36px', boxShadow: 'var(--shadow-lg)' }}>
         
         {/* Cabeçalho */}
         <div style={{ textAlign: 'center', marginBottom: '28px' }}>
@@ -85,7 +89,7 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ user, onComp
           </div>
           <h2 style={{ fontSize: '1.4rem', fontWeight: 800 }}>Complete seu Cadastro</h2>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            Olá <strong>{user.fullName}</strong>! Precisamos do seu endereço e telefone para agilizar seus chamados.
+            Olá <strong>{user.fullName}</strong>! Precisamos do seu endereço e telefone para agilizar seus chamados no banco de dados.
           </p>
         </div>
 
@@ -125,7 +129,7 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ user, onComp
               <label>CEP (Busca Automática de Endereço)</label>
               {isLoadingCep && (
                 <span style={{ fontSize: '0.75rem', color: '#818cf8', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <RefreshCw size={12} className="animate-spin" /> Buscando endereço...
+                  <RefreshCw size={12} className="animate-spin" /> Buscando no ViaCEP...
                 </span>
               )}
               {cepSuccess && (
@@ -228,11 +232,12 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ user, onComp
 
           <button
             type="submit"
+            disabled={isSaving}
             className="btn-primary"
             style={{ width: '100%', padding: '14px', fontSize: '1rem', marginTop: '10px' }}
           >
-            <Check size={18} />
-            <span>Salvar Cadastro e Acessar DriveHora</span>
+            {isSaving ? <RefreshCw size={18} className="animate-spin" /> : <Check size={18} />}
+            <span>{isSaving ? 'Salvando no Banco...' : 'Salvar Cadastro e Acessar DriveHora'}</span>
           </button>
         </form>
       </div>
