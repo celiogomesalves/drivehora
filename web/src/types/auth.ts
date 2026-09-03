@@ -59,4 +59,5 @@ export interface DriverProfile {
   verificationStatus: DriverVerificationStatus;
   rating: number;
   totalRides: number;
+  isOnline?: boolean;
 }

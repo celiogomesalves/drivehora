@@ -62,6 +62,7 @@ export function App() {
 
   // Motorista & Alertas em Tempo Real
   const [isDriverOnline, setIsDriverOnline] = useState(false);
+  const [isTogglingOnline, setIsTogglingOnline] = useState(false);
   const [driverEarnings, setDriverEarnings] = useState(0);
   const [dismissedRideId, setDismissedRideId] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState(false);
@@ -130,6 +131,9 @@ export function App() {
       } else {
         const dp = await dbGetDriverProfile(currentUser.id, currentUser.email);
         setDriverProfile(dp);
+        if (dp?.isOnline !== undefined) {
+          setIsDriverOnline(dp.isOnline);
+        }
         if (isUserAdmin) {
           setActiveTab('admin');
         } else {
@@ -357,8 +361,10 @@ export function App() {
     fetchRides();
   };
 
-  // Alternar modo online do motorista com validação e sincronização no Supabase
+  // Alternar modo online do motorista aguardando validação e gravação no Supabase
   const handleToggleDriverOnline = async () => {
+    if (isTogglingOnline) return;
+
     if (!isDriverOnline) {
       // Para ficar ONLINE e receber chamados, o cadastro deve estar validado ou ser admin
       const isApproved = driverProfile?.verificationStatus === 'approved' || isUserAdmin;
@@ -368,10 +374,23 @@ export function App() {
         return;
       }
     }
+
     const nextStatus = !isDriverOnline;
-    setIsDriverOnline(nextStatus);
-    if (currentUser) {
-      await dbUpdateDriverOnlineStatus(currentUser.id, nextStatus);
+    setIsTogglingOnline(true);
+    try {
+      if (currentUser) {
+        const res = await dbUpdateDriverOnlineStatus(currentUser.id, nextStatus);
+        if (!res.success) {
+          alert(`Não foi possível atualizar o status no banco: ${res.error || 'Falha de comunicação'}`);
+          return;
+        }
+      }
+      // SÓ efetiva a mudança na interface após confirmação de sucesso do banco!
+      setIsDriverOnline(nextStatus);
+    } catch (e: any) {
+      alert('Erro ao atualizar status online no banco de dados.');
+    } finally {
+      setIsTogglingOnline(false);
     }
   };
 
@@ -1544,6 +1563,7 @@ export function App() {
 
                       <button
                         onClick={handleToggleDriverOnline}
+                        disabled={isTogglingOnline}
                         style={{
                           display: 'flex',
                           alignItems: 'center',
@@ -1551,7 +1571,8 @@ export function App() {
                           padding: '8px 16px',
                           borderRadius: '24px',
                           border: 'none',
-                          cursor: 'pointer',
+                          cursor: isTogglingOnline ? 'not-allowed' : 'pointer',
+                          opacity: isTogglingOnline ? 0.7 : 1,
                           fontWeight: 700,
                           fontSize: '0.85rem',
                           background: isDriverOnline ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
@@ -1561,8 +1582,17 @@ export function App() {
                           borderColor: isDriverOnline ? '#10b981' : '#ef4444'
                         }}
                       >
-                        <Radio size={16} className={isDriverOnline ? 'animate-pulse' : ''} />
-                        <span>{isDriverOnline ? 'ONLINE' : 'OFFLINE'}</span>
+                        {isTogglingOnline ? (
+                          <>
+                            <RefreshCw size={16} className="animate-spin" />
+                            <span>GRAVANDO...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Radio size={16} className={isDriverOnline ? 'animate-pulse' : ''} />
+                            <span>{isDriverOnline ? 'ONLINE' : 'OFFLINE'}</span>
+                          </>
+                        )}
                       </button>
                     </div>
                   </div>

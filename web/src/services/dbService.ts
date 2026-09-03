@@ -365,7 +365,8 @@ export const dbGetDriverProfile = async (userId: string, email?: string): Promis
           selfieUrl: res.data.selfie_url,
           verificationStatus: dataVerificationStatus(res.data.verification_status),
           rating: Number(res.data.rating) || 5.0,
-          totalRides: Number(res.data.total_rides) || 0
+          totalRides: Number(res.data.total_rides) || 0,
+          isOnline: Boolean(res.data.is_online)
         };
       }
     } catch (e) {}
@@ -619,13 +620,27 @@ export const dbAdminUpdateDriverStatus = async (
 export const dbUpdateDriverOnlineStatus = async (
   userId: string,
   isOnline: boolean
-): Promise<void> => {
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    localStorage.setItem(`drivehora_driver_online_${userId}`, String(isOnline));
+  } catch (e) {}
+
   const sb = getSupabase();
   if (sb) {
     try {
-      await sb.from('drivers').update({ is_online: isOnline }).eq('user_id', userId);
-    } catch (e) {
-      console.warn('Erro ao atualizar status online do motorista:', e);
+      const res: any = await withTimeout(
+        sb.from('drivers').update({ is_online: isOnline }).eq('user_id', userId),
+        8000
+      );
+      if (res?.error) {
+        console.warn('Erro ao atualizar status online no Supabase:', res.error);
+        return { success: false, error: res.error.message };
+      }
+      return { success: true };
+    } catch (e: any) {
+      console.warn('Erro de comunicação ao atualizar status online:', e);
+      return { success: false, error: e.message || 'Tempo limite esgotado' };
     }
   }
+  return { success: true };
 };
