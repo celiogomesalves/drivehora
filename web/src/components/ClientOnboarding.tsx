@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { UserProfile, ClientProfile } from '../types/auth';
 import { formatCep, fetchAddressByCep } from '../services/cepService';
+import { formatPhone, formatCpf } from '../utils/formatters';
 import { MapPin, Search, CheckCircle2, Check, RefreshCw } from 'lucide-react';
 
 interface ClientOnboardingProps {
@@ -9,7 +10,7 @@ interface ClientOnboardingProps {
 }
 
 export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ user, onComplete }) => {
-  const [phone, setPhone] = useState(user.phone || '');
+  const [phone, setPhone] = useState(formatPhone(user.phone || ''));
   const [cpf, setCpf] = useState('');
   const [cep, setCep] = useState('');
   const [street, setStreet] = useState('');
@@ -97,8 +98,9 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ user, onComp
                 type="tel"
                 className="custom-input"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(e) => setPhone(formatPhone(e.target.value))}
                 placeholder="(11) 98765-4321"
+                maxLength={15}
                 required
               />
             </div>
@@ -109,8 +111,9 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ user, onComp
                 type="text"
                 className="custom-input"
                 value={cpf}
-                onChange={(e) => setCpf(e.target.value)}
+                onChange={(e) => setCpf(formatCpf(e.target.value))}
                 placeholder="000.000.000-00"
+                maxLength={14}
                 required
               />
             </div>
@@ -215,7 +218,7 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ user, onComp
                 type="text"
                 className="custom-input"
                 value={state}
-                onChange={(e) => setState(e.target.value)}
+                onChange={(e) => setState(e.target.value.toUpperCase())}
                 placeholder="SP"
                 maxLength={2}
                 required

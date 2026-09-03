@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { UserRole, UserProfile } from '../types/auth';
 import { Users, Car, LogIn, Mail, Lock, User, Phone } from 'lucide-react';
+import { formatPhone } from '../utils/formatters';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -159,7 +160,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
                     style={{ paddingLeft: '38px' }}
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
-                    placeholder="Seu nome"
+                    placeholder="Seu nome completo"
                     required
                   />
                 </div>
@@ -174,8 +175,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
                     className="custom-input"
                     style={{ paddingLeft: '38px' }}
                     value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
+                    onChange={(e) => setPhone(formatPhone(e.target.value))}
                     placeholder="(11) 98765-4321"
+                    maxLength={15}
                     required
                   />
                 </div>

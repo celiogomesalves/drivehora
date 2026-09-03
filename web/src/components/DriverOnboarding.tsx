@@ -5,6 +5,7 @@ import {
   UploadCloud, Check, Sparkles, RefreshCw
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { formatPhone, formatCpf, formatPlate } from '../utils/formatters';
 
 interface DriverOnboardingProps {
   user: UserProfile;
@@ -16,8 +17,8 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
   const [step, setStep] = useState<number>(initialProfile?.verificationStatus === 'under_review' ? 4 : 1);
   
   // Dados Pessoais & CNH
-  const [cpf, setCpf] = useState(initialProfile?.cpf || '');
-  const [phone, setPhone] = useState(initialProfile?.phone || user.phone || '');
+  const [cpf, setCpf] = useState(formatCpf(initialProfile?.cpf || ''));
+  const [phone, setPhone] = useState(formatPhone(initialProfile?.phone || user.phone || ''));
   const [cnhNumber, setCnhNumber] = useState(initialProfile?.cnhNumber || '');
   const [cnhCategory, setCnhCategory] = useState(initialProfile?.cnhCategory || 'B');
 
@@ -25,7 +26,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
   const [vehicleBrand, setVehicleBrand] = useState(initialProfile?.vehicleBrand || 'Toyota');
   const [vehicleModel, setVehicleModel] = useState(initialProfile?.vehicleModel || 'Corolla XEi');
   const [vehicleYear, setVehicleYear] = useState(initialProfile?.vehicleYear || '2023');
-  const [vehiclePlate, setVehiclePlate] = useState(initialProfile?.vehiclePlate || 'BRA-2E19');
+  const [vehiclePlate, setVehiclePlate] = useState(formatPlate(initialProfile?.vehiclePlate || 'BRA-2E19'));
   const [vehicleColor, setVehicleColor] = useState(initialProfile?.vehicleColor || 'Preto');
 
   // Documentos
@@ -140,8 +141,9 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
                   type="text"
                   className="custom-input"
                   value={cpf}
-                  onChange={(e) => setCpf(e.target.value)}
+                  onChange={(e) => setCpf(formatCpf(e.target.value))}
                   placeholder="000.000.000-00"
+                  maxLength={14}
                   required
                 />
               </div>
@@ -152,8 +154,9 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
                   type="tel"
                   className="custom-input"
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
+                  onChange={(e) => setPhone(formatPhone(e.target.value))}
                   placeholder="(11) 98765-4321"
+                  maxLength={15}
                   required
                 />
               </div>
@@ -166,8 +169,9 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
                   type="text"
                   className="custom-input"
                   value={cnhNumber}
-                  onChange={(e) => setCnhNumber(e.target.value)}
+                  onChange={(e) => setCnhNumber(e.target.value.replace(/\D/g, '').slice(0, 11))}
                   placeholder="00000000000"
+                  maxLength={11}
                   required
                 />
               </div>
@@ -243,8 +247,9 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
                   type="text"
                   className="custom-input"
                   value={vehicleYear}
-                  onChange={(e) => setVehicleYear(e.target.value)}
+                  onChange={(e) => setVehicleYear(e.target.value.replace(/\D/g, '').slice(0, 4))}
                   placeholder="2023"
+                  maxLength={4}
                   required
                 />
               </div>
@@ -255,8 +260,9 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ user, initia
                   type="text"
                   className="custom-input"
                   value={vehiclePlate}
-                  onChange={(e) => setVehiclePlate(e.target.value.toUpperCase())}
+                  onChange={(e) => setVehiclePlate(formatPlate(e.target.value))}
                   placeholder="ABC-1D23"
+                  maxLength={8}
                   required
                 />
               </div>

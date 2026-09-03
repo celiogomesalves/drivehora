@@ -13,6 +13,7 @@ import { AuthModal } from './components/AuthModal';
 import { ClientOnboarding } from './components/ClientOnboarding';
 import { DriverOnboarding } from './components/DriverOnboarding';
 import { getCurrentPosition, reverseGeocode } from './services/gpsService';
+import { formatCurrency } from './utils/formatters';
 
 interface Ride {
   id: string;
@@ -837,16 +838,16 @@ export function App() {
                     }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                         <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Valor Total Contratado:</span>
-                        <strong style={{ fontSize: '1.25rem', color: '#fff' }}>R$ {totalAmount.toFixed(2)}</strong>
+                        <strong style={{ fontSize: '1.25rem', color: '#fff' }}>{formatCurrency(totalAmount)}</strong>
                       </div>
                       <div style={{ height: '1px', background: 'var(--border-subtle)', margin: '8px 0' }}></div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                         <span>Taxa da Plataforma (15%):</span>
-                        <span>R$ {platformFee.toFixed(2)}</span>
+                        <span>{formatCurrency(platformFee)}</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#10b981', marginTop: '4px', fontWeight: 600 }}>
                         <span>Repasse Líquido ao Motorista (85%):</span>
-                        <span>R$ {driverNet.toFixed(2)}</span>
+                        <span>{formatCurrency(driverNet)}</span>
                       </div>
                     </div>
 
@@ -864,7 +865,7 @@ export function App() {
                       ) : (
                         <>
                           <Car size={18} />
-                          <span>Solicitar Motorista por R$ {totalAmount.toFixed(2)}</span>
+                          <span>Solicitar Motorista por {formatCurrency(totalAmount)}</span>
                         </>
                       )}
                     </button>
@@ -967,11 +968,11 @@ export function App() {
                         </div>
                         <div>
                           <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Taxa / Hora</div>
-                          <div style={{ fontWeight: 700 }}>R$ {activeClientRide.hourlyRate}</div>
+                          <div style={{ fontWeight: 700 }}>{formatCurrency(activeClientRide.hourlyRate)}</div>
                         </div>
                         <div>
                           <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Total</div>
-                          <div style={{ fontWeight: 700, color: '#818cf8' }}>R$ {activeClientRide.total.toFixed(2)}</div>
+                          <div style={{ fontWeight: 700, color: '#818cf8' }}>{formatCurrency(activeClientRide.total)}</div>
                         </div>
                       </div>
 
@@ -1114,7 +1115,7 @@ export function App() {
                         <span>Ganhos Líquidos</span>
                       </div>
                       <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#10b981', marginTop: '6px' }}>
-                        R$ {driverEarnings.toFixed(2)}
+                        {formatCurrency(driverEarnings)}
                       </div>
                       <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Repasse de 85% do total</div>
                     </div>
@@ -1201,7 +1202,7 @@ export function App() {
                               ⏱️ {r.hours}h de serviço
                             </span>
                             <strong style={{ color: '#10b981', fontSize: '1.1rem' }}>
-                              Ganho Líquido: R$ {r.driverNet.toFixed(2)}
+                              Ganho Líquido: {formatCurrency(r.driverNet)}
                             </strong>
                           </div>
 
@@ -1214,7 +1215,7 @@ export function App() {
 
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '10px', borderTop: '1px solid var(--border-subtle)' }}>
                             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                              Total Cliente: R$ {r.total.toFixed(2)}
+                              Total Cliente: {formatCurrency(r.total)}
                             </span>
                             <button
                               onClick={() => handleAcceptRide(r.id)}
@@ -1266,7 +1267,7 @@ export function App() {
                                 className="btn-success"
                                 style={{ flex: 1, padding: '8px', fontSize: '0.8rem' }}
                               >
-                                <CheckCircle2 size={14} /> Concluir e Receber R$ {r.driverNet.toFixed(2)}
+                                <CheckCircle2 size={14} /> Concluir e Receber {formatCurrency(r.driverNet)}
                               </button>
                             )}
                           </div>
@@ -1353,8 +1354,8 @@ export function App() {
                   </div>
 
                   <div style={{ background: 'rgba(15, 23, 42, 0.7)', padding: '10px', borderRadius: '8px', fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Total: <strong>R$ {totalAmount.toFixed(2)}</strong></span>
-                    <span style={{ color: '#10b981' }}>Motorista: <strong>R$ {driverNet.toFixed(2)}</strong></span>
+                    <span>Total: <strong>{formatCurrency(totalAmount)}</strong></span>
+                    <span style={{ color: '#10b981' }}>Motorista: <strong>{formatCurrency(driverNet)}</strong></span>
                   </div>
 
                   <button type="submit" className="btn-primary" style={{ padding: '10px' }}>
@@ -1391,7 +1392,7 @@ export function App() {
                       <div key={r.id} style={{ background: 'rgba(15, 23, 42, 0.9)', padding: '14px', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
                         <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>{r.origin} ➔ {r.destination}</div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
-                          <span style={{ fontSize: '0.8rem', color: '#10b981', fontWeight: 700 }}>{r.hours}h • Ganho R$ {r.driverNet.toFixed(2)}</span>
+                          <span style={{ fontSize: '0.8rem', color: '#10b981', fontWeight: 700 }}>{r.hours}h • Ganho {formatCurrency(r.driverNet)}</span>
                           <button onClick={() => handleAcceptRide(r.id)} className="btn-success" style={{ padding: '6px 12px', fontSize: '0.8rem' }}>
                             2. Aceitar
                           </button>
