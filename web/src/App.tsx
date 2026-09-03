@@ -183,7 +183,7 @@ export function App() {
   // Buscar corridas (do Supabase ou do Backend/Memória)
   const fetchRides = async () => {
     const sb = getSupabase();
-    if (sb && supabaseConnected) {
+    if (sb) {
       try {
         const { data, error } = await sb.from('rides').select('*').order('created_at', { ascending: false }).limit(50);
         if (!error && data) {
@@ -303,7 +303,10 @@ export function App() {
   // Solicitar corrida como cliente
   const handleRequestRide = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!origin.trim() || !destination.trim()) return;
+    if (!origin.trim() || !destination.trim()) {
+      alert('Por favor, informe o ponto de partida e o destino.');
+      return;
+    }
 
     setIsRequesting(true);
     const rideId = 'ride_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
@@ -324,8 +327,17 @@ export function App() {
       createdAt: Date.now()
     };
 
-    await dbCreateRide(newRide);
+    // 1. Atualização imediata no estado local do cliente
     setCurrentRideId(rideId);
+    setRides(prev => [newRide, ...prev.filter(r => r.id !== rideId)]);
+
+    // 2. Gravação no Supabase
+    try {
+      await dbCreateRide(newRide);
+    } catch (err) {
+      console.warn('Erro ao criar corrida no Supabase:', err);
+    }
+
     await fetchRides();
     setIsRequesting(false);
   };
@@ -408,7 +420,11 @@ export function App() {
   // ========================================================
   // 2. TELA DO SISTEMA LOGADO
   // ========================================================
-  const activeClientRide = rides.find(r => r.id === currentRideId) || rides.find(r => r.clientId === currentUser?.id) || rides[0];
+  const activeClientRide = 
+    (currentRideId ? rides.find(r => r.id === currentRideId) : null) || 
+    rides.find(r => currentUser && r.clientId === currentUser.id && r.status !== 'finished' && r.status !== 'cancelled') ||
+    rides.find(r => currentUser && r.clientId === currentUser.id) ||
+    (rides.length > 0 && rides[0].status === 'searching' ? rides[0] : null);
   const pendingRides = rides.filter(r => r.status === 'searching');
   const myDriverRides = rides.filter(r => (r.status === 'accepted' || r.status === 'in_progress') && (r.driverId === currentUser?.id || !r.driverId));
 
