@@ -11,6 +11,22 @@ export const formatCurrency = (value: number | undefined | null): string => {
   }).format(num);
 };
 
+// 1.1 Formatação e Máscara para Input de Moeda Brasileira (R$)
+export const parseCurrencyInput = (value: string): number => {
+  const digits = value.replace(/\D/g, '');
+  if (!digits) return 0;
+  return Number(digits) / 100;
+};
+
+export const formatCurrencyInput = (numValue: number): string => {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(numValue || 0);
+};
+
 // 2. Formatação de Telefone Celular / Fixo: (11) 98765-4321 ou (11) 3456-7890
 export const formatPhone = (value: string): string => {
   if (!value) return '';

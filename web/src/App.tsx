@@ -3,7 +3,8 @@ import {
   Car, Clock, DollarSign, Navigation, ShieldCheck, 
   Smartphone, Users, RefreshCw, CheckCircle2, 
   Radio, Award, PlayCircle, Sparkles, Compass, Database, 
-  X, Check, LogOut, MapPin, Crown, AlertTriangle, UserCheck
+  X, Check, LogOut, MapPin, Crown, AlertTriangle, UserCheck,
+  BellRing, Volume2, VolumeX
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import confetti from 'canvas-confetti';
@@ -15,10 +16,10 @@ import { ClientOnboarding } from './components/ClientOnboarding';
 import { DriverOnboarding } from './components/DriverOnboarding';
 import { AdminDashboard } from './components/AdminDashboard';
 import { getCurrentPosition, reverseGeocode, searchAddressPlaces } from './services/gpsService';
-import { formatCurrency } from './utils/formatters';
+import { formatCurrency, formatCurrencyInput, parseCurrencyInput } from './utils/formatters';
 import { 
   dbGetClientProfile, dbGetDriverProfile, 
-  dbCreateRide, dbUpdateRide, type DbRide 
+  dbCreateRide, dbUpdateRide, dbUpdateDriverOnlineStatus, type DbRide 
 } from './services/dbService';
 
 export function App() {
@@ -59,9 +60,54 @@ export function App() {
   const [isRequesting, setIsRequesting] = useState(false);
   const [isLocatingGPS, setIsLocatingGPS] = useState(false);
 
-  // Motorista
+  // Motorista & Alertas em Tempo Real
   const [isDriverOnline, setIsDriverOnline] = useState(false);
   const [driverEarnings, setDriverEarnings] = useState(0);
+  const [dismissedRideId, setDismissedRideId] = useState<string | null>(null);
+  const [isMuted, setIsMuted] = useState(false);
+
+  // Identificar solicitação de corrida pendente em busca de motorista
+  const incomingRide = rides.find(r => r.status === 'searching');
+
+  // Sintetizador Web Audio API de Alerta Sonoro de Chamado
+  const playRideAlertSound = () => {
+    if (isMuted) return;
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      if (ctx.state === 'suspended') ctx.resume();
+
+      const playBeep = (freq: number, start: number, duration: number) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, ctx.currentTime + start);
+        gain.gain.setValueAtTime(0.35, ctx.currentTime + start);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + duration);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(ctx.currentTime + start);
+        osc.stop(ctx.currentTime + start + duration);
+      };
+
+      // Pulsing ride request chime (Arpejo agradável e chamativo)
+      playBeep(880, 0, 0.18);
+      playBeep(1174.66, 0.22, 0.28);
+      playBeep(1479.98, 0.52, 0.38);
+    } catch (e) {}
+  };
+
+  // Tocar som em loop enquanto houver corrida em busca e o motorista estiver online
+  useEffect(() => {
+    if (isDriverOnline && incomingRide && incomingRide.id !== dismissedRideId) {
+      playRideAlertSound();
+      const interval = setInterval(() => {
+        playRideAlertSound();
+      }, 3500);
+      return () => clearInterval(interval);
+    }
+  }, [isDriverOnline, incomingRide?.id, dismissedRideId, isMuted]);
 
   // Informações de rede local
   const localNetworkUrl = `http://192.168.18.71:5173`;
@@ -284,6 +330,7 @@ export function App() {
   const handleAcceptRide = async (rideId: string) => {
     const driverId = currentUser?.id || 'driver_demo_01';
     const driverName = currentUser?.fullName || 'Motorista Parceiro';
+    setDismissedRideId(null);
     await dbUpdateRide(rideId, {
       driverId,
       driverName,
@@ -310,18 +357,22 @@ export function App() {
     fetchRides();
   };
 
-  // Alternar modo online do motorista com validação
-  const handleToggleDriverOnline = () => {
+  // Alternar modo online do motorista com validação e sincronização no Supabase
+  const handleToggleDriverOnline = async () => {
     if (!isDriverOnline) {
-      // Para ficar ONLINE e receber chamados, o cadastro deve estar validado
-      const isApproved = driverProfile?.verificationStatus === 'approved';
+      // Para ficar ONLINE e receber chamados, o cadastro deve estar validado ou ser admin
+      const isApproved = driverProfile?.verificationStatus === 'approved' || isUserAdmin;
       if (!isApproved) {
         alert('Atenção: Para ativar o modo ONLINE e receber solicitações de corridas, é necessário que seus dados de CNH, Veículo e Documentos estejam cadastrados e aprovados.');
         setShowDriverProfileEdit(true);
         return;
       }
     }
-    setIsDriverOnline(!isDriverOnline);
+    const nextStatus = !isDriverOnline;
+    setIsDriverOnline(nextStatus);
+    if (currentUser) {
+      await dbUpdateDriverOnlineStatus(currentUser.id, nextStatus);
+    }
   };
 
   // ========================================================
@@ -690,6 +741,166 @@ export function App() {
         </div>
       )}
 
+      {/* ======================================================== */}
+      {/* MODAL DE ALERTA VISUAL E SONORO DE NOVA CORRIDA (MOTORISTA ONLINE) */}
+      {/* ======================================================== */}
+      {isDriverOnline && incomingRide && incomingRide.id !== dismissedRideId && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.82)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 999,
+          padding: '16px'
+        }}>
+          <div style={{
+            maxWidth: '540px',
+            width: '100%',
+            background: 'linear-gradient(145deg, #0f172a, #1e1b4b)',
+            border: '2px solid #6366f1',
+            borderRadius: '24px',
+            padding: '28px',
+            boxShadow: '0 0 50px rgba(99, 102, 241, 0.5), 0 20px 40px rgba(0,0,0,0.8)',
+            position: 'relative'
+          }}>
+            {/* Cabeçalho do Alerta com Som */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{
+                  background: 'rgba(239, 68, 68, 0.2)',
+                  color: '#ef4444',
+                  padding: '10px',
+                  borderRadius: '14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <BellRing size={24} className="animate-bounce" />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#fff', margin: 0 }}>
+                    NOVA SOLICITAÇÃO DISPONÍVEL!
+                  </h3>
+                  <span style={{ fontSize: '0.8rem', color: '#818cf8', fontWeight: 600 }}>
+                    ⏱️ Toque para aceitar antes que outro motorista pegue
+                  </span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsMuted(!isMuted)}
+                className="btn-outline"
+                style={{ padding: '6px 10px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                title={isMuted ? 'Desmutar alerta sonoro' : 'Mutar alerta sonoro'}
+              >
+                {isMuted ? <VolumeX size={16} color="#ef4444" /> : <Volume2 size={16} color="#10b981" />}
+                <span>{isMuted ? 'Mudo' : 'Som Ativo'}</span>
+              </button>
+            </div>
+
+            {/* Itinerário */}
+            <div style={{
+              background: 'rgba(15, 23, 42, 0.9)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              borderRadius: '16px',
+              padding: '16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+              marginBottom: '16px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#6366f1', marginTop: '5px' }}></div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>📍 Ponto de Partida</div>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#fff' }}>{incomingRide.origin}</div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: '#10b981', marginTop: '5px' }}></div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>🏁 Destino Principal / Roteiro</div>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#fff' }}>{incomingRide.destination}</div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px', borderTop: '1px solid rgba(255, 255, 255, 0.06)', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                <span>👤 Passageiro: <strong>{incomingRide.clientName || 'Passageiro DriveHora'}</strong></span>
+                <span>⏱️ Tempo: <strong>{incomingRide.hours} Horas</strong> ({formatCurrency(incomingRide.hourlyRate)}/h)</span>
+              </div>
+            </div>
+
+            {/* Demonstrativo Financeiro Completo com Taxa Abatida */}
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(99, 102, 241, 0.15))',
+              border: '1px solid rgba(16, 185, 129, 0.4)',
+              borderRadius: '16px',
+              padding: '16px',
+              marginBottom: '20px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                <span>Valor Total da Corrida:</span>
+                <span style={{ fontWeight: 600, color: '#fff' }}>{formatCurrency(incomingRide.total)}</span>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#f87171', marginBottom: '8px' }}>
+                <span>Taxa da Plataforma (15%):</span>
+                <span>- {formatCurrency(incomingRide.commission)}</span>
+              </div>
+
+              <div style={{ height: '1px', background: 'rgba(255, 255, 255, 0.1)', margin: '8px 0' }}></div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#10b981' }}>SEU GANHO LÍQUIDO:</span>
+                <strong style={{ fontSize: '1.6rem', fontWeight: 900, color: '#10b981' }}>
+                  {formatCurrency(incomingRide.driverNet)}
+                </strong>
+              </div>
+            </div>
+
+            {/* Botões de Ação */}
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                type="button"
+                onClick={() => handleAcceptRide(incomingRide.id)}
+                className="btn-success"
+                style={{
+                  flex: 2,
+                  padding: '16px',
+                  fontSize: '1.1rem',
+                  fontWeight: 800,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '10px',
+                  boxShadow: '0 0 25px rgba(16, 185, 129, 0.6)'
+                }}
+              >
+                <CheckCircle2 size={22} />
+                <span>ACEITAR AGORA ({formatCurrency(incomingRide.driverNet)})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDismissedRideId(incomingRide.id)}
+                className="btn-outline"
+                style={{ flex: 1, padding: '16px', fontSize: '0.9rem', color: 'var(--text-muted)' }}
+              >
+                Dispensar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Main Container */}
       <main style={{ flex: 1, maxWidth: '1200px', margin: '0 auto', width: '100%', padding: '24px 16px' }}>
         
@@ -979,21 +1190,50 @@ export function App() {
                       </div>
                     </div>
 
-                    {/* Valor por hora */}
+                    {/* Valor por hora formatado em Moeda Brasileira (R$) */}
                     <div className="input-group">
-                      <label>💵 Valor Ofertado por Hora (R$/h)</label>
-                      <div style={{ position: 'relative' }}>
-                        <span style={{ position: 'absolute', left: '12px', top: '12px', color: 'var(--text-muted)' }}>R$</span>
-                        <input
-                          type="number"
-                          className="custom-input"
-                          style={{ paddingLeft: '38px' }}
-                          value={hourlyRate}
-                          onChange={(e) => setHourlyRate(Number(e.target.value))}
-                          min={30}
-                          step={5}
-                          required
-                        />
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <label>💵 Valor Ofertado por Hora (R$/h)</label>
+                        <span style={{ fontSize: '0.8rem', color: '#10b981', fontWeight: 700 }}>
+                          {formatCurrency(hourlyRate)} / hora
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '6px' }}>
+                        <button
+                          type="button"
+                          onClick={() => setHourlyRate(prev => Math.max(30, prev - 5))}
+                          className="btn-outline"
+                          style={{ padding: '10px 14px', fontSize: '0.9rem', fontWeight: 700, borderRadius: '10px' }}
+                          title="Diminuir R$ 5 por hora"
+                        >
+                          - R$ 5
+                        </button>
+                        <div style={{ position: 'relative', flex: 1 }}>
+                          <input
+                            type="text"
+                            className="custom-input"
+                            style={{ textAlign: 'center', fontWeight: 700, fontSize: '1.1rem', color: '#10b981' }}
+                            value={formatCurrencyInput(hourlyRate)}
+                            onChange={(e) => {
+                              const parsed = parseCurrencyInput(e.target.value);
+                              setHourlyRate(parsed);
+                            }}
+                            required
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setHourlyRate(prev => prev + 5)}
+                          className="btn-outline"
+                          style={{ padding: '10px 14px', fontSize: '0.9rem', fontWeight: 700, borderRadius: '10px' }}
+                          title="Aumentar R$ 5 por hora"
+                        >
+                          + R$ 5
+                        </button>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                        <span>Mínimo sugerido: R$ 30,00/h</span>
+                        <span>Média de mercado: R$ 50,00 - R$ 80,00/h</span>
                       </div>
                     </div>
 

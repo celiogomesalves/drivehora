@@ -614,3 +614,18 @@ export const dbAdminUpdateDriverStatus = async (
     }
   }
 };
+
+// 11. Atualizar Status Online/Offline do Motorista no Banco Supabase
+export const dbUpdateDriverOnlineStatus = async (
+  userId: string,
+  isOnline: boolean
+): Promise<void> => {
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      await sb.from('drivers').update({ is_online: isOnline }).eq('user_id', userId);
+    } catch (e) {
+      console.warn('Erro ao atualizar status online do motorista:', e);
+    }
+  }
+};
