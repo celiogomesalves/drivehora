@@ -1269,7 +1269,7 @@ export function App() {
                       {isRequesting ? (
                         <>
                           <RefreshCw size={18} className="animate-spin" />
-                          <span>Gravando no Banco de Dados...</span>
+                          <span>Buscando motoristas disponíveis...</span>
                         </>
                       ) : (
                         <>
