@@ -94,6 +94,27 @@ export function App() {
     loadUserProfiles();
   }, [currentUser]);
 
+  // Carregar automaticamente a localização do ponto de partida via GPS ao iniciar a solicitação
+  useEffect(() => {
+    if (activeTab === 'client' || activeTab === 'dual') {
+      const autoDetectClientGPS = async () => {
+        try {
+          setIsLocatingGPS(true);
+          const coords = await getCurrentPosition();
+          const address = await reverseGeocode(coords);
+          if (address) {
+            setOrigin(address);
+          }
+        } catch (e) {
+          // Mantém valor padrão caso a permissão seja recusada
+        } finally {
+          setIsLocatingGPS(false);
+        }
+      };
+      autoDetectClientGPS();
+    }
+  }, [activeTab]);
+
   // Verificar conexão Supabase
   const checkSupabaseConnection = async () => {
     const sb = getSupabase();
@@ -741,7 +762,7 @@ export function App() {
                         onChange={(e) => {
                           const val = e.target.value;
                           setOrigin(val);
-                          if (val.trim().length >= 3) {
+                          if (val.trim().length >= 2) {
                             setIsSearchingOrigin(true);
                             searchAddressPlaces(val).then(results => {
                               setOriginSuggestions(results);
@@ -752,7 +773,7 @@ export function App() {
                           }
                         }}
                         onFocus={() => {
-                          if (origin.trim().length >= 3) {
+                          if (origin.trim().length >= 2) {
                             searchAddressPlaces(origin).then(res => setOriginSuggestions(res));
                           }
                         }}
@@ -820,7 +841,7 @@ export function App() {
                         onChange={(e) => {
                           const val = e.target.value;
                           setDestination(val);
-                          if (val.trim().length >= 3) {
+                          if (val.trim().length >= 2) {
                             setIsSearchingDest(true);
                             searchAddressPlaces(val).then(results => {
                               setDestSuggestions(results);
@@ -831,11 +852,11 @@ export function App() {
                           }
                         }}
                         onFocus={() => {
-                          if (destination.trim().length >= 3) {
+                          if (destination.trim().length >= 2) {
                             searchAddressPlaces(destination).then(res => setDestSuggestions(res));
                           }
                         }}
-                        placeholder="Ex: Aeroporto de Guarulhos..."
+                        placeholder="Digite o destino ou local (ex: Aeroporto, Paulista, Shopping...)"
                         required
                       />
 

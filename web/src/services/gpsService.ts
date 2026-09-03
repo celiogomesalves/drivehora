@@ -45,12 +45,7 @@ export const getCurrentPosition = (): Promise<Coordinates> => {
 export const reverseGeocode = async (coords: Coordinates): Promise<string> => {
   try {
     const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${coords.latitude}&lon=${coords.longitude}&zoom=18&addressdetails=1`;
-    const res = await fetch(url, {
-      headers: {
-        'Accept-Language': 'pt-BR,pt;q=0.9',
-        'User-Agent': 'DriveHora-App/1.0'
-      }
-    });
+    const res = await fetch(url);
 
     if (!res.ok) throw new Error('Falha na geocodificação');
     const data = await res.json();
@@ -58,54 +53,99 @@ export const reverseGeocode = async (coords: Coordinates): Promise<string> => {
     const address = data.address || {};
     const road = address.road || address.pedestrian || address.street || '';
     const houseNumber = address.house_number ? `, ${address.house_number}` : '';
-    const suburb = address.suburb || address.neighbourhood || '';
+    const suburb = address.suburb || address.neighbourhood || address.residential || '';
     const city = address.city || address.town || address.municipality || '';
 
-    if (road && suburb) {
-      return `${road}${houseNumber} - ${suburb}, ${city}`;
+    if (road && (suburb || city)) {
+      return `${road}${houseNumber}${suburb ? ` - ${suburb}` : ''}${city ? `, ${city}` : ''}`;
     }
 
-    return data.display_name?.split(',').slice(0, 3).join(',') || `${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)}`;
+    if (data.display_name) {
+      return data.display_name.split(',').slice(0, 3).join(', ');
+    }
+
+    return `Localização atual (${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)})`;
   } catch (err) {
     console.warn('Erro ao obter endereço via GPS:', err);
     return `Localização atual (${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)})`;
   }
 };
 
-// 3. Busca Automática de Endereços / Lugares ao digitar (Geocodificação Direta)
+// 3. Busca Inteligente de Endereços / Lugares ao digitar (Autocomplete Multi-Provedor)
 export const searchAddressPlaces = async (query: string): Promise<string[]> => {
   const clean = query.trim();
-  if (clean.length < 3) return [];
+  if (clean.length < 2) return [];
 
+  const results: string[] = [];
+
+  // Provedor 1: Photon OpenStreetMap (Rápido e especializado em digitação em tempo real)
   try {
     const encoded = encodeURIComponent(clean);
-    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encoded}&countrycodes=br&limit=5&addressdetails=1`;
-    const res = await fetch(url, {
-      headers: {
-        'Accept-Language': 'pt-BR,pt;q=0.9',
-        'User-Agent': 'DriveHora-App/1.0'
+    const photonUrl = `https://photon.komoot.io/api/?q=${encoded}&lang=pt&limit=6`;
+    const res = await fetch(photonUrl);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.features && data.features.length > 0) {
+        data.features.forEach((feat: any) => {
+          const p = feat.properties || {};
+          const name = p.name || p.street || '';
+          const street = p.street || '';
+          const housenumber = p.housenumber ? `, ${p.housenumber}` : '';
+          const district = p.district || p.suburb || p.locality || '';
+          const city = p.city || '';
+          const state = p.state || '';
+
+          let formatted = '';
+          if (name && street && name !== street) {
+            formatted = `${name} (${street}${housenumber})${district ? ` - ${district}` : ''}${city ? `, ${city}` : ''}${state ? ` - ${state}` : ''}`;
+          } else if (name) {
+            formatted = `${name}${housenumber}${district ? ` - ${district}` : ''}${city ? `, ${city}` : ''}${state ? ` - ${state}` : ''}`;
+          }
+
+          if (formatted && !results.includes(formatted)) {
+            results.push(formatted);
+          }
+        });
       }
-    });
-
-    if (!res.ok) return [];
-    const data = await res.json();
-
-    return data.map((item: any) => {
-      const addr = item.address || {};
-      const road = addr.road || addr.pedestrian || addr.street || item.name || '';
-      const suburb = addr.suburb || addr.neighbourhood || '';
-      const city = addr.city || addr.town || addr.municipality || '';
-      const state = addr.state || '';
-
-      if (road && (suburb || city)) {
-        return `${road}${suburb ? ` - ${suburb}` : ''}${city ? `, ${city}` : ''}${state ? ` - ${state}` : ''}`;
-      }
-      return item.display_name.split(',').slice(0, 3).join(',');
-    });
-  } catch (err) {
-    console.warn('Erro na busca de locais:', err);
-    return [];
+    }
+  } catch (e) {
+    console.warn('Busca Photon fallback:', e);
   }
+
+  // Provedor 2: Nominatim OpenStreetMap (Garante cobertura de ruas específicas no Brasil)
+  if (results.length < 4) {
+    try {
+      const encoded = encodeURIComponent(clean);
+      const nominatimUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encoded}&countrycodes=br&limit=6&addressdetails=1`;
+      const res = await fetch(nominatimUrl);
+      if (res.ok) {
+        const data = await res.json();
+        data.forEach((item: any) => {
+          const addr = item.address || {};
+          const road = addr.road || addr.pedestrian || addr.street || item.name || '';
+          const houseNumber = addr.house_number ? `, ${addr.house_number}` : '';
+          const suburb = addr.suburb || addr.neighbourhood || '';
+          const city = addr.city || addr.town || addr.municipality || '';
+          const state = addr.state || '';
+
+          let formatted = '';
+          if (road && (suburb || city)) {
+            formatted = `${road}${houseNumber}${suburb ? ` - ${suburb}` : ''}${city ? `, ${city}` : ''}${state ? ` - ${state}` : ''}`;
+          } else if (item.display_name) {
+            formatted = item.display_name.split(',').slice(0, 3).join(', ');
+          }
+
+          if (formatted && !results.includes(formatted)) {
+            results.push(formatted);
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('Busca Nominatim fallback:', e);
+    }
+  }
+
+  return results.slice(0, 6);
 };
 
 // 4. Cálculo de distância em Km (Fórmula de Haversine)
