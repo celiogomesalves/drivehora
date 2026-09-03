@@ -185,14 +185,23 @@ export function App() {
     const sb = getSupabase();
     if (sb) {
       try {
-        const { data, error } = await sb.from('rides').select('*').order('created_at', { ascending: false }).limit(50);
-        if (!error && data) {
-          const formatted: DbRide[] = data.map((d: any) => ({
+        const [ridesRes, profilesRes] = await Promise.all([
+          sb.from('rides').select('*').order('created_at', { ascending: false }).limit(50),
+          sb.from('profiles').select('id, full_name')
+        ]);
+
+        if (!ridesRes.error && ridesRes.data) {
+          const profilesMap = new Map<string, string>();
+          (profilesRes.data || []).forEach((p: any) => {
+            if (p.id && p.full_name) profilesMap.set(p.id, p.full_name);
+          });
+
+          const formatted: DbRide[] = ridesRes.data.map((d: any) => ({
             id: d.id,
             clientId: d.client_id,
-            clientName: d.client_name,
+            clientName: profilesMap.get(d.client_id) || d.client_name || 'Passageiro',
             driverId: d.driver_id,
-            driverName: d.driver_name,
+            driverName: profilesMap.get(d.driver_id) || d.driver_name || (d.driver_id ? 'Motorista Parceiro' : undefined),
             origin: d.origin,
             destination: d.destination,
             hours: Number(d.hours),

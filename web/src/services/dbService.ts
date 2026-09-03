@@ -387,30 +387,32 @@ const dataVerificationStatus = (status: string): DriverVerificationStatus => {
 };
 
 // 6. Criar Corrida
-export const dbCreateRide = async (ride: DbRide): Promise<void> => {
+export const dbCreateRide = async (ride: DbRide): Promise<{ success: boolean; error?: string }> => {
   const sb = getSupabase();
   if (sb) {
     try {
-      await sb.from('rides').insert([{
+      const payload: any = {
         id: ride.id,
         client_id: ride.clientId,
-        client_name: ride.clientName,
         origin: ride.origin,
         destination: ride.destination,
-        origin_lat: ride.originLat,
-        origin_lng: ride.originLng,
-        dest_lat: ride.destLat,
-        dest_lng: ride.destLng,
-        hours: ride.hours,
-        hourly_rate: ride.hourlyRate,
-        total: ride.total,
-        commission: ride.commission,
-        driver_net: ride.driverNet,
-        status: ride.status
-      }]);
-      return;
-    } catch (e) {
+        hours: Number(ride.hours) || 1,
+        hourly_rate: Number(ride.hourlyRate) || 50,
+        total: Number(ride.total) || 50,
+        commission: Number(ride.commission) || 7.5,
+        driver_net: Number(ride.driverNet) || 42.5,
+        status: ride.status || 'searching'
+      };
+
+      const res = await sb.from('rides').insert([payload]);
+      if (res?.error) {
+        console.warn('Erro ao inserir corrida no Supabase:', res.error);
+        return { success: false, error: res.error.message };
+      }
+      return { success: true };
+    } catch (e: any) {
       console.warn('Erro ao inserir corrida no Supabase:', e);
+      return { success: false, error: e.message };
     }
   }
 
@@ -421,6 +423,7 @@ export const dbCreateRide = async (ride: DbRide): Promise<void> => {
       body: JSON.stringify(ride)
     });
   } catch (e) {}
+  return { success: true };
 };
 
 // 7. Atualizar Status da Corrida
@@ -434,7 +437,6 @@ export const dbUpdateRide = async (
       const payload: any = {};
       if (updates.status) payload.status = updates.status;
       if (updates.driverId) payload.driver_id = updates.driverId;
-      if (updates.driverName) payload.driver_name = updates.driverName;
       if (updates.acceptedAt) payload.accepted_at = new Date(updates.acceptedAt).toISOString();
       if (updates.startedAt) payload.started_at = new Date(updates.startedAt).toISOString();
       if (updates.finishedAt) payload.finished_at = new Date(updates.finishedAt).toISOString();
