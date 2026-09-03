@@ -12,6 +12,8 @@ export function LiveRideTrackerMap({ ride }: LiveRideTrackerMapProps) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const driverMarkerRef = useRef<L.Marker | null>(null);
+  const originMarkerRef = useRef<L.Marker | null>(null);
+  const destMarkerRef = useRef<L.Marker | null>(null);
   const routeLineRef = useRef<L.Polyline | null>(null);
 
   const [progressPercent, setProgressPercent] = useState(15);
@@ -41,114 +43,115 @@ export function LiveRideTrackerMap({ ride }: LiveRideTrackerMapProps) {
     const animInterval = setInterval(() => {
       setProgressPercent((prev) => {
         if (prev >= 95) return 15; // Loop suave
-        return prev + 1.5;
+        return prev + 1.2;
       });
-    }, 2000);
+    }, 1500);
     return () => clearInterval(animInterval);
   }, []);
 
-  // 3. Inicializar e Atualizar Mapa Leaflet
+  // 3. Inicializar Mapa Leaflet UMA ÚNICA VEZ (Sem piscar)
   useEffect(() => {
     if (!mapContainerRef.current) return;
+    if (mapInstanceRef.current) return;
 
-    if (!mapInstanceRef.current) {
-      const map = L.map(mapContainerRef.current, {
-        center: [(originLat + destLat) / 2, (originLng + destLng) / 2],
-        zoom: 13,
-        zoomControl: true
-      });
+    const map = L.map(mapContainerRef.current, {
+      center: [(originLat + destLat) / 2, (originLng + destLng) / 2],
+      zoom: 13,
+      zoomControl: true,
+      fadeAnimation: true
+    });
 
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-        maxZoom: 19
-      }).addTo(map);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+      maxZoom: 19
+    }).addTo(map);
 
-      // Ícone de Partida
-      const originIcon = L.divIcon({
-        className: 'origin-marker',
-        html: `
-          <div style="background: #6366f1; color: #fff; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; border: 2px solid #fff; box-shadow: 0 4px 10px rgba(99, 102, 241, 0.6);">
-            📍
-          </div>
-        `,
-        iconSize: [30, 30],
-        iconAnchor: [15, 15]
-      });
+    // Ícone de Partida
+    const originIcon = L.divIcon({
+      className: 'origin-marker',
+      html: `
+        <div style="background: #6366f1; color: #fff; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; border: 2px solid #fff; box-shadow: 0 4px 10px rgba(99, 102, 241, 0.6);">
+          📍
+        </div>
+      `,
+      iconSize: [30, 30],
+      iconAnchor: [15, 15]
+    });
 
-      // Ícone de Destino
-      const destIcon = L.divIcon({
-        className: 'dest-marker',
-        html: `
-          <div style="background: #10b981; color: #fff; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; border: 2px solid #fff; box-shadow: 0 4px 10px rgba(16, 185, 129, 0.6);">
-            🏁
-          </div>
-        `,
-        iconSize: [30, 30],
-        iconAnchor: [15, 15]
-      });
+    // Ícone de Destino
+    const destIcon = L.divIcon({
+      className: 'dest-marker',
+      html: `
+        <div style="background: #10b981; color: #fff; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; border: 2px solid #fff; box-shadow: 0 4px 10px rgba(16, 185, 129, 0.6);">
+          🏁
+        </div>
+      `,
+      iconSize: [30, 30],
+      iconAnchor: [15, 15]
+    });
 
-      L.marker([originLat, originLng], { icon: originIcon })
-        .bindPopup(`<strong>Partida:</strong><br/>${ride.origin}`)
-        .addTo(map);
+    const origM = L.marker([originLat, originLng], { icon: originIcon })
+      .bindPopup(`<strong>Partida:</strong><br/>${ride.origin}`)
+      .addTo(map);
+    originMarkerRef.current = origM;
 
-      L.marker([destLat, destLng], { icon: destIcon })
-        .bindPopup(`<strong>Destino:</strong><br/>${ride.destination}`)
-        .addTo(map);
+    const destM = L.marker([destLat, destLng], { icon: destIcon })
+      .bindPopup(`<strong>Destino:</strong><br/>${ride.destination}`)
+      .addTo(map);
+    destMarkerRef.current = destM;
 
-      // Traçado da rota
-      const polyline = L.polyline([
-        [originLat, originLng],
-        [originLat + (destLat - originLat) * 0.4, originLng + (destLng - originLng) * 0.3],
-        [originLat + (destLat - originLat) * 0.7, originLng + (destLng - originLng) * 0.8],
-        [destLat, destLng]
-      ], {
-        color: '#6366f1',
-        weight: 5,
-        opacity: 0.8,
-        dashArray: '8, 8'
-      }).addTo(map);
+    // Traçado da rota
+    const polyline = L.polyline([
+      [originLat, originLng],
+      [originLat + (destLat - originLat) * 0.4, originLng + (destLng - originLng) * 0.3],
+      [originLat + (destLat - originLat) * 0.7, originLng + (destLng - originLng) * 0.8],
+      [destLat, destLng]
+    ], {
+      color: '#6366f1',
+      weight: 5,
+      opacity: 0.8,
+      dashArray: '8, 8'
+    }).addTo(map);
 
-      routeLineRef.current = polyline;
+    routeLineRef.current = polyline;
 
-      // Ícone do Motorista em Movimento
-      const carIcon = L.divIcon({
-        className: 'live-driver-car',
-        html: `
-          <div style="
-            background: linear-gradient(135deg, #10b981, #059669);
-            color: #fff;
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 20px;
-            box-shadow: 0 0 20px rgba(16, 185, 129, 0.8);
-            border: 2px solid #fff;
-            animation: pulse 1.5s infinite;
-          ">
-            🚗
-          </div>
-        `,
-        iconSize: [40, 40],
-        iconAnchor: [20, 20]
-      });
+    // Ícone do Motorista em Movimento
+    const carIcon = L.divIcon({
+      className: 'live-driver-car',
+      html: `
+        <div style="
+          background: linear-gradient(135deg, #10b981, #059669);
+          color: #fff;
+          width: 40px;
+          height: 40px;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 20px;
+          box-shadow: 0 0 20px rgba(16, 185, 129, 0.8);
+          border: 2px solid #fff;
+        ">
+          🚗
+        </div>
+      `,
+      iconSize: [40, 40],
+      iconAnchor: [20, 20]
+    });
 
-      const initialDriverPos: [number, number] = [
-        originLat + (destLat - originLat) * 0.2,
-        originLng + (destLng - originLng) * 0.2
-      ];
+    const initialDriverPos: [number, number] = [
+      originLat + (destLat - originLat) * 0.15,
+      originLng + (destLng - originLng) * 0.15
+    ];
 
-      const driverMarker = L.marker(initialDriverPos, { icon: carIcon })
-        .bindPopup(`<strong>${ride.driverName || 'Motorista Parceiro'}</strong><br/>Em deslocamento em tempo real`)
-        .addTo(map);
+    const driverMarker = L.marker(initialDriverPos, { icon: carIcon })
+      .bindPopup(`<strong>${ride.driverName || 'Motorista Parceiro'}</strong><br/>Em deslocamento em tempo real`)
+      .addTo(map);
 
-      driverMarkerRef.current = driverMarker;
-      mapInstanceRef.current = map;
+    driverMarkerRef.current = driverMarker;
+    mapInstanceRef.current = map;
 
-      map.fitBounds(polyline.getBounds(), { padding: [50, 50] });
-    }
+    map.fitBounds(polyline.getBounds(), { padding: [50, 50] });
 
     return () => {
       if (mapInstanceRef.current) {
@@ -156,9 +159,9 @@ export function LiveRideTrackerMap({ ride }: LiveRideTrackerMapProps) {
         mapInstanceRef.current = null;
       }
     };
-  }, [originLat, originLng, destLat, destLng]);
+  }, []);
 
-  // 4. Atualizar posição do motorista conforme o progresso
+  // 4. Atualizar posição do motorista conforme o progresso suavemente
   useEffect(() => {
     if (!driverMarkerRef.current) return;
 
@@ -222,7 +225,7 @@ export function LiveRideTrackerMap({ ride }: LiveRideTrackerMapProps) {
         </div>
       </div>
 
-      {/* Mapa do Leaflet */}
+      {/* Mapa do Leaflet Estável */}
       <div style={{
         borderRadius: '16px',
         overflow: 'hidden',
@@ -248,7 +251,7 @@ export function LiveRideTrackerMap({ ride }: LiveRideTrackerMapProps) {
           alignItems: 'center',
           gap: '8px'
         }}>
-          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981', animation: 'ping 1.5s infinite' }}></span>
+          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981' }}></span>
           <span>Motorista: <strong>{ride.driverName || 'Motorista Parceiro'}</strong></span>
         </div>
       </div>

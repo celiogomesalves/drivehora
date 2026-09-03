@@ -12,14 +12,16 @@ interface NearbyDriversMapProps {
 export function NearbyDriversMap({ onSelectDriverToRequest }: NearbyDriversMapProps) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
+  const userMarkerRef = useRef<L.Marker | null>(null);
+  const driverMarkersRef = useRef<Map<string, L.Marker>>(new Map());
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
 
   const [userLocation, setUserLocation] = useState<Coordinates>({ latitude: -19.8157, longitude: -43.9542 }); // Default BH
   const [onlineDrivers, setOnlineDrivers] = useState<DriverProfile[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<Date>(new Date());
 
-  // 1. Obter e monitorar GPS real do Cliente
+  // 1. Obter e monitorar GPS real do Cliente (Sem forçar remontagem do mapa)
   useEffect(() => {
     let watchId: number | null = null;
     getCurrentPosition()
@@ -35,7 +37,7 @@ export function NearbyDriversMap({ onSelectDriverToRequest }: NearbyDriversMapPr
           });
         },
         () => {},
-        { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 }
+        { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
       );
     }
 
@@ -44,22 +46,22 @@ export function NearbyDriversMap({ onSelectDriverToRequest }: NearbyDriversMapPr
     };
   }, []);
 
-  // 2. Buscar Motoristas com Posições GPS Exatas em Tempo Real
-  const loadDrivers = useCallback(async () => {
+  // 2. Buscar Motoristas com Posições GPS
+  const loadDrivers = useCallback(async (isManual = false) => {
+    if (isManual) setIsSyncing(true);
     try {
       const all = await dbGetAllDrivers();
-      // Filtrar motoristas que estão com modo ONLINE ativo
       const online = all.filter(d => d.isOnline);
       setOnlineDrivers(online);
       setLastSyncTime(new Date());
     } catch (e) {
-      console.warn('Erro ao buscar motoristas:', e);
+      console.warn('Erro ao sincronizar motoristas:', e);
     } finally {
-      setIsLoading(false);
+      if (isManual) setIsSyncing(false);
     }
   }, []);
 
-  // 3. Inscrição em Tempo Real (Supabase Realtime) + Fallback Polling a cada 2.5s
+  // 3. Inscrição em Tempo Real (Supabase Realtime) + Polling Suave
   useEffect(() => {
     loadDrivers();
 
@@ -67,7 +69,9 @@ export function NearbyDriversMap({ onSelectDriverToRequest }: NearbyDriversMapPr
       loadDrivers();
     });
 
-    const interval = setInterval(loadDrivers, 2500);
+    const interval = setInterval(() => {
+      loadDrivers();
+    }, 4000);
 
     return () => {
       unsubscribe();
@@ -75,63 +79,73 @@ export function NearbyDriversMap({ onSelectDriverToRequest }: NearbyDriversMapPr
     };
   }, [loadDrivers]);
 
-  // 4. Inicializar Mapa Leaflet
+  // 4. Inicializar Mapa Leaflet UMA ÚNICA VEZ (Flicker-Free / Sem piscar)
   useEffect(() => {
     if (!mapContainerRef.current) return;
+    if (mapInstanceRef.current) return; // Já inicializado
 
-    if (!mapInstanceRef.current) {
-      const map = L.map(mapContainerRef.current, {
-        center: [userLocation.latitude, userLocation.longitude],
-        zoom: 14,
-        zoomControl: true
-      });
+    const map = L.map(mapContainerRef.current, {
+      center: [userLocation.latitude, userLocation.longitude],
+      zoom: 14,
+      zoomControl: true,
+      fadeAnimation: true,
+      markerZoomAnimation: true
+    });
 
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-        maxZoom: 19
-      }).addTo(map);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+      maxZoom: 19
+    }).addTo(map);
 
-      const markersGroup = L.layerGroup().addTo(map);
-      markersLayerRef.current = markersGroup;
-      mapInstanceRef.current = map;
-    } else {
-      mapInstanceRef.current.setView([userLocation.latitude, userLocation.longitude], mapInstanceRef.current.getZoom());
-    }
+    const layerGroup = L.layerGroup().addTo(map);
+    markersLayerRef.current = layerGroup;
+    mapInstanceRef.current = map;
+
+    // Criar Marcador Inicial do Passageiro
+    const userIcon = L.divIcon({
+      className: 'custom-user-pin',
+      html: `
+        <div style="position: relative; display: flex; align-items: center; justify-content: center;">
+          <div style="position: absolute; width: 32px; height: 32px; border-radius: 50%; background: rgba(99, 102, 241, 0.35); animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
+          <div style="width: 18px; height: 18px; border-radius: 50%; background: #6366f1; border: 3px solid #fff; box-shadow: 0 0 12px rgba(99, 102, 241, 0.9);"></div>
+        </div>
+      `,
+      iconSize: [32, 32],
+      iconAnchor: [16, 16]
+    });
+
+    const userMarker = L.marker([userLocation.latitude, userLocation.longitude], { icon: userIcon })
+      .bindPopup(`<strong>📍 Sua Localização Atual</strong>`)
+      .addTo(layerGroup);
+
+    userMarkerRef.current = userMarker;
 
     return () => {
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
+        driverMarkersRef.current.clear();
       }
     };
+  }, []); // Run once on mount
+
+  // 5. Atualizar posição do passageiro de forma suave (Sem recriar o mapa)
+  useEffect(() => {
+    if (userMarkerRef.current) {
+      userMarkerRef.current.setLatLng([userLocation.latitude, userLocation.longitude]);
+    }
   }, [userLocation.latitude, userLocation.longitude]);
 
-  // 5. Renderizar Marcadores Exatos no Mapa
+  // 6. Atualizar Marcadores dos Motoristas Suavemente (Move existentes / Adiciona novos)
   useEffect(() => {
     if (!mapInstanceRef.current || !markersLayerRef.current) return;
 
-    markersLayerRef.current.clearLayers();
+    const currentDriverIds = new Set<string>();
 
-    // Marcador do Passageiro
-    const userIcon = L.divIcon({
-      className: 'custom-user-pin',
-      html: `
-        <div style="position: relative; display: flex; align-items: center; justify-content: center;">
-          <div style="position: absolute; width: 36px; height: 36px; border-radius: 50%; background: rgba(99, 102, 241, 0.4); animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
-          <div style="width: 20px; height: 20px; border-radius: 50%; background: #6366f1; border: 3px solid #fff; box-shadow: 0 0 10px rgba(99, 102, 241, 0.8);"></div>
-        </div>
-      `,
-      iconSize: [36, 36],
-      iconAnchor: [18, 18]
-    });
-
-    L.marker([userLocation.latitude, userLocation.longitude], { icon: userIcon })
-      .bindPopup(`<strong>📍 Sua Localização Atual</strong>`)
-      .addTo(markersLayerRef.current);
-
-    // Marcadores dos Motoristas com GPS Exato
     onlineDrivers.forEach((driver, idx) => {
-      // Usar coordenadas exatas enviadas pelo GPS do motorista; se ainda não capturadas, distribuir suavemente
+      const driverId = driver.id || `driver_${driver.userId || idx}`;
+      currentDriverIds.add(driverId);
+
       const hasExactGps = Boolean(driver.currentLat && driver.currentLng);
       const offsetLat = (Math.sin(idx * 1.7) * 0.008) + (idx % 2 === 0 ? 0.003 : -0.004);
       const offsetLng = (Math.cos(idx * 1.7) * 0.009) + (idx % 2 === 0 ? -0.003 : 0.004);
@@ -142,55 +156,72 @@ export function NearbyDriversMap({ onSelectDriverToRequest }: NearbyDriversMapPr
       const dist = calculateDistanceKm(userLocation, { latitude: driverLat, longitude: driverLng });
       const etaMin = Math.max(1, Math.round(Number(dist) * 2.2));
 
-      const carIcon = L.divIcon({
-        className: 'custom-driver-car-icon',
-        html: `
-          <div style="
-            background: linear-gradient(135deg, #10b981, #059669);
-            color: #fff;
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 4px 16px rgba(16, 185, 129, 0.7);
-            border: 2px solid #fff;
-            font-size: 18px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-          ">
-            🚗
-          </div>
-        `,
-        iconSize: [40, 40],
-        iconAnchor: [20, 20]
-      });
-
       const popupHtml = `
-        <div style="font-family: sans-serif; padding: 6px; min-width: 200px;">
-          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+        <div style="font-family: sans-serif; padding: 4px; min-width: 190px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
             <span style="font-size: 11px; background: #10b981; color: #fff; padding: 2px 6px; border-radius: 6px; font-weight: bold;">
-              🟢 ONLINE ${hasExactGps ? '• GPS EXATO' : ''}
+              🟢 ONLINE ${hasExactGps ? '• GPS REAL' : ''}
             </span>
             <span style="font-size: 11px; font-weight: bold; color: #10b981;">~${dist} km</span>
           </div>
           <div style="font-size: 13px; font-weight: bold; margin-bottom: 2px;">
             ${driver.vehicleBrand || 'Motorista'} ${driver.vehicleModel || 'Parceiro'}
           </div>
-          <div style="font-size: 11px; color: #666; margin-bottom: 6px;">
+          <div style="font-size: 11px; color: #666; margin-bottom: 4px;">
             Placa: <strong>${driver.vehiclePlate || 'Mercosul'}</strong> (${driver.vehicleColor || 'Prata'})
           </div>
-          <div style="font-size: 11px; color: #333; display: flex; justify-content: space-between; border-top: 1px solid #eee; padding-top: 6px;">
+          <div style="font-size: 11px; color: #333; display: flex; justify-content: space-between; border-top: 1px solid #eee; padding-top: 4px;">
             <span>⭐ ${driver.rating || 5.0} (${driver.totalRides || 0} corridas)</span>
             <span style="color: #6366f1; font-weight: bold;">Chegada: ~${etaMin} min</span>
           </div>
         </div>
       `;
 
-      L.marker([driverLat, driverLng], { icon: carIcon })
-        .bindPopup(popupHtml)
-        .addTo(markersLayerRef.current!);
+      // Se o marcador já existe, apenas move a posição (setLatLng) suavemente!
+      if (driverMarkersRef.current.has(driverId)) {
+        const existingMarker = driverMarkersRef.current.get(driverId)!;
+        existingMarker.setLatLng([driverLat, driverLng]);
+        existingMarker.setPopupContent(popupHtml);
+      } else {
+        // Criar novo marcador
+        const carIcon = L.divIcon({
+          className: 'custom-driver-car-icon',
+          html: `
+            <div style="
+              background: linear-gradient(135deg, #10b981, #059669);
+              color: #fff;
+              width: 38px;
+              height: 38px;
+              border-radius: 50%;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              box-shadow: 0 4px 14px rgba(16, 185, 129, 0.6);
+              border: 2px solid #fff;
+              font-size: 18px;
+              cursor: pointer;
+            ">
+              🚗
+            </div>
+          `,
+          iconSize: [38, 38],
+          iconAnchor: [19, 19]
+        });
+
+        const newMarker = L.marker([driverLat, driverLng], { icon: carIcon })
+          .bindPopup(popupHtml)
+          .addTo(markersLayerRef.current!);
+
+        driverMarkersRef.current.set(driverId, newMarker);
+      }
+    });
+
+    // Remover marcadores de motoristas que ficaram offline
+    driverMarkersRef.current.forEach((marker, id) => {
+      if (!currentDriverIds.has(id)) {
+        markersLayerRef.current?.removeLayer(marker);
+        driverMarkersRef.current.delete(id);
+      }
     });
   }, [onlineDrivers, userLocation]);
 
@@ -212,19 +243,19 @@ export function NearbyDriversMap({ onSelectDriverToRequest }: NearbyDriversMapPr
               </span>
             </div>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: '4px 0 0' }}>
-              Posicionamento geográfico exato transmitido pelos motoristas credenciados conectados.
+              Posicionamento geográfico contínuo dos motoristas conectados na sua região.
             </p>
           </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <button
-            onClick={loadDrivers}
-            disabled={isLoading}
+            onClick={() => loadDrivers(true)}
+            disabled={isSyncing}
             className="btn-outline"
             style={{ fontSize: '0.8rem', padding: '8px 14px', display: 'flex', alignItems: 'center', gap: '6px' }}
           >
-            <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+            <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} />
             <span>Sincronizar ({lastSyncTime.toLocaleTimeString()})</span>
           </button>
 
@@ -241,7 +272,7 @@ export function NearbyDriversMap({ onSelectDriverToRequest }: NearbyDriversMapPr
         </div>
       </div>
 
-      {/* Mapa Interativo com Rastreamento Exato */}
+      {/* Mapa Interativo Estável (Sem Piscar) */}
       <div className="glass-panel" style={{ padding: '0', overflow: 'hidden', borderRadius: '20px', position: 'relative', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
         <div 
           ref={mapContainerRef} 
@@ -266,7 +297,7 @@ export function NearbyDriversMap({ onSelectDriverToRequest }: NearbyDriversMapPr
           gap: '8px',
           boxShadow: '0 4px 20px rgba(0,0,0,0.5)'
         }}>
-          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981', animation: 'ping 1.5s infinite' }}></span>
+          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981' }}></span>
           <span><strong>{onlineDrivers.length}</strong> motorista(s) com GPS ativo</span>
         </div>
       </div>
@@ -280,10 +311,10 @@ export function NearbyDriversMap({ onSelectDriverToRequest }: NearbyDriversMapPr
 
         {onlineDrivers.length === 0 ? (
           <div className="glass-panel" style={{ padding: '36px', textAlign: 'center' }}>
-            <Radio size={40} color="var(--text-muted)" style={{ margin: '0 auto 12px' }} className="animate-pulse" />
-            <h4 style={{ fontSize: '1rem', fontWeight: 600 }}>Nenhum motorista online no momento exato</h4>
+            <Radio size={40} color="var(--text-muted)" style={{ margin: '0 auto 12px' }} />
+            <h4 style={{ fontSize: '1rem', fontWeight: 600 }}>Nenhum motorista online no momento</h4>
             <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', maxWidth: '440px', margin: '6px auto 16px' }}>
-              Ao enviar sua solicitação de corrida por hora, todos os motoristas cadastrados receberão uma notificação instantânea para atendimento.
+              Ao solicitar uma corrida por hora, todos os motoristas cadastrados receberão uma notificação instantânea.
             </p>
             {onSelectDriverToRequest && (
               <button onClick={onSelectDriverToRequest} className="btn-primary" style={{ padding: '10px 20px', fontSize: '0.9rem' }}>
