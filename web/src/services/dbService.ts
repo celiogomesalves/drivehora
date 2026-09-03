@@ -70,14 +70,34 @@ export const dbSaveProfile = async (profile: UserProfile): Promise<{ success: bo
   return { success: true };
 };
 
-// 2. Salvar ou atualizar Perfil de Cliente (Passageiro)
-export const dbSaveClientProfile = async (client: ClientProfile): Promise<{ success: boolean; error?: string }> => {
+// 2. Salvar ou atualizar Perfil de Cliente (Passageiro) com Auto-garantia de Profile
+export const dbSaveClientProfile = async (
+  client: ClientProfile, 
+  userProfile?: UserProfile | null
+): Promise<{ success: boolean; error?: string }> => {
   localStorage.setItem(`drivehora_client_profile_${client.userId}`, JSON.stringify(client));
   const sb = getSupabase();
   if (!sb) {
     return { success: false, error: 'Banco de dados Supabase desconectado. Conecte o banco antes de enviar.' };
   }
+
   try {
+    // Garantir que a tabela 'profiles' possui o registro do usuário para não violar a Foreign Key
+    let current = userProfile;
+    if (!current) {
+      const saved = localStorage.getItem('drivehora_current_user');
+      if (saved) current = JSON.parse(saved);
+    }
+
+    await sb.from('profiles').upsert({
+      id: client.userId,
+      email: current?.email || `client_${client.userId}@drivehora.com`,
+      full_name: current?.fullName || 'Passageiro DriveHora',
+      role: 'client',
+      phone: client.phone || current?.phone || '(11) 98765-4321',
+      updated_at: new Date().toISOString()
+    });
+
     const { error } = await sb.from('clients').upsert({
       id: client.id,
       user_id: client.userId,
@@ -92,6 +112,7 @@ export const dbSaveClientProfile = async (client: ClientProfile): Promise<{ succ
       state: client.state,
       is_profile_complete: client.isProfileComplete
     });
+
     if (error) {
       console.warn('Erro ao salvar client no Supabase:', error);
       return { success: false, error: error.message };
@@ -131,8 +152,11 @@ export const dbGetClientProfile = async (userId: string): Promise<ClientProfile 
   return local ? JSON.parse(local) : null;
 };
 
-// 4. Salvar ou atualizar Perfil de Motorista (Com checagem estrita de banco)
-export const dbSaveDriverProfile = async (driver: DriverProfile): Promise<{ success: boolean; error?: string }> => {
+// 4. Salvar ou atualizar Perfil de Motorista com Auto-garantia de Profile (Elimina Erro de Foreign Key)
+export const dbSaveDriverProfile = async (
+  driver: DriverProfile, 
+  userProfile?: UserProfile | null
+): Promise<{ success: boolean; error?: string }> => {
   localStorage.setItem(`drivehora_driver_profile_${driver.userId}`, JSON.stringify(driver));
   const sb = getSupabase();
   if (!sb) {
@@ -140,6 +164,27 @@ export const dbSaveDriverProfile = async (driver: DriverProfile): Promise<{ succ
   }
 
   try {
+    // 1. Garantir que a tabela 'profiles' possui o registro antes de inserir em 'drivers'
+    let current = userProfile;
+    if (!current) {
+      const saved = localStorage.getItem('drivehora_current_user');
+      if (saved) current = JSON.parse(saved);
+    }
+
+    const { error: profileError } = await sb.from('profiles').upsert({
+      id: driver.userId,
+      email: current?.email || `driver_${driver.userId}@drivehora.com`,
+      full_name: current?.fullName || 'Motorista Parceiro',
+      role: 'driver',
+      phone: driver.phone || current?.phone || '(11) 98765-4321',
+      updated_at: new Date().toISOString()
+    });
+
+    if (profileError) {
+      console.warn('Aviso ao sincronizar profile base:', profileError);
+    }
+
+    // 2. Inserir ou atualizar na tabela 'drivers'
     const { error } = await sb.from('drivers').upsert({
       id: driver.id,
       user_id: driver.userId,
