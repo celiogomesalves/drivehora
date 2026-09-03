@@ -4,7 +4,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 let globalUrl = import.meta.env.VITE_SUPABASE_URL || '';
 let globalKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
-// Obter credenciais globais (Environment > Backend Config > LocalStorage)
+// Obter credenciais globais (Environment > LocalStorage > Cache)
 export const getSupabaseCredentials = () => {
   const storageUrl = localStorage.getItem('drivehora_supabase_url') || '';
   const storageKey = localStorage.getItem('drivehora_supabase_key') || '';
@@ -15,7 +15,7 @@ export const getSupabaseCredentials = () => {
   return { url, key, isConfigured: Boolean(url && key) };
 };
 
-// Salvar credenciais globalmente
+// Salvar credenciais globalmente e sincronizar com todos os usuários
 export const saveSupabaseCredentials = async (url: string, key: string) => {
   const cleanUrl = url.trim();
   const cleanKey = key.trim();
@@ -26,7 +26,7 @@ export const saveSupabaseCredentials = async (url: string, key: string) => {
   localStorage.setItem('drivehora_supabase_url', cleanUrl);
   localStorage.setItem('drivehora_supabase_key', cleanKey);
 
-  // Sincronizar com o servidor backend central (para que todos os dispositivos recebam)
+  // 1. Sincronizar com a API Serverless Vercel / Backend Node
   try {
     await fetch('/api/config/supabase', {
       method: 'POST',
@@ -34,7 +34,7 @@ export const saveSupabaseCredentials = async (url: string, key: string) => {
       body: JSON.stringify({ url: cleanUrl, key: cleanKey })
     });
   } catch (e) {
-    console.warn('Não foi possível sincronizar credenciais com o backend:', e);
+    console.warn('Sincronização API Vercel:', e);
   }
 };
 
@@ -71,8 +71,9 @@ export const getSupabase = (): SupabaseClient | null => {
   }
 };
 
-// Auto-sincronizar credenciais do backend no início
-export const initGlobalSupabaseConfig = async () => {
+// Sincronizar automaticamente as credenciais configuradas para todos os usuários
+export const initGlobalSupabaseConfig = async (): Promise<boolean> => {
+  // 1. Tentar ler do backend serverless
   try {
     const res = await fetch('/api/config/supabase');
     if (res.ok) {
@@ -82,9 +83,12 @@ export const initGlobalSupabaseConfig = async () => {
         globalKey = data.key;
         localStorage.setItem('drivehora_supabase_url', data.url);
         localStorage.setItem('drivehora_supabase_key', data.key);
+        return true;
       }
     }
-  } catch (e) {
-    // Modo offline / estático
-  }
+  } catch (e) {}
+
+  // 2. Se já estiver no localStorage, retorna true
+  const creds = getSupabaseCredentials();
+  return creds.isConfigured;
 };
