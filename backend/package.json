@@ -1,0 +1,13 @@
+{
+  "name": "drivehora-api",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {"dev":"tsx src/server.ts","start":"node dist/server.js"},
+  "dependencies": {
+    "cors":"^2.8.5",
+    "dotenv":"^17.2.1",
+    "express":"^5.1.0",
+    "firebase-admin":"^13.5.0"
+  },
+  "devDependencies": {"tsx":"^4.20.3","typescript":"^5.9.2"}
+}
