@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { UserProfile, ClientProfile } from '../types/auth';
 import { formatCep, fetchAddressByCep } from '../services/cepService';
 import { formatPhone, formatCpf, validateCpf, validatePhone } from '../utils/formatters';
@@ -16,20 +16,51 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({
   onComplete,
   onOpenSupabaseConfig 
 }) => {
-  const [phone, setPhone] = useState(formatPhone(user.phone || ''));
-  const [cpf, setCpf] = useState('');
-  const [cep, setCep] = useState('');
-  const [street, setStreet] = useState('');
-  const [number, setNumber] = useState('');
-  const [complement, setComplement] = useState('');
-  const [neighborhood, setNeighborhood] = useState('');
-  const [city, setCity] = useState('');
-  const [state, setState] = useState('');
+  // 💾 Recuperar rascunho de cliente salvo em memória interna
+  const getSavedDraft = () => {
+    try {
+      const raw = localStorage.getItem(`drivehora_client_draft_${user.id}`);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  };
+  const draft = getSavedDraft();
+
+  const [phone, setPhone] = useState(draft?.phone || formatPhone(user.phone || ''));
+  const [cpf, setCpf] = useState(draft?.cpf || '');
+  const [cep, setCep] = useState(draft?.cep || '');
+  const [street, setStreet] = useState(draft?.street || '');
+  const [number, setNumber] = useState(draft?.number || '');
+  const [complement, setComplement] = useState(draft?.complement || '');
+  const [neighborhood, setNeighborhood] = useState(draft?.neighborhood || '');
+  const [city, setCity] = useState(draft?.city || '');
+  const [state, setState] = useState(draft?.state || '');
   const [isLoadingCep, setIsLoadingCep] = useState(false);
-  const [cepSuccess, setCepSuccess] = useState(false);
+  const [cepSuccess, setCepSuccess] = useState(Boolean(draft?.street));
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isDbError, setIsDbError] = useState(false);
+
+  // 💾 Salvar automaticamente em memória interna a cada alteração
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        `drivehora_client_draft_${user.id}`,
+        JSON.stringify({
+          phone,
+          cpf,
+          cep,
+          street,
+          number,
+          complement,
+          neighborhood,
+          city,
+          state
+        })
+      );
+    } catch (e) {}
+  }, [phone, cpf, cep, street, number, complement, neighborhood, city, state, user.id]);
 
   // Manipular busca automática do CEP
   const handleCepChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -77,39 +108,43 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({
 
     // 4. Checagem de Conexão com o Banco Supabase
     setIsSaving(true);
-    const dbStatus = await dbCheckSupabaseStatus();
-    if (!dbStatus.connected) {
+    try {
+      const dbStatus = await dbCheckSupabaseStatus();
+      if (!dbStatus.connected) {
+        setIsDbError(true);
+        setErrorMessage(`⚠️ Impossível cadastrar cliente: Não há conexão com o banco de dados Supabase (${dbStatus.message || 'Desconectado'}). Conecte o banco primeiro.`);
+        return;
+      }
+
+      const profile: ClientProfile = {
+        id: 'client_' + user.id,
+        userId: user.id,
+        cpf,
+        phone,
+        cep,
+        street,
+        number,
+        complement,
+        neighborhood,
+        city,
+        state,
+        isProfileComplete: true
+      };
+
+      const res = await dbSaveClientProfile(profile, user);
+      if (!res.success) {
+        setIsDbError(true);
+        setErrorMessage(`Falha ao salvar no banco: ${res.error}`);
+        return;
+      }
+
+      onComplete(profile);
+    } catch (err: any) {
+      setIsDbError(true);
+      setErrorMessage(`Erro ao gravar no banco: ${err.message || 'Falha de comunicação'}`);
+    } finally {
       setIsSaving(false);
-      setIsDbError(true);
-      setErrorMessage(`⚠️ Impossível cadastrar cliente: Não há conexão com o banco de dados Supabase (${dbStatus.message || 'Desconectado'}). Conecte o banco primeiro.`);
-      return;
     }
-
-    const profile: ClientProfile = {
-      id: 'client_' + user.id,
-      userId: user.id,
-      cpf,
-      phone,
-      cep,
-      street,
-      number,
-      complement,
-      neighborhood,
-      city,
-      state,
-      isProfileComplete: true
-    };
-
-    const res = await dbSaveClientProfile(profile);
-    setIsSaving(false);
-
-    if (!res.success) {
-      setIsDbError(true);
-      setErrorMessage(`Falha ao salvar no banco: ${res.error}`);
-      return;
-    }
-
-    onComplete(profile);
   };
 
   return (

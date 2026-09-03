@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { UserProfile, DriverProfile, DriverVerificationStatus } from '../types/auth';
 import { 
   ShieldCheck, Car, FileText, Camera, CheckCircle2, 
@@ -60,32 +60,45 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
   onComplete,
   onOpenSupabaseConfig 
 }) => {
-  const [step, setStep] = useState<number>(initialProfile?.verificationStatus === 'under_review' ? 4 : 1);
-  
-  // Dados Pessoais & CNH
-  const [cpf, setCpf] = useState(formatCpf(initialProfile?.cpf || ''));
-  const [phone, setPhone] = useState(formatPhone(initialProfile?.phone || user.phone || ''));
-  const [cnhNumber, setCnhNumber] = useState(initialProfile?.cnhNumber || '');
-  const [cnhCategory, setCnhCategory] = useState(initialProfile?.cnhCategory || 'B');
+  // 💾 Recuperar rascunho salvo em memória interna (localStorage)
+  const getSavedDraft = () => {
+    try {
+      const raw = localStorage.getItem(`drivehora_driver_draft_${user.id}`);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  };
+  const draft = getSavedDraft();
 
-  // Dados do Veículo (Dropdown de anos a partir de 2010)
   const currentYear = new Date().getFullYear();
   const availableYears = Array.from({ length: currentYear + 2 - 2010 }, (_, i) => String(currentYear + 1 - i));
 
-  const [vehicleBrand, setVehicleBrand] = useState(initialProfile?.vehicleBrand || 'Toyota');
-  const [vehicleModel, setVehicleModel] = useState(initialProfile?.vehicleModel || 'Corolla XEi');
-  const [vehicleYear, setVehicleYear] = useState(initialProfile?.vehicleYear || String(currentYear));
-  const [vehiclePlate, setVehiclePlate] = useState(formatPlate(initialProfile?.vehiclePlate || 'BRA-2E19'));
-  const [vehicleColor, setVehicleColor] = useState(initialProfile?.vehicleColor || 'Preto');
+  const [step, setStep] = useState<number>(
+    initialProfile?.verificationStatus === 'under_review' ? 4 : draft?.step || 1
+  );
+  
+  // Dados Pessoais & CNH (Recuperados do Rascunho Interno)
+  const [cpf, setCpf] = useState(draft?.cpf || formatCpf(initialProfile?.cpf || ''));
+  const [phone, setPhone] = useState(draft?.phone || formatPhone(initialProfile?.phone || user.phone || ''));
+  const [cnhNumber, setCnhNumber] = useState(draft?.cnhNumber || initialProfile?.cnhNumber || '');
+  const [cnhCategory, setCnhCategory] = useState(draft?.cnhCategory || initialProfile?.cnhCategory || 'B');
+
+  // Dados do Veículo
+  const [vehicleBrand, setVehicleBrand] = useState(draft?.vehicleBrand || initialProfile?.vehicleBrand || 'Toyota');
+  const [vehicleModel, setVehicleModel] = useState(draft?.vehicleModel || initialProfile?.vehicleModel || 'Corolla XEi');
+  const [vehicleYear, setVehicleYear] = useState(draft?.vehicleYear || initialProfile?.vehicleYear || String(currentYear));
+  const [vehiclePlate, setVehiclePlate] = useState(draft?.vehiclePlate || formatPlate(initialProfile?.vehiclePlate || 'BRA-2E19'));
+  const [vehicleColor, setVehicleColor] = useState(draft?.vehicleColor || initialProfile?.vehicleColor || 'Preto');
 
   // Uploads Reais de Documentos (Base64 Otimizado)
-  const [cnhFileName, setCnhFileName] = useState<string>(initialProfile?.cnhUrl ? 'cnh_anexada.jpg' : '');
+  const [cnhFileName, setCnhFileName] = useState<string>(draft?.cnhFileName || (initialProfile?.cnhUrl ? 'cnh_anexada.jpg' : ''));
   const [cnhUrl, setCnhUrl] = useState<string>(initialProfile?.cnhUrl || '');
 
-  const [crlvFileName, setCrlvFileName] = useState<string>(initialProfile?.crlvUrl ? 'crlv_anexado.jpg' : '');
+  const [crlvFileName, setCrlvFileName] = useState<string>(draft?.crlvFileName || (initialProfile?.crlvUrl ? 'crlv_anexado.jpg' : ''));
   const [crlvUrl, setCrlvUrl] = useState<string>(initialProfile?.crlvUrl || '');
 
-  const [selfieFileName, setSelfieFileName] = useState<string>(initialProfile?.selfieUrl ? 'selfie_biometria.jpg' : '');
+  const [selfieFileName, setSelfieFileName] = useState<string>(draft?.selfieFileName || (initialProfile?.selfieUrl ? 'selfie_biometria.jpg' : ''));
   const [selfieUrl, setSelfieUrl] = useState<string>(initialProfile?.selfieUrl || '');
 
   // Status
@@ -95,6 +108,30 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isDbError, setIsDbError] = useState(false);
+
+  // 💾 Salvar automaticamente em memória interna a cada alteração
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        `drivehora_driver_draft_${user.id}`,
+        JSON.stringify({
+          step,
+          cpf,
+          phone,
+          cnhNumber,
+          cnhCategory,
+          vehicleBrand,
+          vehicleModel,
+          vehicleYear,
+          vehiclePlate,
+          vehicleColor,
+          cnhFileName,
+          crlvFileName,
+          selfieFileName
+        })
+      );
+    } catch (e) {}
+  }, [step, cpf, phone, cnhNumber, cnhCategory, vehicleBrand, vehicleModel, vehicleYear, vehiclePlate, vehicleColor, cnhFileName, crlvFileName, selfieFileName, user.id]);
 
   // Manipulador de upload com compressão automática
   const handleFileUpload = async (
