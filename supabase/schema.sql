@@ -1,5 +1,6 @@
 -- ========================================================
 -- SCHEMA COMPLETO DRIVEHORA - SUPABASE (POSTGRESQL + REALTIME)
+-- SCRIPT IDEMPOTENTE (PODE SER EXECUTADO MÚLTIPLAS VEZES SEM ERROS)
 -- ========================================================
 
 -- 1. Tabela de Perfis de Usuários (profiles)
@@ -126,15 +127,46 @@ ALTER TABLE public.rides ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ratings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
 
--- Políticas de acesso (Leitura e Escrita Públicas / Anônimas para MVP)
+-- Políticas de acesso (Remove se já existir e recria com segurança)
+DROP POLICY IF EXISTS "Permitir tudo em perfis" ON public.profiles;
 CREATE POLICY "Permitir tudo em perfis" ON public.profiles FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Permitir tudo em clientes" ON public.clients;
 CREATE POLICY "Permitir tudo em clientes" ON public.clients FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Permitir tudo em motoristas" ON public.drivers;
 CREATE POLICY "Permitir tudo em motoristas" ON public.drivers FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Permitir tudo em corridas" ON public.rides;
 CREATE POLICY "Permitir tudo em corridas" ON public.rides FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Permitir tudo em avaliações" ON public.ratings;
 CREATE POLICY "Permitir tudo em avaliações" ON public.ratings FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Permitir tudo em transações" ON public.transactions;
 CREATE POLICY "Permitir tudo em transações" ON public.transactions FOR ALL USING (true) WITH CHECK (true);
 
--- 9. Habilitar Supabase Realtime para sincronização em tempo real
-ALTER PUBLICATION supabase_realtime ADD TABLE public.rides;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.drivers;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.profiles;
+-- 9. Habilitar Supabase Realtime (Com verificação se a tabela já foi adicionada)
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_publication_tables 
+        WHERE pubname = 'supabase_realtime' AND tablename = 'rides'
+    ) THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.rides;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_publication_tables 
+        WHERE pubname = 'supabase_realtime' AND tablename = 'drivers'
+    ) THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.drivers;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_publication_tables 
+        WHERE pubname = 'supabase_realtime' AND tablename = 'profiles'
+    ) THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.profiles;
+    END IF;
+END $$;
