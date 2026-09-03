@@ -27,7 +27,15 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({
   };
   const draft = getSavedDraft();
 
-  const [phone, setPhone] = useState(draft?.phone || initialProfile?.phone || formatPhone(user.phone || ''));
+  const initialPhone = (user.phone && user.phone !== '(11) 98765-4321') 
+    ? formatPhone(user.phone) 
+    : (initialProfile?.phone && initialProfile.phone !== '(11) 98765-4321') 
+    ? formatPhone(initialProfile.phone) 
+    : (draft?.phone && draft.phone !== '(11) 98765-4321') 
+    ? draft.phone 
+    : '';
+
+  const [phone, setPhone] = useState(initialPhone);
   const [cpf, setCpf] = useState(draft?.cpf || initialProfile?.cpf || '');
   const [cep, setCep] = useState(draft?.cep || initialProfile?.cep || '');
   const [street, setStreet] = useState(draft?.street || initialProfile?.street || '');

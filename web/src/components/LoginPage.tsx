@@ -32,9 +32,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     const user: UserProfile = {
       id: userId,
       email: cleanEmail,
-      fullName: fullName.trim() || existingProfile?.fullName || (selectedRole === 'client' ? 'Passageiro DriveHora' : 'Motorista Parceiro'),
+      fullName: (fullName.trim() || existingProfile?.fullName) || (selectedRole === 'client' ? 'Passageiro DriveHora' : 'Motorista Parceiro'),
       role: selectedRole,
-      phone: phone || existingProfile?.phone || '(11) 98765-4321',
+      phone: (phone.trim() ? formatPhone(phone) : existingProfile?.phone) || '',
       isAdmin: isAdmin,
       createdAt: existingProfile?.createdAt || new Date().toISOString()
     };

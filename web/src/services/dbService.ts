@@ -78,7 +78,7 @@ export const dbFindProfileByEmail = async (email: string): Promise<UserProfile |
           email: res.data.email,
           fullName: res.data.full_name || res.data.name || 'Usuário DriveHora',
           role: res.data.role || 'client',
-          phone: res.data.phone || '(11) 98765-4321',
+          phone: res.data.phone || '',
           avatarUrl: res.data.avatar_url,
           isAdmin: isSuperAdminEmail(res.data.email)
         };
@@ -149,7 +149,7 @@ export const dbSaveClientProfile = async (
       email: (current?.email || `client_${client.userId}@drivehora.com`).toLowerCase().trim(),
       full_name: current?.fullName || 'Passageiro DriveHora',
       role: 'client',
-      phone: client.phone || current?.phone || '(11) 98765-4321',
+      phone: client.phone || current?.phone || '',
       updated_at: new Date().toISOString()
     }), 8000);
 
@@ -229,9 +229,9 @@ export const dbGetClientProfile = async (userId: string, email?: string): Promis
         return {
           id: 'client_' + userProfileData.id,
           userId: userProfileData.id,
-          cpf: userProfileData.cpf || '000.000.000-00',
-          phone: userProfileData.phone || '(11) 98765-4321',
-          cep: userProfileData.cep || '01310-100',
+          cpf: userProfileData.cpf || '',
+          phone: userProfileData.phone || '',
+          cep: userProfileData.cep || '',
           street: userProfileData.street || 'Av. Paulista',
           number: userProfileData.number || '1000',
           complement: userProfileData.complement || '',
@@ -286,7 +286,7 @@ export const dbSaveDriverProfile = async (
       email: (current?.email || `driver_${driver.userId}@drivehora.com`).toLowerCase().trim(),
       full_name: current?.fullName || 'Motorista Parceiro',
       role: 'driver',
-      phone: driver.phone || current?.phone || '(11) 98765-4321',
+      phone: driver.phone || current?.phone || '',
       updated_at: new Date().toISOString()
     }), 8000);
 

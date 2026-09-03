@@ -78,9 +78,17 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
     initialProfile?.verificationStatus === 'under_review' ? 4 : draft?.step || 1
   );
   
+  const initialDriverPhone = (user.phone && user.phone !== '(11) 98765-4321')
+    ? formatPhone(user.phone)
+    : (initialProfile?.phone && initialProfile.phone !== '(11) 98765-4321')
+    ? formatPhone(initialProfile.phone)
+    : (draft?.phone && draft.phone !== '(11) 98765-4321')
+    ? draft.phone
+    : '';
+
   // Dados Pessoais & CNH (Recuperados do Rascunho Interno)
   const [cpf, setCpf] = useState(draft?.cpf || formatCpf(initialProfile?.cpf || ''));
-  const [phone, setPhone] = useState(draft?.phone || formatPhone(initialProfile?.phone || user.phone || ''));
+  const [phone, setPhone] = useState(initialDriverPhone);
   const [cnhNumber, setCnhNumber] = useState(draft?.cnhNumber || initialProfile?.cnhNumber || '');
   const [cnhCategory, setCnhCategory] = useState(draft?.cnhCategory || initialProfile?.cnhCategory || 'B');
 
