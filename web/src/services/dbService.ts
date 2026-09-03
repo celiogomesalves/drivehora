@@ -25,6 +25,14 @@ export interface DbRide {
   finishedAt?: number;
 }
 
+// Timeout helper para chamadas de banco nunca travarem
+const withTimeout = async (promise: any, timeoutMs = 12000): Promise<any> => {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Tempo limite de conexão com o banco esgotado (12s)')), timeoutMs))
+  ]);
+};
+
 // 0. Testar status da conexão com o banco Supabase
 export const dbCheckSupabaseStatus = async (): Promise<{ connected: boolean; message?: string }> => {
   const sb = getSupabase();
@@ -32,9 +40,9 @@ export const dbCheckSupabaseStatus = async (): Promise<{ connected: boolean; mes
     return { connected: false, message: 'Credenciais do Supabase não configuradas no sistema.' };
   }
   try {
-    const { error } = await sb.from('profiles').select('id').limit(1);
-    if (error) {
-      return { connected: false, message: `Erro ao conectar com Supabase: ${error.message}` };
+    const res: any = await withTimeout(sb.from('profiles').select('id').limit(1), 6000);
+    if (res?.error) {
+      return { connected: false, message: `Erro ao conectar com Supabase: ${res.error.message}` };
     }
     return { connected: true };
   } catch (e: any) {
@@ -44,11 +52,14 @@ export const dbCheckSupabaseStatus = async (): Promise<{ connected: boolean; mes
 
 // 1. Salvar ou atualizar Perfil de Usuário
 export const dbSaveProfile = async (profile: UserProfile): Promise<{ success: boolean; error?: string }> => {
-  localStorage.setItem(`drivehora_profile_${profile.id}`, JSON.stringify(profile));
+  try {
+    localStorage.setItem(`drivehora_profile_${profile.id}`, JSON.stringify(profile));
+  } catch (e) {}
+
   const sb = getSupabase();
   if (sb) {
     try {
-      const { error } = await sb.from('profiles').upsert({
+      const res: any = await withTimeout(sb.from('profiles').upsert({
         id: profile.id,
         email: profile.email,
         full_name: profile.fullName,
@@ -56,10 +67,10 @@ export const dbSaveProfile = async (profile: UserProfile): Promise<{ success: bo
         phone: profile.phone,
         avatar_url: profile.avatarUrl,
         updated_at: new Date().toISOString()
-      });
-      if (error) {
-        console.warn('Erro ao salvar profile no Supabase:', error);
-        return { success: false, error: error.message };
+      }), 8000);
+      if (res?.error) {
+        console.warn('Erro ao salvar profile no Supabase:', res.error);
+        return { success: false, error: res.error.message };
       }
       return { success: true };
     } catch (e: any) {
@@ -75,7 +86,10 @@ export const dbSaveClientProfile = async (
   client: ClientProfile, 
   userProfile?: UserProfile | null
 ): Promise<{ success: boolean; error?: string }> => {
-  localStorage.setItem(`drivehora_client_profile_${client.userId}`, JSON.stringify(client));
+  try {
+    localStorage.setItem(`drivehora_client_profile_${client.userId}`, JSON.stringify(client));
+  } catch (e) {}
+
   const sb = getSupabase();
   if (!sb) {
     return { success: false, error: 'Banco de dados Supabase desconectado. Conecte o banco antes de enviar.' };
@@ -86,19 +100,21 @@ export const dbSaveClientProfile = async (
     let current = userProfile;
     if (!current) {
       const saved = localStorage.getItem('drivehora_current_user');
-      if (saved) current = JSON.parse(saved);
+      if (saved) {
+        try { current = JSON.parse(saved); } catch (e) {}
+      }
     }
 
-    await sb.from('profiles').upsert({
+    await withTimeout(sb.from('profiles').upsert({
       id: client.userId,
       email: current?.email || `client_${client.userId}@drivehora.com`,
       full_name: current?.fullName || 'Passageiro DriveHora',
       role: 'client',
       phone: client.phone || current?.phone || '(11) 98765-4321',
       updated_at: new Date().toISOString()
-    });
+    }), 8000);
 
-    const { error } = await sb.from('clients').upsert({
+    const res: any = await withTimeout(sb.from('clients').upsert({
       id: client.id,
       user_id: client.userId,
       cpf: client.cpf,
@@ -111,11 +127,11 @@ export const dbSaveClientProfile = async (
       city: client.city,
       state: client.state,
       is_profile_complete: client.isProfileComplete
-    });
+    }), 8000);
 
-    if (error) {
-      console.warn('Erro ao salvar client no Supabase:', error);
-      return { success: false, error: error.message };
+    if (res?.error) {
+      console.warn('Erro ao salvar client no Supabase:', res.error);
+      return { success: false, error: res.error.message };
     }
     return { success: true };
   } catch (e: any) {
@@ -129,35 +145,46 @@ export const dbGetClientProfile = async (userId: string): Promise<ClientProfile 
   const sb = getSupabase();
   if (sb) {
     try {
-      const { data, error } = await sb.from('clients').select('*').eq('user_id', userId).maybeSingle();
-      if (!error && data) {
+      const res: any = await withTimeout(sb.from('clients').select('*').eq('user_id', userId).maybeSingle(), 6000);
+      if (!res?.error && res?.data) {
         return {
-          id: data.id,
-          userId: data.user_id,
-          cpf: data.cpf || '',
-          phone: data.phone || '',
-          cep: data.cep || '',
-          street: data.street || '',
-          number: data.number || '',
-          complement: data.complement || '',
-          neighborhood: data.neighborhood || '',
-          city: data.city || '',
-          state: data.state || '',
-          isProfileComplete: Boolean(data.is_profile_complete)
+          id: res.data.id,
+          userId: res.data.user_id,
+          cpf: res.data.cpf || '',
+          phone: res.data.phone || '',
+          cep: res.data.cep || '',
+          street: res.data.street || '',
+          number: res.data.number || '',
+          complement: res.data.complement || '',
+          neighborhood: res.data.neighborhood || '',
+          city: res.data.city || '',
+          state: res.data.state || '',
+          isProfileComplete: Boolean(res.data.is_profile_complete)
         };
       }
     } catch (e) {}
   }
-  const local = localStorage.getItem(`drivehora_client_profile_${userId}`);
-  return local ? JSON.parse(local) : null;
+  try {
+    const local = localStorage.getItem(`drivehora_client_profile_${userId}`);
+    return local ? JSON.parse(local) : null;
+  } catch (e) {
+    return null;
+  }
 };
 
-// 4. Salvar ou atualizar Perfil de Motorista com Auto-garantia de Profile (Elimina Erro de Foreign Key)
+// 4. Salvar ou atualizar Perfil de Motorista (Com auto-garantia de Profile e proteção contra timeout)
 export const dbSaveDriverProfile = async (
   driver: DriverProfile, 
   userProfile?: UserProfile | null
 ): Promise<{ success: boolean; error?: string }> => {
-  localStorage.setItem(`drivehora_driver_profile_${driver.userId}`, JSON.stringify(driver));
+  // Salvar no localStorage de forma segura (sem estourar cota)
+  try {
+    const lightweightDriver = { ...driver, cnhUrl: undefined, crlvUrl: undefined, selfieUrl: undefined };
+    localStorage.setItem(`drivehora_driver_profile_${driver.userId}`, JSON.stringify(lightweightDriver));
+  } catch (e) {
+    console.warn('Armazenamento local cheio, prosseguindo com gravação no banco.');
+  }
+
   const sb = getSupabase();
   if (!sb) {
     return { success: false, error: 'Banco de dados Supabase desconectado. Conecte o banco de dados antes de enviar os documentos.' };
@@ -168,24 +195,22 @@ export const dbSaveDriverProfile = async (
     let current = userProfile;
     if (!current) {
       const saved = localStorage.getItem('drivehora_current_user');
-      if (saved) current = JSON.parse(saved);
+      if (saved) {
+        try { current = JSON.parse(saved); } catch (e) {}
+      }
     }
 
-    const { error: profileError } = await sb.from('profiles').upsert({
+    await withTimeout(sb.from('profiles').upsert({
       id: driver.userId,
       email: current?.email || `driver_${driver.userId}@drivehora.com`,
       full_name: current?.fullName || 'Motorista Parceiro',
       role: 'driver',
       phone: driver.phone || current?.phone || '(11) 98765-4321',
       updated_at: new Date().toISOString()
-    });
-
-    if (profileError) {
-      console.warn('Aviso ao sincronizar profile base:', profileError);
-    }
+    }), 8000);
 
     // 2. Inserir ou atualizar na tabela 'drivers'
-    const { error } = await sb.from('drivers').upsert({
+    const res: any = await withTimeout(sb.from('drivers').upsert({
       id: driver.id,
       user_id: driver.userId,
       cpf: driver.cpf,
@@ -203,11 +228,11 @@ export const dbSaveDriverProfile = async (
       verification_status: driver.verificationStatus,
       rating: driver.rating,
       total_rides: driver.totalRides
-    });
+    }), 10000);
 
-    if (error) {
-      console.warn('Erro ao salvar driver no Supabase:', error);
-      return { success: false, error: `Erro no Supabase: ${error.message}` };
+    if (res?.error) {
+      console.warn('Erro ao salvar driver no Supabase:', res.error);
+      return { success: false, error: `Erro no Supabase: ${res.error.message}` };
     }
     return { success: true };
   } catch (e: any) {
@@ -221,32 +246,36 @@ export const dbGetDriverProfile = async (userId: string): Promise<DriverProfile 
   const sb = getSupabase();
   if (sb) {
     try {
-      const { data, error } = await sb.from('drivers').select('*').eq('user_id', userId).maybeSingle();
-      if (!error && data) {
+      const res: any = await withTimeout(sb.from('drivers').select('*').eq('user_id', userId).maybeSingle(), 6000);
+      if (!res?.error && res?.data) {
         return {
-          id: data.id,
-          userId: data.user_id,
-          cpf: data.cpf || '',
-          phone: data.phone || '',
-          cnhNumber: data.cnh_number || '',
-          cnhCategory: data.cnh_category || 'B',
-          vehicleBrand: data.vehicle_brand || '',
-          vehicleModel: data.vehicle_model || '',
-          vehicleYear: data.vehicle_year || '',
-          vehiclePlate: data.vehicle_plate || '',
-          vehicleColor: data.vehicle_color || '',
-          cnhUrl: data.cnh_url,
-          crlvUrl: data.crlv_url,
-          selfieUrl: data.selfie_url,
-          verificationStatus: data.verification_status || 'pending_docs',
-          rating: Number(data.rating) || 5.0,
-          totalRides: Number(data.total_rides) || 0
+          id: res.data.id,
+          userId: res.data.user_id,
+          cpf: res.data.cpf || '',
+          phone: res.data.phone || '',
+          cnhNumber: res.data.cnh_number || '',
+          cnhCategory: res.data.cnh_category || 'B',
+          vehicleBrand: res.data.vehicle_brand || '',
+          vehicleModel: res.data.vehicle_model || '',
+          vehicleYear: res.data.vehicle_year || '',
+          vehiclePlate: res.data.vehicle_plate || '',
+          vehicleColor: res.data.vehicle_color || '',
+          cnhUrl: res.data.cnh_url,
+          crlvUrl: res.data.crlv_url,
+          selfieUrl: res.data.selfie_url,
+          verificationStatus: res.data.verification_status || 'pending_docs',
+          rating: Number(res.data.rating) || 5.0,
+          totalRides: Number(res.data.total_rides) || 0
         };
       }
     } catch (e) {}
   }
-  const local = localStorage.getItem(`drivehora_driver_profile_${userId}`);
-  return local ? JSON.parse(local) : null;
+  try {
+    const local = localStorage.getItem(`drivehora_driver_profile_${userId}`);
+    return local ? JSON.parse(local) : null;
+  } catch (e) {
+    return null;
+  }
 };
 
 // 6. Criar Corrida

@@ -15,6 +15,45 @@ interface DriverOnboardingProps {
   onOpenSupabaseConfig?: () => void;
 }
 
+// Compressor de imagem no cliente (reduz fotos pesadas para ~120KB)
+const compressImageFile = (file: File): Promise<string> => {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 1200;
+        const MAX_HEIGHT = 1200;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width *= MAX_HEIGHT / height;
+            height = MAX_HEIGHT;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', 0.72));
+      };
+      img.onerror = () => resolve((e.target?.result as string) || '');
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => resolve('');
+    reader.readAsDataURL(file);
+  });
+};
+
 export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ 
   user, 
   initialProfile, 
@@ -39,7 +78,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
   const [vehiclePlate, setVehiclePlate] = useState(formatPlate(initialProfile?.vehiclePlate || 'BRA-2E19'));
   const [vehicleColor, setVehicleColor] = useState(initialProfile?.vehicleColor || 'Preto');
 
-  // Uploads Reais de Documentos (Base64 / Nome do Arquivo)
+  // Uploads Reais de Documentos (Base64 Otimizado)
   const [cnhFileName, setCnhFileName] = useState<string>(initialProfile?.cnhUrl ? 'cnh_anexada.jpg' : '');
   const [cnhUrl, setCnhUrl] = useState<string>(initialProfile?.cnhUrl || '');
 
@@ -57,24 +96,23 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isDbError, setIsDbError] = useState(false);
 
-  // Leitor de arquivo real para Base64
-  const handleFileUpload = (
+  // Manipulador de upload com compressão automática
+  const handleFileUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
     setFileName: (name: string) => void,
     setUrl: (url: string) => void
   ) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 10 * 1024 * 1024) {
-        alert('O arquivo selecionado é muito grande. O limite máximo é 10MB.');
-        return;
-      }
       setFileName(file.name);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setUrl(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      if (file.type.startsWith('image/')) {
+        const compressedBase64 = await compressImageFile(file);
+        setUrl(compressedBase64);
+      } else {
+        const reader = new FileReader();
+        reader.onloadend = () => setUrl(reader.result as string);
+        reader.readAsDataURL(file);
+      }
     }
   };
 
@@ -116,7 +154,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
     setStep(3);
   };
 
-  // Validação e Envio da Etapa 3 com Verificação Obrigatória do Banco
+  // Validação e Envio da Etapa 3 com Verificação Segura do Banco
   const handleStep3Submit = async () => {
     setErrorMessage(null);
     setIsDbError(false);
@@ -126,26 +164,31 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
       return;
     }
 
-    // 🔒 Verificação estrita de conexão com o Banco Supabase
     setIsSaving(true);
-    const dbStatus = await dbCheckSupabaseStatus();
-    if (!dbStatus.connected) {
+    try {
+      // 🔒 1. Testar conexão com o banco
+      const dbStatus = await dbCheckSupabaseStatus();
+      if (!dbStatus.connected) {
+        setIsDbError(true);
+        setErrorMessage(`⚠️ Impossível enviar documentos: Não há conexão com o banco de dados Supabase (${dbStatus.message || 'Desconectado'}). Conecte o banco primeiro para gravar seus documentos.`);
+        return;
+      }
+
+      // 💾 2. Salvar no Supabase
+      const saveResult = await handleFinishRegistration('under_review');
+      if (!saveResult.success) {
+        setIsDbError(true);
+        setErrorMessage(`Falha ao gravar no banco: ${saveResult.error}`);
+        return;
+      }
+
+      setStep(4);
+    } catch (err: any) {
+      setIsDbError(true);
+      setErrorMessage(`Erro inesperado ao salvar: ${err.message || 'Falha de comunicação com o servidor'}`);
+    } finally {
       setIsSaving(false);
-      setIsDbError(true);
-      setErrorMessage(`⚠️ Impossível enviar documentos: Não há conexão com o banco de dados Supabase (${dbStatus.message || 'Desconectado'}). Conecte o banco primeiro para gravar seus documentos.`);
-      return;
     }
-
-    const saveResult = await handleFinishRegistration('under_review');
-    setIsSaving(false);
-
-    if (!saveResult.success) {
-      setIsDbError(true);
-      setErrorMessage(`Falha ao gravar no banco: ${saveResult.error}`);
-      return;
-    }
-
-    setStep(4);
   };
 
   const handleFinishRegistration = async (status: DriverVerificationStatus): Promise<{ success: boolean; error?: string }> => {
@@ -169,7 +212,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
       totalRides: initialProfile?.totalRides || 0
     };
 
-    const res = await dbSaveDriverProfile(profile);
+    const res = await dbSaveDriverProfile(profile, user);
     if (res.success) {
       setVerificationStatus(status);
       onComplete(profile);
@@ -355,7 +398,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
           </form>
         )}
 
-        {/* ETAPA 2: DADOS DO VEÍCULO COM DROPDOWN DE ANOS (A PARTIR DE 2010) */}
+        {/* ETAPA 2: DADOS DO VEÍCULO */}
         {step === 2 && (
           <form onSubmit={handleStep2Submit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#10b981' }}>2. Dados do Veículo</h3>
@@ -399,7 +442,6 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
-              {/* Dropdown de Ano de Fabricação a partir de 2010 */}
               <div className="input-group">
                 <label>Ano de Fabricação</label>
                 <select
@@ -453,7 +495,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
           </form>
         )}
 
-        {/* ETAPA 3: UPLOAD REAL DE DOCUMENTOS & SELFIE COM BLOQUEIO DE BANCO */}
+        {/* ETAPA 3: UPLOAD REAL DE DOCUMENTOS COM COMPRESSÃO E GRAVAÇÃO RÁPIDA */}
         {step === 3 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#10b981' }}>
