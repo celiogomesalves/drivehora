@@ -1,21 +1,15 @@
 import React, { useState } from 'react';
 import type { UserRole, UserProfile } from '../types/auth';
 import { isSuperAdminEmail } from '../types/auth';
-import { Users, Car, LogIn, Mail, Lock, User, Phone, ShieldCheck, Sparkles, Database, Clock, DollarSign } from 'lucide-react';
+import { Users, Car, LogIn, Mail, Lock, User, Phone, ShieldCheck, Sparkles, Clock, DollarSign } from 'lucide-react';
 import { formatPhone } from '../utils/formatters';
 import { dbSaveProfile } from '../services/dbService';
 
 interface LoginPageProps {
   onLoginSuccess: (user: UserProfile) => void;
-  onOpenSupabaseConfig: () => void;
-  supabaseConnected: boolean;
 }
 
-export const LoginPage: React.FC<LoginPageProps> = ({ 
-  onLoginSuccess, 
-  onOpenSupabaseConfig, 
-  supabaseConnected 
-}) => {
+export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const [selectedRole, setSelectedRole] = useState<UserRole>('client');
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
@@ -29,7 +23,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     setIsLoading(true);
 
     const cleanEmail = email.trim() || (selectedRole === 'client' ? 'passageiro@drivehora.com' : 'motorista@drivehora.com');
-    // Validação de Super-Admin sempre pelo email após o login
     const isAdmin = isSuperAdminEmail(cleanEmail);
 
     const user: UserProfile = {
@@ -76,7 +69,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       position: 'relative',
       overflow: 'hidden'
     }}>
-      {/* Top Navbar */}
+      {/* Top Navbar Limpa (Sem opções administrativas públicas) */}
       <header style={{
         maxWidth: '1200px',
         margin: '0 auto',
@@ -118,27 +111,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Motorista particular sob demanda por hora</p>
           </div>
         </div>
-
-        {/* Botão de Conectar Supabase no Login */}
-        <button
-          onClick={onOpenSupabaseConfig}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            fontSize: '0.75rem',
-            padding: '8px 14px',
-            background: supabaseConnected ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-            color: supabaseConnected ? '#10b981' : '#f59e0b',
-            border: `1px solid ${supabaseConnected ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
-            borderRadius: '20px',
-            cursor: 'pointer',
-            fontWeight: 600
-          }}
-        >
-          <Database size={14} />
-          <span>{supabaseConnected ? 'Banco Supabase Conectado' : 'Conectar Banco Supabase'}</span>
-        </button>
       </header>
 
       {/* Container Central com Grid */}
@@ -389,7 +361,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             <div style={{ flex: 1, height: '1px', background: 'var(--border-subtle)' }} />
           </div>
 
-          {/* Botões de Acesso Rápido Padrão (Sem bypass de admin na tela de login) */}
+          {/* Botões de Acesso Rápido Padrão */}
           <div style={{ display: 'flex', gap: '10px' }}>
             <button
               type="button"

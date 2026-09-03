@@ -2,19 +2,17 @@ import React, { useState, useEffect } from 'react';
 import type { UserProfile, ClientProfile } from '../types/auth';
 import { formatCep, fetchAddressByCep } from '../services/cepService';
 import { formatPhone, formatCpf, validateCpf, validatePhone } from '../utils/formatters';
-import { MapPin, Search, CheckCircle2, Check, RefreshCw, AlertCircle, Database } from 'lucide-react';
+import { MapPin, Search, CheckCircle2, Check, RefreshCw, AlertCircle } from 'lucide-react';
 import { dbSaveClientProfile, dbCheckSupabaseStatus } from '../services/dbService';
 
 interface ClientOnboardingProps {
   user: UserProfile;
   onComplete: (clientProfile: ClientProfile) => void;
-  onOpenSupabaseConfig?: () => void;
 }
 
 export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ 
   user, 
-  onComplete,
-  onOpenSupabaseConfig 
+  onComplete 
 }) => {
   // 💾 Recuperar rascunho de cliente salvo em memória interna
   const getSavedDraft = () => {
@@ -40,7 +38,6 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({
   const [cepSuccess, setCepSuccess] = useState(Boolean(draft?.street));
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isDbError, setIsDbError] = useState(false);
 
   // 💾 Salvar automaticamente em memória interna a cada alteração
   useEffect(() => {
@@ -86,7 +83,6 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
-    setIsDbError(false);
 
     // 1. Validação Real e Impeditiva de CPF
     if (!validateCpf(cpf)) {
@@ -111,8 +107,7 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({
     try {
       const dbStatus = await dbCheckSupabaseStatus();
       if (!dbStatus.connected) {
-        setIsDbError(true);
-        setErrorMessage(`⚠️ Impossível cadastrar cliente: Não há conexão com o banco de dados Supabase (${dbStatus.message || 'Desconectado'}). Conecte o banco primeiro.`);
+        setErrorMessage('Serviço de cadastro temporariamente indisponível. Por favor, tente novamente em instantes.');
         return;
       }
 
@@ -133,15 +128,13 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({
 
       const res = await dbSaveClientProfile(profile, user);
       if (!res.success) {
-        setIsDbError(true);
-        setErrorMessage(`Falha ao salvar no banco: ${res.error}`);
+        setErrorMessage(`Falha ao salvar dados: ${res.error}`);
         return;
       }
 
       onComplete(profile);
     } catch (err: any) {
-      setIsDbError(true);
-      setErrorMessage(`Erro ao gravar no banco: ${err.message || 'Falha de comunicação'}`);
+      setErrorMessage(`Erro ao gravar dados: ${err.message || 'Falha de comunicação'}`);
     } finally {
       setIsSaving(false);
     }
@@ -168,7 +161,7 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({
           </div>
           <h2 style={{ fontSize: '1.4rem', fontWeight: 800 }}>Complete seu Cadastro</h2>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            Olá <strong>{user.fullName}</strong>! Precisamos do seu endereço e telefone para agilizar seus chamados no banco de dados.
+            Olá <strong>{user.fullName}</strong>! Precisamos do seu endereço e telefone para agilizar seus chamados no sistema.
           </p>
         </div>
 
@@ -183,25 +176,10 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({
             marginBottom: '16px',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
             gap: '10px'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <AlertCircle size={20} style={{ flexShrink: 0 }} />
-              <span>{errorMessage}</span>
-            </div>
-
-            {isDbError && onOpenSupabaseConfig && (
-              <button
-                type="button"
-                onClick={onOpenSupabaseConfig}
-                className="btn-primary"
-                style={{ fontSize: '0.75rem', padding: '6px 12px' }}
-              >
-                <Database size={14} /> Conectar Banco
-              </button>
-            )}
+            <AlertCircle size={20} style={{ flexShrink: 0 }} />
+            <span>{errorMessage}</span>
           </div>
         )}
 
@@ -349,7 +327,7 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({
             style={{ width: '100%', padding: '14px', fontSize: '1rem', marginTop: '10px' }}
           >
             {isSaving ? <RefreshCw size={18} className="animate-spin" /> : <Check size={18} />}
-            <span>{isSaving ? 'Gravando no Banco de Dados...' : 'Salvar no Banco e Acessar DriveHora'}</span>
+            <span>{isSaving ? 'Gravando Cadastro...' : 'Salvar Cadastro e Acessar DriveHora'}</span>
           </button>
         </form>
       </div>

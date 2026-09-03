@@ -308,88 +308,9 @@ export function App() {
   // ========================================================
   if (!currentUser) {
     return (
-      <>
-        <LoginPage
-          onLoginSuccess={(user) => setCurrentUser(user)}
-          onOpenSupabaseConfig={() => setShowConfigModal(true)}
-          supabaseConnected={supabaseConnected}
-        />
-
-        {/* Supabase Config Modal */}
-        {showConfigModal && (
-          <div style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0, 0, 0, 0.75)',
-            backdropFilter: 'blur(10px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 200,
-            padding: '20px'
-          }}>
-            <div className="glass-panel" style={{ maxWidth: '520px', width: '100%', padding: '28px', position: 'relative' }}>
-              <button
-                onClick={() => setShowConfigModal(false)}
-                style={{ position: 'absolute', top: '20px', right: '20px', background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
-              >
-                <X size={20} />
-              </button>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-                <div style={{ background: 'rgba(16, 185, 129, 0.2)', padding: '8px', borderRadius: '10px', color: '#10b981' }}>
-                  <Database size={20} />
-                </div>
-                <h3 style={{ fontSize: '1.2rem', fontWeight: 700 }}>Conectar Banco Supabase</h3>
-              </div>
-
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '20px' }}>
-                Cole as credenciais do seu projeto Supabase abaixo para habilitar o banco de dados em nuvem e sincronização em tempo real (Realtime):
-              </p>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                <div className="input-group">
-                  <label>URL do Projeto Supabase (Project URL)</label>
-                  <input
-                    type="text"
-                    className="custom-input"
-                    value={inputSupabaseUrl}
-                    onChange={(e) => setInputSupabaseUrl(e.target.value)}
-                    placeholder="https://xyzcompany.supabase.co"
-                  />
-                </div>
-
-                <div className="input-group">
-                  <label>Chave Pública Anon (Anon Public Key)</label>
-                  <input
-                    type="password"
-                    className="custom-input"
-                    value={inputSupabaseKey}
-                    onChange={(e) => setInputSupabaseKey(e.target.value)}
-                    placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                  />
-                </div>
-
-                <div style={{ background: 'rgba(99, 102, 241, 0.1)', padding: '12px', borderRadius: '10px', fontSize: '0.75rem', color: '#cbd5e1' }}>
-                  💡 <strong>Dica:</strong> O script completo de tabelas (<code>profiles</code>, <code>clients</code>, <code>drivers</code>, <code>rides</code>) está em <code>supabase/schema.sql</code>!
-                </div>
-
-                <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-                  <button onClick={handleSaveConfig} className="btn-success" style={{ flex: 1 }}>
-                    <Check size={16} /> Salvar e Conectar
-                  </button>
-                  <button onClick={() => setShowConfigModal(false)} className="btn-outline" style={{ flex: 1 }}>
-                    Cancelar
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </>
+      <LoginPage
+        onLoginSuccess={(user) => setCurrentUser(user)}
+      />
     );
   }
 
@@ -647,26 +568,28 @@ export function App() {
               </button>
             </div>
 
-            {/* Supabase Button */}
-            <button
-              onClick={() => setShowConfigModal(true)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                fontSize: '0.75rem',
-                padding: '6px 12px',
-                background: supabaseConnected ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-                color: supabaseConnected ? '#10b981' : '#f59e0b',
-                border: `1px solid ${supabaseConnected ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
-                borderRadius: '20px',
-                cursor: 'pointer',
-                fontWeight: 600
-              }}
-            >
-              <Database size={14} />
-              <span>{supabaseConnected ? 'Supabase ✅' : 'Supabase'}</span>
-            </button>
+            {/* Supabase Button - Exclusivo para Administrador */}
+            {isUserAdmin && (
+              <button
+                onClick={() => setShowConfigModal(true)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontSize: '0.75rem',
+                  padding: '6px 12px',
+                  background: supabaseConnected ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                  color: supabaseConnected ? '#10b981' : '#f59e0b',
+                  border: `1px solid ${supabaseConnected ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
+                  borderRadius: '20px',
+                  cursor: 'pointer',
+                  fontWeight: 600
+                }}
+              >
+                <Database size={14} />
+                <span>{supabaseConnected ? 'Supabase (Admin) ✅' : 'Supabase (Admin)'}</span>
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -765,7 +688,6 @@ export function App() {
               <ClientOnboarding
                 user={currentUser}
                 onComplete={(cp) => setClientProfile(cp)}
-                onOpenSupabaseConfig={() => setShowConfigModal(true)}
               />
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }}>
@@ -1280,7 +1202,7 @@ export function App() {
                 user={currentUser}
                 initialProfile={driverProfile}
                 onComplete={(dp) => setDriverProfile(dp)}
-                onOpenSupabaseConfig={() => setShowConfigModal(true)}
+                onOpenSupabaseConfig={isUserAdmin ? () => setShowConfigModal(true) : undefined}
               />
             ) : showDriverProfileEdit ? (
               <div>
@@ -1299,7 +1221,7 @@ export function App() {
                     setDriverProfile(dp);
                     setShowDriverProfileEdit(false);
                   }}
-                  onOpenSupabaseConfig={() => setShowConfigModal(true)}
+                  onOpenSupabaseConfig={isUserAdmin ? () => setShowConfigModal(true) : undefined}
                 />
               </div>
             ) : (

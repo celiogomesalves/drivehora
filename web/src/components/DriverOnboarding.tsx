@@ -342,14 +342,14 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
               <span>{errorMessage}</span>
             </div>
 
-            {isDbError && onOpenSupabaseConfig && (
+            {isDbError && user.isAdmin && onOpenSupabaseConfig && (
               <button
                 type="button"
                 onClick={onOpenSupabaseConfig}
                 className="btn-primary"
                 style={{ fontSize: '0.75rem', padding: '6px 12px' }}
               >
-                <Database size={14} /> Conectar Banco
+                <Database size={14} /> Conectar Banco (Admin)
               </button>
             )}
           </div>
