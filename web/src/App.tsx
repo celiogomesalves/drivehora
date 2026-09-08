@@ -24,8 +24,10 @@ import { formatCurrency, formatCurrencyInput, parseCurrencyInput } from './utils
 import { 
   dbGetClientProfile, dbGetDriverProfile, 
   dbCreateRide, dbUpdateRide, dbCancelRide, dbUpdateDriverOnlineStatus, dbUpdateDriverLocation,
-  dbGetFavoriteDriverIds, dbToggleFavoriteDriver, type DbRide 
+  dbGetFavoriteDriverIds, dbToggleFavoriteDriver, dbSaveUserDeviceToken, type DbRide 
 } from './services/dbService';
+import { requestWebPushToken, onForegroundMessage } from './services/firebase';
+import { getSystemSettings } from './services/settingsService';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<'client' | 'driver' | 'admin' | 'dual' | 'mobile'>('client');
@@ -79,6 +81,42 @@ export function App() {
       dbGetFavoriteDriverIds(currentUser.id).then(ids => setFavoriteDriverIds(ids));
     }
   }, [currentUser?.id]);
+
+  // Registro Automático do Device Token (Push FCM) ao Logar
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    const registerPushToken = async () => {
+      try {
+        const settings = getSystemSettings();
+        if (!settings.firebase?.enabled) return;
+
+        const token = await requestWebPushToken(settings.firebase.vapidKey);
+        if (token) {
+          await dbSaveUserDeviceToken(currentUser.id, token, currentUser.role);
+        }
+      } catch (e) {
+        console.warn('Registro de push token postergado ou não autorizado:', e);
+      }
+    };
+
+    // Delay suave para a interface carregar antes de pedir permissão
+    const timer = setTimeout(registerPushToken, 1200);
+
+    // Listener de mensagens recebidas em primeiro plano (In-App Push)
+    const unsubscribeForeground = onForegroundMessage((payload) => {
+      const title = payload.notification?.title || '🔔 DriveHora Notificação';
+      const body = payload.notification?.body || '';
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification(title, { body, icon: '/favicon.svg' });
+      }
+    });
+
+    return () => {
+      clearTimeout(timer);
+      if (unsubscribeForeground) unsubscribeForeground();
+    };
+  }, [currentUser?.id, currentUser?.role]);
 
   // Alternar favorito do cliente
   const handleToggleFavorite = async (driverId: string) => {

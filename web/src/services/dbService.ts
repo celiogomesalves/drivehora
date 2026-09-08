@@ -879,4 +879,39 @@ export const dbGetFavoriteDrivers = async (clientId: string): Promise<DriverPubl
   return list;
 };
 
+// 18. Salvar Token de Dispositivo (FCM Device Token) no Banco de Dados
+export const dbSaveUserDeviceToken = async (userId: string, token: string, role?: string): Promise<boolean> => {
+  if (!userId || !token) return false;
+  try {
+    const sb = getSupabase();
+    if (!sb) return false;
 
+    // Atualiza na tabela principal de perfis
+    await sb
+      .from('profiles')
+      .update({ fcm_token: token, updated_at: new Date().toISOString() })
+      .eq('id', userId);
+
+    // Se for motorista, também atualiza na tabela de motoristas
+    if (role === 'driver') {
+      await sb
+        .from('drivers')
+        .update({ fcm_token: token })
+        .eq('user_id', userId);
+    }
+
+    // Se for cliente, também atualiza na tabela de clientes
+    if (role === 'client') {
+      await sb
+        .from('clients')
+        .update({ fcm_token: token })
+        .eq('user_id', userId);
+    }
+
+    console.log(`[FCM] Device token registrado com sucesso para o usuário ${userId}`);
+    return true;
+  } catch (err) {
+    console.warn('Erro ao salvar device token no Supabase:', err);
+    return false;
+  }
+};

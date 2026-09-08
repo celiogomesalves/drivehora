@@ -12,9 +12,15 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     role TEXT NOT NULL CHECK (role IN ('client', 'driver', 'admin')),
     phone TEXT NOT NULL,
     avatar_url TEXT,
+    fcm_token TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Migração Idempotente para bases existentes:
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS fcm_token TEXT;
+ALTER TABLE public.drivers ADD COLUMN IF NOT EXISTS fcm_token TEXT;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS fcm_token TEXT;
 
 -- 2. Tabela de Passageiros / Clientes (clients)
 CREATE TABLE IF NOT EXISTS public.clients (
