@@ -330,7 +330,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                       style={{ paddingLeft: '38px' }}
                       value={phone}
                       onChange={(e) => setPhone(formatPhone(e.target.value))}
-                      placeholder="(11) 98765-4321"
+                      placeholder="(00) 00000-0000"
                       maxLength={15}
                       required
                     />
