@@ -1,9 +1,16 @@
 import React, { useState } from 'react';
 import type { UserRole, UserProfile } from '../types/auth';
 import { isSuperAdminEmail } from '../types/auth';
-import { Users, Car, LogIn, Mail, Lock, User, Phone, ShieldCheck, Sparkles, Clock, DollarSign } from 'lucide-react';
+import { 
+  Users, Car, LogIn, Mail, Lock, User, Phone, ShieldCheck, 
+  Sparkles, Clock, DollarSign, LogOut, X, ShieldAlert 
+} from 'lucide-react';
 import { formatPhone } from '../utils/formatters';
-import { dbSaveProfile, dbFindProfileByEmail, generateUserIdFromEmail } from '../services/dbService';
+import { 
+  dbSaveProfile, dbFindProfileByEmail, generateUserIdFromEmail, 
+  dbForceDisconnectOtherSessions, dbUpdateUserSession 
+} from '../services/dbService';
+import { getDeviceName, getLocalSessionToken, setLocalSessionToken, generateSessionToken } from '../utils/sessionHelper';
 
 interface LoginPageProps {
   onLoginSuccess: (user: UserProfile) => void;
@@ -18,6 +25,25 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const [phone, setPhone] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  // Estado para detecção de sessão concorrente em outro aparelho
+  const [concurrentSessionData, setConcurrentSessionData] = useState<{
+    user: UserProfile;
+    existingDevice: string;
+  } | null>(null);
+
+  const completeLogin = async (user: UserProfile, sessionToken: string, deviceName: string) => {
+    user.activeSessionToken = sessionToken;
+    user.activeDeviceName = deviceName;
+    user.lastActiveAt = new Date().toISOString();
+
+    setLocalSessionToken(sessionToken);
+    await dbSaveProfile(user);
+    await dbUpdateUserSession(user.id, sessionToken, deviceName);
+    localStorage.setItem('drivehora_current_user', JSON.stringify(user));
+    setIsLoading(false);
+    onLoginSuccess(user);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -28,6 +54,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     // 🔍 Buscar se o usuário já possui cadastro prévio no banco
     const existingProfile = await dbFindProfileByEmail(cleanEmail);
     const userId = existingProfile?.id || generateUserIdFromEmail(cleanEmail);
+    const localToken = getLocalSessionToken();
+    const deviceName = getDeviceName();
 
     const user: UserProfile = {
       id: userId,
@@ -39,10 +67,42 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       createdAt: existingProfile?.createdAt || new Date().toISOString()
     };
 
-    await dbSaveProfile(user);
-    localStorage.setItem('drivehora_current_user', JSON.stringify(user));
-    setIsLoading(false);
-    onLoginSuccess(user);
+    // 🛡️ VERIFICAÇÃO DE SESSÃO ÚNICA (Single Device Session):
+    // Se o perfil já tiver uma sessão ativa registrada diferente deste aparelho:
+    if (
+      existingProfile?.activeSessionToken && 
+      existingProfile.activeSessionToken !== localToken &&
+      !isSignUp
+    ) {
+      setIsLoading(false);
+      setConcurrentSessionData({
+        user,
+        existingDevice: existingProfile.activeDeviceName || 'Outro Dispositivo'
+      });
+      return;
+    }
+
+    // Se for novo cadastro ou mesmo aparelho, segue o login direto
+    await completeLogin(user, localToken, deviceName);
+  };
+
+  // Forçar desconexão do outro aparelho e assumir acesso neste dispositivo
+  const handleConfirmDisconnectAndLogin = async () => {
+    if (!concurrentSessionData) return;
+    setIsLoading(true);
+
+    const newToken = generateSessionToken();
+    const deviceName = getDeviceName();
+
+    await dbForceDisconnectOtherSessions(
+      concurrentSessionData.user.id, 
+      newToken, 
+      deviceName, 
+      concurrentSessionData.user.role
+    );
+
+    await completeLogin(concurrentSessionData.user, newToken, deviceName);
+    setConcurrentSessionData(null);
   };
 
   return (
@@ -342,6 +402,111 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         </div>
 
       </main>
+
+      {/* MODAL DE SESSÃO ATIVA EM OUTRO DISPOSITIVO */}
+      {concurrentSessionData && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.85)',
+          backdropFilter: 'blur(10px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px'
+        }}>
+          <div className="glass-panel" style={{
+            maxWidth: '480px',
+            width: '100%',
+            padding: '32px 24px',
+            borderRadius: '24px',
+            border: '1px solid rgba(245, 158, 11, 0.4)',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8)',
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px'
+          }}>
+            <div style={{
+              width: '64px',
+              height: '64px',
+              borderRadius: '20px',
+              background: 'rgba(245, 158, 11, 0.15)',
+              border: '1px solid rgba(245, 158, 11, 0.3)',
+              color: '#f59e0b',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto'
+            }}>
+              <ShieldAlert size={34} />
+            </div>
+
+            <div>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#fff', margin: '0 0 6px' }}>
+                Sessão Ativa em Outro Dispositivo
+              </h3>
+              <p style={{ fontSize: '0.85rem', color: '#94a3b8', margin: 0, lineHeight: 1.5 }}>
+                Esta conta já está conectada em <strong style={{ color: '#f59e0b' }}>{concurrentSessionData.existingDevice}</strong>.
+              </p>
+            </div>
+
+            <div style={{
+              background: 'rgba(255, 255, 255, 0.03)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              borderRadius: '12px',
+              padding: '12px 16px',
+              fontSize: '0.8rem',
+              color: 'var(--text-secondary)',
+              textAlign: 'left',
+              lineHeight: 1.5
+            }}>
+              🔒 <strong>Regra de Segurança:</strong> Para evitar o compartilhamento de contas e garantir a segurança das viagens, o DriveHora permite apenas <strong>1 dispositivo conectado por vez</strong>.
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '6px' }}>
+              <button
+                type="button"
+                onClick={handleConfirmDisconnectAndLogin}
+                disabled={isLoading}
+                className="btn-primary"
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  fontSize: '0.9rem',
+                  fontWeight: 700,
+                  justifyContent: 'center',
+                  background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                  color: '#000'
+                }}
+              >
+                <LogOut size={16} />
+                <span>Desconectar Outro Aparelho e Entrar Aqui</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setConcurrentSessionData(null)}
+                disabled={isLoading}
+                className="btn-outline"
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  fontSize: '0.85rem',
+                  justifyContent: 'center'
+                }}
+              >
+                <X size={15} />
+                <span>Cancelar e Manter no Outro Aparelho</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <footer style={{

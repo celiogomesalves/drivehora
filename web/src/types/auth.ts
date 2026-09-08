@@ -20,6 +20,9 @@ export interface UserProfile {
   phone: string;
   avatarUrl?: string;
   isAdmin?: boolean;
+  activeSessionToken?: string;
+  activeDeviceName?: string;
+  lastActiveAt?: string;
   createdAt?: string;
 }
 

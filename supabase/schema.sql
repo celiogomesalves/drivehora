@@ -13,12 +13,18 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     phone TEXT NOT NULL,
     avatar_url TEXT,
     fcm_token TEXT,
+    active_session_token TEXT,
+    active_device_name TEXT,
+    last_active_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Migração Idempotente para bases existentes:
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS fcm_token TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS active_session_token TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS active_device_name TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMPTZ;
 ALTER TABLE public.drivers ADD COLUMN IF NOT EXISTS fcm_token TEXT;
 ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS fcm_token TEXT;
 

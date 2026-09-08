@@ -4,7 +4,7 @@ import {
   Smartphone, Users, RefreshCw, CheckCircle2, 
   Radio, Award, PlayCircle, Sparkles, Compass, Database, 
   X, Check, LogOut, MapPin, Crown, AlertTriangle, UserCheck,
-  BellRing, Volume2, VolumeX, Ban, AlertOctagon, Heart
+  BellRing, Volume2, VolumeX, Ban, AlertOctagon, Heart, ShieldAlert
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import confetti from 'canvas-confetti';
@@ -24,10 +24,11 @@ import { formatCurrency, formatCurrencyInput, parseCurrencyInput } from './utils
 import { 
   dbGetClientProfile, dbGetDriverProfile, 
   dbCreateRide, dbUpdateRide, dbCancelRide, dbUpdateDriverOnlineStatus, dbUpdateDriverLocation,
-  dbGetFavoriteDriverIds, dbToggleFavoriteDriver, dbSaveUserDeviceToken, type DbRide 
+  dbGetFavoriteDriverIds, dbToggleFavoriteDriver, dbSaveUserDeviceToken, dbCheckUserSession, type DbRide 
 } from './services/dbService';
 import { requestWebPushToken, onForegroundMessage } from './services/firebase';
 import { getSystemSettings } from './services/settingsService';
+import { getLocalSessionToken, clearLocalSessionToken } from './utils/sessionHelper';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<'client' | 'driver' | 'admin' | 'dual' | 'mobile'>('client');
@@ -42,6 +43,9 @@ export function App() {
     if (isSuperAdminEmail(parsed.email)) parsed.isAdmin = true;
     return parsed;
   });
+
+  // Alerta de Sessão Concorrente / Desconexão Forçada
+  const [forcedLogoutNotice, setForcedLogoutNotice] = useState<{ activeDevice: string } | null>(null);
 
   // Perfis Onboarding
   const [clientProfile, setClientProfile] = useState<ClientProfile | null>(null);
@@ -74,6 +78,74 @@ export function App() {
   const [selectedDirectDriver, setSelectedDirectDriver] = useState<DriverPublicProfile | null>(null);
   const [now, setNow] = useState(Date.now());
   const [dismissedCancellationId, setDismissedCancellationId] = useState<string | null>(null);
+
+  // Verificação Constante de Sessão Única Concorrente (Supabase Realtime + Polling a cada 4s)
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    let isChecking = false;
+    const verifySession = async () => {
+      if (isChecking) return;
+      isChecking = true;
+      try {
+        const localToken = getLocalSessionToken();
+        if (!localToken) return;
+
+        const sessionCheck = await dbCheckUserSession(currentUser.id, localToken);
+        if (!sessionCheck.valid) {
+          console.warn('Sessão desconectada por novo login em outro aparelho:', sessionCheck.activeDevice);
+          // Limpa sessão local
+          clearLocalSessionToken();
+          localStorage.removeItem('drivehora_current_user');
+          setCurrentUser(null);
+          setClientProfile(null);
+          setDriverProfile(null);
+          setIsDriverOnline(false);
+          setForcedLogoutNotice({
+            activeDevice: sessionCheck.activeDevice || 'Outro dispositivo'
+          });
+        }
+      } catch (e) {
+        console.warn('Erro ao checar integridade da sessão:', e);
+      } finally {
+        isChecking = false;
+      }
+    };
+
+    // Verificação imediata
+    verifySession();
+
+    // Verificação periódica contínua
+    const pollInterval = setInterval(verifySession, 4000);
+
+    // Verificação Realtime Supabase
+    const sb = getSupabase();
+    let sessionChannel: any = null;
+    if (sb) {
+      sessionChannel = sb
+        .channel(`session_profile_${currentUser.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'profiles',
+            filter: `id=eq.${currentUser.id}`
+          },
+          () => {
+            verifySession();
+          }
+        )
+        .subscribe();
+    }
+
+    return () => {
+      clearInterval(pollInterval);
+      if (sessionChannel && sb) {
+        sb.removeChannel(sessionChannel);
+      }
+    };
+  }, [currentUser?.id]);
 
   // Carregar IDs de favoritos do cliente logado
   useEffect(() => {
@@ -384,6 +456,7 @@ export function App() {
 
   // Logout do Usuário -> Volta imediatamente para a Página de Login
   const handleLogout = () => {
+    clearLocalSessionToken();
     localStorage.removeItem('drivehora_current_user');
     setCurrentUser(null);
     setClientProfile(null);
@@ -554,9 +627,91 @@ export function App() {
   // ========================================================
   if (!currentUser) {
     return (
-      <LoginPage
-        onLoginSuccess={(user) => setCurrentUser(user)}
-      />
+      <>
+        <LoginPage
+          onLoginSuccess={(user) => setCurrentUser(user)}
+        />
+        {forcedLogoutNotice && (
+          <div style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(5, 8, 15, 0.88)',
+            backdropFilter: 'blur(10px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '20px'
+          }}>
+            <div style={{
+              background: '#0d1527',
+              border: '1px solid rgba(239, 68, 68, 0.4)',
+              borderRadius: '24px',
+              padding: '32px 28px',
+              maxWidth: '460px',
+              width: '100%',
+              textAlign: 'center',
+              boxShadow: '0 25px 60px rgba(0, 0, 0, 0.8), 0 0 35px rgba(239, 68, 68, 0.2)',
+              animation: 'slideUp 0.3s ease-out'
+            }}>
+              <div style={{
+                width: '64px',
+                height: '64px',
+                borderRadius: '50%',
+                background: 'rgba(239, 68, 68, 0.15)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 20px',
+                color: '#ef4444'
+              }}>
+                <ShieldAlert size={36} />
+              </div>
+
+              <h3 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#fff', marginBottom: '10px' }}>
+                Sessão Desconectada
+              </h3>
+
+              <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: '20px' }}>
+                Sua conta foi conectada em outro dispositivo: <br />
+                <strong style={{ color: '#ef4444' }}>{forcedLogoutNotice.activeDevice}</strong>.
+              </p>
+
+              <div style={{
+                background: 'rgba(239, 68, 68, 0.08)',
+                border: '1px solid rgba(239, 68, 68, 0.2)',
+                borderRadius: '12px',
+                padding: '12px 14px',
+                fontSize: '0.82rem',
+                color: '#fca5a5',
+                marginBottom: '24px',
+                lineHeight: 1.4
+              }}>
+                🔒 Por medidas de segurança e para evitar compartilhamento de contas entre vários motoristas/passageiros, é permitido apenas um acesso simultâneo por usuário.
+              </div>
+
+              <button
+                onClick={() => setForcedLogoutNotice(null)}
+                style={{
+                  width: '100%',
+                  padding: '14px',
+                  background: 'var(--primary-gradient)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontWeight: 700,
+                  fontSize: '0.95rem',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 15px rgba(99, 102, 241, 0.35)'
+                }}
+              >
+                Entendido, Fazer Novo Login
+              </button>
+            </div>
+          </div>
+        )}
+      </>
     );
   }
 

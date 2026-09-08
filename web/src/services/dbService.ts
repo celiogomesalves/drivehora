@@ -80,7 +80,11 @@ export const dbFindProfileByEmail = async (email: string): Promise<UserProfile |
           role: res.data.role || 'client',
           phone: res.data.phone || '',
           avatarUrl: res.data.avatar_url,
-          isAdmin: isSuperAdminEmail(res.data.email)
+          isAdmin: isSuperAdminEmail(res.data.email),
+          activeSessionToken: res.data.active_session_token,
+          activeDeviceName: res.data.active_device_name,
+          lastActiveAt: res.data.last_active_at,
+          createdAt: res.data.created_at
         };
       }
     } catch (e) {
@@ -99,7 +103,7 @@ export const dbSaveProfile = async (profile: UserProfile): Promise<{ success: bo
   const sb = getSupabase();
   if (sb) {
     try {
-      await withTimeout(sb.from('profiles').upsert({
+      const upsertData: any = {
         id: profile.id,
         email: profile.email.toLowerCase().trim(),
         full_name: profile.fullName,
@@ -107,7 +111,19 @@ export const dbSaveProfile = async (profile: UserProfile): Promise<{ success: bo
         phone: profile.phone || '',
         avatar_url: profile.avatarUrl,
         updated_at: new Date().toISOString()
-      }), 8000);
+      };
+
+      if (profile.activeSessionToken) {
+        upsertData.active_session_token = profile.activeSessionToken;
+      }
+      if (profile.activeDeviceName) {
+        upsertData.active_device_name = profile.activeDeviceName;
+      }
+      if (profile.lastActiveAt) {
+        upsertData.last_active_at = profile.lastActiveAt;
+      }
+
+      await withTimeout(sb.from('profiles').upsert(upsertData), 8000);
 
       // Sincronizar automaticamente na tabela clients para o admin visualizar
       if (profile.role === 'client') {
@@ -133,6 +149,105 @@ export const dbSaveProfile = async (profile: UserProfile): Promise<{ success: bo
     }
   }
   return { success: true };
+};
+
+// 1.1 Atualizar Token de Sessão Ativa do Usuário
+export const dbUpdateUserSession = async (
+  userId: string,
+  sessionToken: string,
+  deviceName: string
+): Promise<boolean> => {
+  if (!userId || !sessionToken) return false;
+  const sb = getSupabase();
+  if (!sb) return false;
+
+  try {
+    await withTimeout(
+      sb.from('profiles').update({
+        active_session_token: sessionToken,
+        active_device_name: deviceName,
+        last_active_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }).eq('id', userId),
+      6000
+    );
+    return true;
+  } catch (err) {
+    console.warn('Erro ao atualizar sessão no Supabase:', err);
+    return false;
+  }
+};
+
+// 1.2 Verificar se a sessão local ainda é a sessão ativa autorizada
+export const dbCheckUserSession = async (
+  userId: string,
+  localSessionToken: string
+): Promise<{ valid: boolean; activeDevice?: string }> => {
+  if (!userId || !localSessionToken) return { valid: true };
+  const sb = getSupabase();
+  if (!sb) return { valid: true };
+
+  try {
+    const res: any = await withTimeout(
+      sb.from('profiles').select('active_session_token, active_device_name').eq('id', userId).maybeSingle(),
+      4000
+    );
+
+    if (res?.data) {
+      const serverToken = res.data.active_session_token;
+      // Se não há token no servidor ainda, consideramos válida
+      if (!serverToken) return { valid: true };
+      
+      // Se o token no servidor for diferente do local, outra sessão assumiu o controle!
+      if (serverToken !== localSessionToken) {
+        return { 
+          valid: false, 
+          activeDevice: res.data.active_device_name || 'Outro Dispositivo' 
+        };
+      }
+    }
+    return { valid: true };
+  } catch {
+    return { valid: true };
+  }
+};
+
+// 1.3 Forçar Desconexão de Outros Dispositivos e Assumir Controle Deste Dispositivo
+export const dbForceDisconnectOtherSessions = async (
+  userId: string,
+  newSessionToken: string,
+  deviceName: string,
+  role?: string
+): Promise<boolean> => {
+  if (!userId || !newSessionToken) return false;
+  const sb = getSupabase();
+  if (!sb) return false;
+
+  try {
+    // 1. Atualiza a sessão para este novo token e dispositivo
+    await withTimeout(
+      sb.from('profiles').update({
+        active_session_token: newSessionToken,
+        active_device_name: deviceName,
+        last_active_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }).eq('id', userId),
+      6000
+    );
+
+    // 2. Se for motorista, desliga o modo online para que ele religue no novo aparelho conscientemente
+    if (role === 'driver') {
+      await withTimeout(
+        sb.from('drivers').update({ is_online: false }).eq('user_id', userId),
+        6000
+      );
+    }
+
+    return true;
+  } catch (err) {
+    console.warn('Erro ao forçar desconexão no Supabase:', err);
+    return false;
+  }
 };
 
 // 2. Salvar ou atualizar Perfil de Cliente (Passageiro) com Auto-garantia de Profile
