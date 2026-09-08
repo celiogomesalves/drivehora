@@ -6,7 +6,7 @@ import {
   TrendingUp, Database, Image, AlertTriangle, Eye, X, Check,
   Settings, Bell, CreditCard, Sliders, Send, Save
 } from 'lucide-react';
-import { formatCurrency, formatPhone, formatCpf, formatPlate } from '../utils/formatters';
+import { formatCurrency, formatCurrencyInput, parseCurrencyInput, formatPhone, formatCpf, formatPlate } from '../utils/formatters';
 import { dbGetAllDrivers, dbGetAllClients, dbAdminUpdateDriverStatus, type DbRide } from '../services/dbService';
 import { getSupabase } from '../supabase';
 import { getSystemSettings, saveSystemSettings, type SystemSettings } from '../services/settingsService';
@@ -1320,14 +1320,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                   <div>
                     <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
-                      Tarifa Base Padrão/Hora (R$)
+                      Tarifa Base Padrão/Hora
                     </label>
                     <input
-                      type="number"
-                      value={systemSettings.rates.defaultHourlyRate}
+                      type="text"
+                      inputMode="numeric"
+                      value={formatCurrencyInput(systemSettings.rates.defaultHourlyRate)}
                       onChange={(e) => setSystemSettings(prev => ({
                         ...prev,
-                        rates: { ...prev.rates, defaultHourlyRate: Number(e.target.value) }
+                        rates: { ...prev.rates, defaultHourlyRate: parseCurrencyInput(e.target.value) }
                       }))}
                       className="input-field"
                       style={{ width: '100%', fontSize: '0.85rem' }}
@@ -1336,14 +1337,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                   <div>
                     <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
-                      Valor Mínimo de Corrida (R$)
+                      Valor Mínimo de Corrida
                     </label>
                     <input
-                      type="number"
-                      value={systemSettings.rates.minRideRate}
+                      type="text"
+                      inputMode="numeric"
+                      value={formatCurrencyInput(systemSettings.rates.minRideRate)}
                       onChange={(e) => setSystemSettings(prev => ({
                         ...prev,
-                        rates: { ...prev.rates, minRideRate: Number(e.target.value) }
+                        rates: { ...prev.rates, minRideRate: parseCurrencyInput(e.target.value) }
                       }))}
                       className="input-field"
                       style={{ width: '100%', fontSize: '0.85rem' }}
@@ -1464,20 +1466,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     />
                   </div>
 
-                  <div>
-                    <label style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '2px' }}>Multiplicador de Tarifa</label>
-                    <input
-                      type="number"
-                      step="0.05"
-                      className="input-field"
-                      value={cat.rateMultiplier}
-                      onChange={(e) => {
-                        const updated = [...systemSettings.vehicleCategories];
-                        updated[idx] = { ...updated[idx], rateMultiplier: Number(e.target.value) };
-                        setSystemSettings(prev => ({ ...prev, vehicleCategories: updated }));
-                      }}
-                      style={{ fontSize: '0.8rem', padding: '8px 10px' }}
-                    />
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', alignItems: 'center' }}>
+                    <div>
+                      <label style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '2px' }}>Multiplicador</label>
+                      <input
+                        type="number"
+                        step="0.05"
+                        className="input-field"
+                        value={cat.rateMultiplier}
+                        onChange={(e) => {
+                          const updated = [...systemSettings.vehicleCategories];
+                          updated[idx] = { ...updated[idx], rateMultiplier: Number(e.target.value) };
+                          setSystemSettings(prev => ({ ...prev, vehicleCategories: updated }));
+                        }}
+                        style={{ fontSize: '0.8rem', padding: '8px 10px' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '2px' }}>Estimativa Base / Hora</label>
+                      <div style={{
+                        padding: '8px 10px',
+                        background: 'rgba(16, 185, 129, 0.1)',
+                        border: '1px solid rgba(16, 185, 129, 0.3)',
+                        borderRadius: '8px',
+                        color: '#10b981',
+                        fontWeight: 700,
+                        fontSize: '0.85rem'
+                      }}>
+                        {formatCurrency(systemSettings.rates.defaultHourlyRate * (cat.rateMultiplier || 1))}
+                      </div>
+                    </div>
                   </div>
                 </div>
               ))}

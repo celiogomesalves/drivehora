@@ -2151,13 +2151,14 @@ export function App() {
                         style={{ width: '100%', accentColor: '#6366f1' }}
                       />
                     </div>
-                    <div style={{ width: '120px' }}>
-                      <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>R$/hora</label>
+                    <div style={{ width: '130px' }}>
+                      <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Valor/hora</label>
                       <input
-                        type="number"
+                        type="text"
+                        inputMode="numeric"
                         className="custom-input"
-                        value={hourlyRate}
-                        onChange={(e) => setHourlyRate(Number(e.target.value))}
+                        value={formatCurrencyInput(hourlyRate)}
+                        onChange={(e) => setHourlyRate(parseCurrencyInput(e.target.value))}
                       />
                     </div>
                   </div>
