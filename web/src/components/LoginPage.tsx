@@ -45,25 +45,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     onLoginSuccess(user);
   };
 
-  const handleQuickDemo = async (role: UserRole) => {
-    setIsLoading(true);
-    const isDemoAdmin = (role as string) === 'admin';
-    const demoUser: UserProfile = {
-      id: role === 'client' ? 'client_demo_01' : role === 'driver' ? 'driver_demo_01' : 'admin_master_01',
-      email: role === 'client' ? 'passageiro.demo@drivehora.com' : role === 'driver' ? 'motorista.demo@drivehora.com' : 'admin@drivehora.com',
-      fullName: role === 'client' ? 'Carlos Eduardo (Passageiro)' : role === 'driver' ? 'Roberto Silva (Motorista)' : 'Administrador Geral (DriveHora)',
-      role: role,
-      phone: '(11) 99123-4567',
-      isAdmin: isDemoAdmin,
-      createdAt: new Date().toISOString()
-    };
-
-    await dbSaveProfile(demoUser);
-    localStorage.setItem('drivehora_current_user', JSON.stringify(demoUser));
-    setIsLoading(false);
-    onLoginSuccess(demoUser);
-  };
-
   return (
     <div style={{
       minHeight: '100vh',
@@ -356,48 +337,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               }}
             >
               {isSignUp ? 'Já tem uma conta? Clique aqui para entrar' : 'Ainda não tem conta? Cadastre-se gratuitamente'}
-            </button>
-          </div>
-
-          {/* Divisor */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '22px 0 16px' }}>
-            <div style={{ flex: 1, height: '1px', background: 'var(--border-subtle)' }} />
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Acesso Rápido de Testes</span>
-            <div style={{ flex: 1, height: '1px', background: 'var(--border-subtle)' }} />
-          </div>
-
-          {/* Botões de Acesso Rápido Padrão */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
-            <button
-              type="button"
-              onClick={() => handleQuickDemo('client')}
-              className="btn-outline"
-              style={{ fontSize: '0.75rem', padding: '10px 6px', textAlign: 'center' }}
-            >
-              🚀 Passageiro Demo
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQuickDemo('driver')}
-              className="btn-outline"
-              style={{ fontSize: '0.75rem', padding: '10px 6px', textAlign: 'center' }}
-            >
-              🚗 Motorista Demo
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQuickDemo('admin')}
-              className="btn-outline"
-              style={{
-                fontSize: '0.75rem',
-                padding: '10px 6px',
-                textAlign: 'center',
-                borderColor: '#f59e0b',
-                color: '#f59e0b',
-                background: 'rgba(245, 158, 11, 0.08)'
-              }}
-            >
-              👑 Admin Demo
             </button>
           </div>
         </div>

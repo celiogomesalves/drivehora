@@ -35,21 +35,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
     onClose();
   };
 
-  const handleQuickDemo = (role: UserRole) => {
-    const demoUser: UserProfile = {
-      id: role === 'client' ? 'client_demo_123' : 'driver_demo_456',
-      email: role === 'client' ? 'passageiro@drivehora.com' : 'motorista.vip@drivehora.com',
-      fullName: role === 'client' ? 'Carlos Eduardo (Passageiro)' : 'Roberto Silva (Motorista)',
-      role: role,
-      phone: '(11) 99123-4567',
-      createdAt: new Date().toISOString()
-    };
-
-    localStorage.setItem('drivehora_current_user', JSON.stringify(demoUser));
-    onLoginSuccess(demoUser);
-    onClose();
-  };
-
   return (
     <div style={{
       position: 'fixed',
@@ -241,33 +226,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
             }}
           >
             {isSignUp ? 'Já tem uma conta? Clique para entrar' : 'Ainda não tem conta? Cadastre-se aqui'}
-          </button>
-        </div>
-
-        {/* Divisor */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '20px 0 16px' }}>
-          <div style={{ flex: 1, height: '1px', background: 'var(--border-subtle)' }} />
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Ou teste rápido</span>
-          <div style={{ flex: 1, height: '1px', background: 'var(--border-subtle)' }} />
-        </div>
-
-        {/* Botões de Acesso Rápido para Testes */}
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button
-            type="button"
-            onClick={() => handleQuickDemo('client')}
-            className="btn-outline"
-            style={{ flex: 1, fontSize: '0.8rem', padding: '10px' }}
-          >
-            Passageiro Demo
-          </button>
-          <button
-            type="button"
-            onClick={() => handleQuickDemo('driver')}
-            className="btn-outline"
-            style={{ flex: 1, fontSize: '0.8rem', padding: '10px' }}
-          >
-            Motorista Demo
           </button>
         </div>
       </div>
