@@ -25,7 +25,6 @@ export function NearbyDriversMap({
   const userMarkerRef = useRef<L.Marker | null>(null);
   const driverMarkersRef = useRef<Map<string, L.Marker>>(new Map());
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
-  const hasAutoFittedRef = useRef<boolean>(false);
 
   const [userLocation, setUserLocation] = useState<Coordinates>({ latitude: -19.8157, longitude: -43.9542 }); // Default BH
   const [onlineDrivers, setOnlineDrivers] = useState<DriverProfile[]>([]);
@@ -36,28 +35,34 @@ export function NearbyDriversMap({
   const fitMapToAllDrivers = useCallback((isSmooth = true) => {
     if (!mapInstanceRef.current) return;
 
-    const points: [number, number][] = [
-      [userLocation.latitude, userLocation.longitude]
-    ];
+    try {
+      mapInstanceRef.current.invalidateSize();
 
-    onlineDrivers.forEach((driver, idx) => {
-      const offsetLat = (Math.sin(idx * 1.7) * 0.008) + (idx % 2 === 0 ? 0.003 : -0.004);
-      const offsetLng = (Math.cos(idx * 1.7) * 0.009) + (idx % 2 === 0 ? -0.003 : 0.004);
-      const driverLat = (driver.currentLat && !isNaN(driver.currentLat)) ? driver.currentLat : (userLocation.latitude + offsetLat);
-      const driverLng = (driver.currentLng && !isNaN(driver.currentLng)) ? driver.currentLng : (userLocation.longitude + offsetLng);
-      points.push([driverLat, driverLng]);
-    });
+      const points: [number, number][] = [
+        [userLocation.latitude, userLocation.longitude]
+      ];
 
-    if (points.length === 1) {
-      mapInstanceRef.current.setView(points[0], 14, { animate: isSmooth });
-    } else {
-      const bounds = L.latLngBounds(points);
-      mapInstanceRef.current.fitBounds(bounds, {
-        padding: [60, 60],
-        maxZoom: 15,
-        animate: isSmooth,
-        duration: 0.8
+      onlineDrivers.forEach((driver, idx) => {
+        const offsetLat = (Math.sin(idx * 1.7) * 0.008) + (idx % 2 === 0 ? 0.003 : -0.004);
+        const offsetLng = (Math.cos(idx * 1.7) * 0.009) + (idx % 2 === 0 ? -0.003 : 0.004);
+        const driverLat = (driver.currentLat && !isNaN(driver.currentLat)) ? driver.currentLat : (userLocation.latitude + offsetLat);
+        const driverLng = (driver.currentLng && !isNaN(driver.currentLng)) ? driver.currentLng : (userLocation.longitude + offsetLng);
+        points.push([driverLat, driverLng]);
       });
+
+      if (points.length === 1) {
+        mapInstanceRef.current.setView(points[0], 14, { animate: isSmooth });
+      } else {
+        const bounds = L.latLngBounds(points);
+        mapInstanceRef.current.fitBounds(bounds, {
+          padding: [50, 50],
+          maxZoom: 15,
+          animate: isSmooth,
+          duration: 0.8
+        });
+      }
+    } catch (err) {
+      console.warn('Erro ao ajustar enquadramento do mapa:', err);
     }
   }, [userLocation, onlineDrivers]);
 
@@ -72,11 +77,13 @@ export function NearbyDriversMap({
     mapContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
 
-  // 1. Obter e monitorar GPS real do Cliente (Sem forçar remontagem do mapa)
+  // 1. Obter e monitorar GPS real do Cliente
   useEffect(() => {
     let watchId: number | null = null;
     getCurrentPosition()
-      .then(coords => setUserLocation(coords))
+      .then(coords => {
+        setUserLocation(coords);
+      })
       .catch(() => {});
 
     if ('geolocation' in navigator) {
@@ -107,18 +114,12 @@ export function NearbyDriversMap({
       const finalDrivers = online.length > 0 ? online : all;
       setOnlineDrivers(finalDrivers);
       setLastSyncTime(new Date());
-
-      // Auto-enquadramento inteligente na primeira carga ou sincronização manual
-      if ((!hasAutoFittedRef.current || isManual) && finalDrivers.length > 0) {
-        hasAutoFittedRef.current = true;
-        setTimeout(() => fitMapToAllDrivers(true), 300);
-      }
     } catch (e) {
       console.warn('Erro ao sincronizar motoristas:', e);
     } finally {
       if (isManual) setIsSyncing(false);
     }
-  }, [fitMapToAllDrivers]);
+  }, []);
 
   // 3. Inscrição em Tempo Real (Supabase Realtime) + Polling Suave
   useEffect(() => {
@@ -179,7 +180,29 @@ export function NearbyDriversMap({
 
     userMarkerRef.current = userMarker;
 
+    // Ajustar tamanho e enquadrar automaticamente em múltiplos estágios pós-renderização
+    const t1 = setTimeout(() => {
+      map.invalidateSize();
+      fitMapToAllDrivers(false);
+    }, 100);
+
+    const t2 = setTimeout(() => {
+      map.invalidateSize();
+      fitMapToAllDrivers(true);
+    }, 500);
+
+    const handleResize = () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.invalidateSize();
+        fitMapToAllDrivers(true);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+
     return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      window.removeEventListener('resize', handleResize);
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
@@ -187,6 +210,16 @@ export function NearbyDriversMap({
       }
     };
   }, []); // Run once on mount
+
+  // 4.1 Enquadramento automático sempre que a lista de motoristas carregar ou GPS atualizar
+  useEffect(() => {
+    if (onlineDrivers.length > 0 && mapInstanceRef.current) {
+      const timer = setTimeout(() => {
+        fitMapToAllDrivers(true);
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [onlineDrivers.length, userLocation.latitude, userLocation.longitude, fitMapToAllDrivers]);
 
   // 5. Atualizar posição do passageiro de forma suave (Sem recriar o mapa)
   useEffect(() => {
