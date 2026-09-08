@@ -134,12 +134,18 @@ export const dbSaveProfile = async (profile: UserProfile): Promise<{ success: bo
           is_profile_complete: true
         }), 8000);
       } else if (profile.role === 'driver') {
-        await withTimeout(sb.from('drivers').upsert({
-          id: 'driver_' + profile.id,
-          user_id: profile.id,
-          phone: profile.phone || '',
-          verification_status: 'pending_docs'
-        }), 8000);
+        // APENAS cria a linha se ainda não existir — NUNCA sobrescreve o verification_status
+        // pois ele é gerenciado exclusivamente pelo Admin
+        await withTimeout(
+          sb.from('drivers')
+            .upsert({
+              id: 'driver_' + profile.id,
+              user_id: profile.id,
+              phone: profile.phone || '',
+              verification_status: 'pending_docs'
+            }, { onConflict: 'id', ignoreDuplicates: true }),
+          8000
+        );
       }
 
       return { success: true };
