@@ -156,7 +156,7 @@ export function App() {
   // Informações de rede local
   const localNetworkUrl = `http://192.168.18.71:5173`;
 
-  const isUserAdmin = Boolean(currentUser?.isAdmin || isSuperAdminEmail(currentUser?.email));
+  const isUserAdmin = Boolean(currentUser?.isAdmin || currentUser?.role === 'admin' || isSuperAdminEmail(currentUser?.email));
 
   // Cálculos financeiros
   const totalAmount = hours * hourlyRate;

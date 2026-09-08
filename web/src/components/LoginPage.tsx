@@ -47,13 +47,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
 
   const handleQuickDemo = async (role: UserRole) => {
     setIsLoading(true);
+    const isDemoAdmin = (role as string) === 'admin';
     const demoUser: UserProfile = {
-      id: role === 'client' ? 'client_demo_01' : 'driver_demo_01',
-      email: role === 'client' ? 'passageiro.demo@drivehora.com' : 'motorista.demo@drivehora.com',
-      fullName: role === 'client' ? 'Carlos Eduardo (Passageiro)' : 'Roberto Silva (Motorista)',
+      id: role === 'client' ? 'client_demo_01' : role === 'driver' ? 'driver_demo_01' : 'admin_master_01',
+      email: role === 'client' ? 'passageiro.demo@drivehora.com' : role === 'driver' ? 'motorista.demo@drivehora.com' : 'admin@drivehora.com',
+      fullName: role === 'client' ? 'Carlos Eduardo (Passageiro)' : role === 'driver' ? 'Roberto Silva (Motorista)' : 'Administrador Geral (DriveHora)',
       role: role,
       phone: '(11) 99123-4567',
-      isAdmin: false,
+      isAdmin: isDemoAdmin,
       createdAt: new Date().toISOString()
     };
 
@@ -366,12 +367,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
           </div>
 
           {/* Botões de Acesso Rápido Padrão */}
-          <div style={{ display: 'flex', gap: '10px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
             <button
               type="button"
               onClick={() => handleQuickDemo('client')}
               className="btn-outline"
-              style={{ flex: 1, fontSize: '0.8rem', padding: '12px' }}
+              style={{ fontSize: '0.75rem', padding: '10px 6px', textAlign: 'center' }}
             >
               🚀 Passageiro Demo
             </button>
@@ -379,9 +380,24 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               type="button"
               onClick={() => handleQuickDemo('driver')}
               className="btn-outline"
-              style={{ flex: 1, fontSize: '0.8rem', padding: '12px' }}
+              style={{ fontSize: '0.75rem', padding: '10px 6px', textAlign: 'center' }}
             >
               🚗 Motorista Demo
+            </button>
+            <button
+              type="button"
+              onClick={() => handleQuickDemo('admin')}
+              className="btn-outline"
+              style={{
+                fontSize: '0.75rem',
+                padding: '10px 6px',
+                textAlign: 'center',
+                borderColor: '#f59e0b',
+                color: '#f59e0b',
+                background: 'rgba(245, 158, 11, 0.08)'
+              }}
+            >
+              👑 Admin Demo
             </button>
           </div>
         </div>

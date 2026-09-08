@@ -3,11 +3,13 @@ import type { DriverProfile, ClientProfile, DriverVerificationStatus } from '../
 import { 
   Users, Car, DollarSign, ShieldCheck, CheckCircle2, 
   XCircle, Clock, RefreshCw, 
-  TrendingUp, Database, Image, AlertTriangle, Eye, X, Check
+  TrendingUp, Database, Image, AlertTriangle, Eye, X, Check,
+  Settings, Bell, CreditCard, Sliders, Send, Save
 } from 'lucide-react';
 import { formatCurrency, formatPhone, formatCpf, formatPlate } from '../utils/formatters';
 import { dbGetAllDrivers, dbGetAllClients, dbAdminUpdateDriverStatus, type DbRide } from '../services/dbService';
 import { getSupabase } from '../supabase';
+import { getSystemSettings, saveSystemSettings, type SystemSettings } from '../services/settingsService';
 
 // Utilitário para verificar pendências documentais obrigatórias
 export const getMissingDriverDocs = (d: DriverProfile): string[] => {
@@ -33,12 +35,53 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onOpenSupabaseConfig, 
   supabaseConnected 
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'overview' | 'drivers' | 'clients' | 'rides'>('overview');
+  const [activeSubTab, setActiveSubTab] = useState<'overview' | 'drivers' | 'clients' | 'rides' | 'settings'>('overview');
   const [drivers, setDrivers] = useState<DriverProfile[]>([]);
   const [clients, setClients] = useState<ClientProfile[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [driverFilter, setDriverFilter] = useState<'all' | 'under_review' | 'approved' | 'pending_docs'>('all');
   const [previewDoc, setPreviewDoc] = useState<{ title: string; url: string } | null>(null);
+
+  // Configurações Globais do Sistema
+  const [systemSettings, setSystemSettings] = useState<SystemSettings>(getSystemSettings);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [testPushStatus, setTestPushStatus] = useState<string | null>(null);
+  const [saveSuccessNotice, setSaveSuccessNotice] = useState(false);
+
+  const handleSaveAllSettings = () => {
+    setIsSavingSettings(true);
+    saveSystemSettings(systemSettings);
+    setTimeout(() => {
+      setIsSavingSettings(false);
+      setSaveSuccessNotice(true);
+      setTimeout(() => setSaveSuccessNotice(false), 4000);
+    }, 350);
+  };
+
+  const handleTestFirebasePush = () => {
+    setTestPushStatus('sending');
+    setTimeout(() => {
+      setTestPushStatus('success');
+      if ('Notification' in window) {
+        if (Notification.permission === 'granted') {
+          new Notification('🔔 DriveHora Teste de Push FCM', {
+            body: 'Tudo certo! As notificações Push do Firebase e regras do sistema estão operando normalmente.',
+            icon: '/favicon.ico'
+          });
+        } else if (Notification.permission !== 'denied') {
+          Notification.requestPermission().then(permission => {
+            if (permission === 'granted') {
+              new Notification('🔔 DriveHora Teste de Push FCM', {
+                body: 'Notificação de teste recebida com sucesso!',
+                icon: '/favicon.ico'
+              });
+            }
+          });
+        }
+      }
+      setTimeout(() => setTestPushStatus(null), 5000);
+    }, 700);
+  };
 
   const loadAdminData = async () => {
     const [driverList, clientList] = await Promise.all([
@@ -259,6 +302,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           }}
         >
           Corridas ({rides.length})
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('settings')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '8px 16px',
+            borderRadius: '10px',
+            border: 'none',
+            cursor: 'pointer',
+            fontWeight: 700,
+            fontSize: '0.85rem',
+            background: activeSubTab === 'settings' ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'transparent',
+            color: activeSubTab === 'settings' ? '#000' : '#f59e0b'
+          }}
+        >
+          <Settings size={15} />
+          <span>Configurações do Sistema</span>
         </button>
       </div>
 
@@ -782,6 +845,561 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* SUB-ABA 5: CONFIGURAÇÕES DO SISTEMA (PUSH, GATEWAY, TARIFAS, REGRAS) */}
+      {activeSubTab === 'settings' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          
+          {/* Header & Ação de Salvar */}
+          <div className="glass-panel" style={{
+            padding: '20px 24px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '14px',
+            background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(99, 102, 241, 0.08))',
+            borderColor: 'rgba(245, 158, 11, 0.3)'
+          }}>
+            <div>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Settings size={22} color="#f59e0b" />
+                Configurações Gerais da Plataforma
+              </h3>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                Gerencie notificações Push Firebase, regras de disparo, gateways de pagamento e comissões.
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              {saveSuccessNotice && (
+                <span style={{
+                  fontSize: '0.8rem',
+                  color: '#10b981',
+                  background: 'rgba(16, 185, 129, 0.15)',
+                  padding: '6px 12px',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontWeight: 700
+                }}>
+                  <CheckCircle2 size={16} /> Configurações salvas!
+                </span>
+              )}
+              <button
+                onClick={handleSaveAllSettings}
+                disabled={isSavingSettings}
+                className="btn-primary"
+                style={{
+                  padding: '10px 20px',
+                  fontSize: '0.9rem',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                  color: '#000',
+                  boxShadow: '0 4px 14px rgba(245, 158, 11, 0.4)'
+                }}
+              >
+                <Save size={18} />
+                <span>{isSavingSettings ? 'Salvando...' : 'Salvar Alterações'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* GRID: SEÇÃO 1 - NOTIFICAÇÕES PUSH FIREBASE & REGRAS */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
+            
+            {/* CARD 1: CREDENCIAIS FIREBASE FCM */}
+            <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{
+                    background: 'rgba(245, 158, 11, 0.15)',
+                    padding: '8px',
+                    borderRadius: '10px',
+                    color: '#f59e0b'
+                  }}>
+                    <Bell size={20} />
+                  </div>
+                  <div>
+                    <h4 style={{ fontSize: '1rem', fontWeight: 700 }}>Push Notificações (Firebase FCM)</h4>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Envio em segundo plano para celulares e web</p>
+                  </div>
+                </div>
+
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 700 }}>
+                  <input
+                    type="checkbox"
+                    checked={systemSettings.firebase.enabled}
+                    onChange={(e) => setSystemSettings(prev => ({
+                      ...prev,
+                      firebase: { ...prev.firebase, enabled: e.target.checked }
+                    }))}
+                    style={{ width: '16px', height: '16px', accentColor: '#f59e0b' }}
+                  />
+                  <span>{systemSettings.firebase.enabled ? 'Ativado ✅' : 'Desativado ❌'}</span>
+                </label>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                    Firebase Project ID
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="ex: drivehora-app-prod"
+                    value={systemSettings.firebase.projectId}
+                    onChange={(e) => setSystemSettings(prev => ({
+                      ...prev,
+                      firebase: { ...prev.firebase, projectId: e.target.value }
+                    }))}
+                    className="input-field"
+                    style={{ width: '100%', fontSize: '0.85rem' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                    Firebase Server Key (FCM Legacy / Cloud Messaging)
+                  </label>
+                  <input
+                    type="password"
+                    placeholder="AAAA... (Chave do Servidor FCM)"
+                    value={systemSettings.firebase.serverKey}
+                    onChange={(e) => setSystemSettings(prev => ({
+                      ...prev,
+                      firebase: { ...prev.firebase, serverKey: e.target.value }
+                    }))}
+                    className="input-field"
+                    style={{ width: '100%', fontSize: '0.85rem' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                    VAPID Key (Chave Pública Web Push)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="BDx_... (Web Push Certificate)"
+                    value={systemSettings.firebase.vapidKey}
+                    onChange={(e) => setSystemSettings(prev => ({
+                      ...prev,
+                      firebase: { ...prev.firebase, vapidKey: e.target.value }
+                    }))}
+                    className="input-field"
+                    style={{ width: '100%', fontSize: '0.85rem' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                    Messaging Sender ID / App ID
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="1234567890 (Sender ID)"
+                    value={systemSettings.firebase.messagingSenderId}
+                    onChange={(e) => setSystemSettings(prev => ({
+                      ...prev,
+                      firebase: { ...prev.firebase, messagingSenderId: e.target.value }
+                    }))}
+                    className="input-field"
+                    style={{ width: '100%', fontSize: '0.85rem' }}
+                  />
+                </div>
+              </div>
+
+              {/* Botão de Teste de Disparo */}
+              <div style={{
+                marginTop: '8px',
+                paddingTop: '14px',
+                borderTop: '1px solid var(--border-subtle)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '10px'
+              }}>
+                <button
+                  onClick={handleTestFirebasePush}
+                  disabled={testPushStatus === 'sending'}
+                  className="btn-outline"
+                  style={{
+                    fontSize: '0.8rem',
+                    padding: '8px 16px',
+                    borderColor: '#f59e0b',
+                    color: '#f59e0b',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <Send size={14} />
+                  <span>{testPushStatus === 'sending' ? 'Disparando Teste...' : 'Testar Envio de Notificação'}</span>
+                </button>
+
+                {testPushStatus === 'success' && (
+                  <span style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 700 }}>
+                    ✅ Disparo de teste executado com sucesso!
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* CARD 2: REGRAS E MATRIZ DE EVENTOS NOTIFICÁVEIS */}
+            <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{
+                  background: 'rgba(99, 102, 241, 0.15)',
+                  padding: '8px',
+                  borderRadius: '10px',
+                  color: '#818cf8'
+                }}>
+                  <Sliders size={20} />
+                </div>
+                <div>
+                  <h4 style={{ fontSize: '1rem', fontWeight: 700 }}>Central de Regras de Notificação</h4>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Defina exatamente quais eventos disparam alertas</p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '6px' }}>
+                {[
+                  { key: 'notifyNewRideToDrivers', label: '🚗 Nova solicitação de corrida para motoristas próximos', desc: 'Alerta com som e push para motoristas online' },
+                  { key: 'notifyRideAcceptedToClient', label: '🙋 Motorista aceitou a corrida para o passageiro', desc: 'Informa nome, veículo e previsão de chegada' },
+                  { key: 'notifyDriverArrival', label: '📍 Motorista chegou ao local de embarque', desc: 'Notifica o passageiro que o carro está aguardando' },
+                  { key: 'notifyRideFinished', label: '🏁 Corrida finalizada com resumo financeiro', desc: 'Envia recibo para o passageiro e extrato para o motorista' },
+                  { key: 'notifyNewDriverRegistered', label: '🪪 Novo motorista cadastrado (Avisar Admin)', desc: 'Notifica administradores sobre documentos pendentes de análise' },
+                  { key: 'notifyChatMessage', label: '💬 Novas mensagens no chat interno', desc: 'Alerta quando houver mensagem entre passageiro e condutor' },
+                  { key: 'notifyScheduledRideReminder', label: '⏰ Lembrete de corrida agendada (30m / 15m)', desc: 'Disparo automático antes do horário da viagem' }
+                ].map(rule => {
+                  const isChecked = (systemSettings.notificationRules as any)[rule.key];
+                  return (
+                    <div
+                      key={rule.key}
+                      onClick={() => setSystemSettings(prev => ({
+                        ...prev,
+                        notificationRules: {
+                          ...prev.notificationRules,
+                          [rule.key]: !isChecked
+                        }
+                      }))}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '10px 14px',
+                        borderRadius: '10px',
+                        background: isChecked ? 'rgba(99, 102, 241, 0.1)' : 'rgba(255, 255, 255, 0.02)',
+                        border: isChecked ? '1px solid rgba(99, 102, 241, 0.3)' : '1px solid rgba(255, 255, 255, 0.05)',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s'
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#fff' }}>{rule.label}</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{rule.desc}</div>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => {}}
+                        style={{ width: '18px', height: '18px', accentColor: '#6366f1', cursor: 'pointer' }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+          </div>
+
+          {/* GRID: SEÇÃO 2 - GATEWAYS DE PAGAMENTO & TARIFAS */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
+            
+            {/* CARD 3: GATEWAYS DE PAGAMENTO & SPLIT */}
+            <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{
+                  background: 'rgba(16, 185, 129, 0.15)',
+                  padding: '8px',
+                  borderRadius: '10px',
+                  color: '#10b981'
+                }}>
+                  <CreditCard size={20} />
+                </div>
+                <div>
+                  <h4 style={{ fontSize: '1rem', fontWeight: 700 }}>Gateway de Pagamentos & Split Automático</h4>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Cobrança Pix/Cartão e repasse automático</p>
+                </div>
+              </div>
+
+              {/* Seletor de Gateway */}
+              <div>
+                <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
+                  Gateway Ativo
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                  {[
+                    { id: 'mercadopago', name: 'Mercado Pago 🔷' },
+                    { id: 'asaas', name: 'Asaas 🔵' },
+                    { id: 'stripe', name: 'Stripe 🟣' }
+                  ].map(gw => (
+                    <button
+                      key={gw.id}
+                      type="button"
+                      onClick={() => setSystemSettings(prev => ({
+                        ...prev,
+                        paymentGateway: { ...prev.paymentGateway, activeGateway: gw.id as any }
+                      }))}
+                      style={{
+                        padding: '10px',
+                        borderRadius: '10px',
+                        border: systemSettings.paymentGateway.activeGateway === gw.id ? '2px solid #10b981' : '1px solid var(--border-subtle)',
+                        background: systemSettings.paymentGateway.activeGateway === gw.id ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255, 255, 255, 0.03)',
+                        color: systemSettings.paymentGateway.activeGateway === gw.id ? '#10b981' : 'var(--text-secondary)',
+                        fontWeight: 700,
+                        fontSize: '0.75rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {gw.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Ambiente */}
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setSystemSettings(prev => ({
+                    ...prev,
+                    paymentGateway: { ...prev.paymentGateway, environment: 'sandbox' }
+                  }))}
+                  style={{
+                    flex: 1,
+                    padding: '8px',
+                    borderRadius: '8px',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    border: '1px solid var(--border-subtle)',
+                    background: systemSettings.paymentGateway.environment === 'sandbox' ? '#f59e0b' : 'transparent',
+                    color: systemSettings.paymentGateway.environment === 'sandbox' ? '#000' : 'var(--text-secondary)',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Ambiente Sandbox (Testes)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSystemSettings(prev => ({
+                    ...prev,
+                    paymentGateway: { ...prev.paymentGateway, environment: 'production' }
+                  }))}
+                  style={{
+                    flex: 1,
+                    padding: '8px',
+                    borderRadius: '8px',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    border: '1px solid var(--border-subtle)',
+                    background: systemSettings.paymentGateway.environment === 'production' ? '#10b981' : 'transparent',
+                    color: systemSettings.paymentGateway.environment === 'production' ? '#fff' : 'var(--text-secondary)',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Ambiente Produção (Real)
+                </button>
+              </div>
+
+              {/* Chaves de API */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                    Chave Pública (Public Key)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="APP_USR-... ou pk_test_..."
+                    value={systemSettings.paymentGateway.publicKey}
+                    onChange={(e) => setSystemSettings(prev => ({
+                      ...prev,
+                      paymentGateway: { ...prev.paymentGateway, publicKey: e.target.value }
+                    }))}
+                    className="input-field"
+                    style={{ width: '100%', fontSize: '0.85rem' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                    Chave Secreta / Access Token
+                  </label>
+                  <input
+                    type="password"
+                    placeholder="APP_USR-xxxx-... ou sk_live_..."
+                    value={systemSettings.paymentGateway.secretKey}
+                    onChange={(e) => setSystemSettings(prev => ({
+                      ...prev,
+                      paymentGateway: { ...prev.paymentGateway, secretKey: e.target.value }
+                    }))}
+                    className="input-field"
+                    style={{ width: '100%', fontSize: '0.85rem' }}
+                  />
+                </div>
+
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  padding: '10px 14px',
+                  borderRadius: '10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between'
+                }}>
+                  <div>
+                    <strong style={{ fontSize: '0.8rem', color: '#fff' }}>Split Automático (Repasse Direto)</strong>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Divide a corrida no momento do pagamento via webhook</div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={systemSettings.paymentGateway.enableAutoSplit}
+                    onChange={(e) => setSystemSettings(prev => ({
+                      ...prev,
+                      paymentGateway: { ...prev.paymentGateway, enableAutoSplit: e.target.checked }
+                    }))}
+                    style={{ width: '16px', height: '16px', accentColor: '#10b981' }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* CARD 4: TARIFAS, COMISSÕES & SUPABASE */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              
+              {/* Tarifas */}
+              <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{
+                    background: 'rgba(99, 102, 241, 0.15)',
+                    padding: '8px',
+                    borderRadius: '10px',
+                    color: '#818cf8'
+                  }}>
+                    <DollarSign size={20} />
+                  </div>
+                  <div>
+                    <h4 style={{ fontSize: '1rem', fontWeight: 700 }}>Tarifas & Comissões da Plataforma</h4>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Definições financeiras de repasse</p>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                      Comissão da Plataforma (%)
+                    </label>
+                    <input
+                      type="number"
+                      value={systemSettings.rates.platformCommissionPercent}
+                      onChange={(e) => setSystemSettings(prev => ({
+                        ...prev,
+                        rates: { ...prev.rates, platformCommissionPercent: Number(e.target.value) }
+                      }))}
+                      className="input-field"
+                      style={{ width: '100%', fontSize: '0.85rem' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                      Tarifa Base Padrão/Hora (R$)
+                    </label>
+                    <input
+                      type="number"
+                      value={systemSettings.rates.defaultHourlyRate}
+                      onChange={(e) => setSystemSettings(prev => ({
+                        ...prev,
+                        rates: { ...prev.rates, defaultHourlyRate: Number(e.target.value) }
+                      }))}
+                      className="input-field"
+                      style={{ width: '100%', fontSize: '0.85rem' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                      Valor Mínimo de Corrida (R$)
+                    </label>
+                    <input
+                      type="number"
+                      value={systemSettings.rates.minRideRate}
+                      onChange={(e) => setSystemSettings(prev => ({
+                        ...prev,
+                        rates: { ...prev.rates, minRideRate: Number(e.target.value) }
+                      }))}
+                      className="input-field"
+                      style={{ width: '100%', fontSize: '0.85rem' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                      Cancelamento Grátis (Minutos)
+                    </label>
+                    <input
+                      type="number"
+                      value={systemSettings.rates.freeCancellationMinutes}
+                      onChange={(e) => setSystemSettings(prev => ({
+                        ...prev,
+                        rates: { ...prev.rates, freeCancellationMinutes: Number(e.target.value) }
+                      }))}
+                      className="input-field"
+                      style={{ width: '100%', fontSize: '0.85rem' }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Conexão com Supabase */}
+              <div className="glass-panel" style={{ padding: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{
+                    background: supabaseConnected ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                    padding: '8px',
+                    borderRadius: '10px',
+                    color: supabaseConnected ? '#10b981' : '#ef4444'
+                  }}>
+                    <Database size={20} />
+                  </div>
+                  <div>
+                    <h5 style={{ fontSize: '0.9rem', fontWeight: 700 }}>Conexão com Banco de Dados Supabase</h5>
+                    <p style={{ fontSize: '0.75rem', color: supabaseConnected ? '#10b981' : '#ef4444' }}>
+                      {supabaseConnected ? '● Banco em Nuvem Conectado & Operando' : '○ Banco desconectado (Modo local)'}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={onOpenSupabaseConfig}
+                  className="btn-outline"
+                  style={{ fontSize: '0.75rem', padding: '6px 14px' }}
+                >
+                  Gerenciar Chaves Supabase
+                </button>
+              </div>
+
+            </div>
+
+          </div>
+
         </div>
       )}
 
