@@ -143,17 +143,18 @@ export function FavoriteDriversList({
             >
               {/* Topo do Card */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: 1 }}>
                   <div style={{
-                    width: '52px',
-                    height: '52px',
+                    width: '50px',
+                    height: '50px',
+                    minWidth: '50px',
                     borderRadius: '16px',
                     background: 'linear-gradient(135deg, #10b981, #059669)',
                     overflow: 'hidden',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    fontSize: '1.4rem',
+                    fontSize: '1.3rem',
                     color: '#fff',
                     flexShrink: 0
                   }}>
@@ -164,11 +165,31 @@ export function FavoriteDriversList({
                     )}
                   </div>
 
-                  <div>
-                    <h4 style={{ fontSize: '1rem', fontWeight: 800, margin: 0, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
+                    <h4 
+                      style={{ 
+                        fontSize: '1rem', 
+                        fontWeight: 800, 
+                        margin: 0, 
+                        color: '#fff', 
+                        whiteSpace: 'nowrap', 
+                        overflow: 'hidden', 
+                        textOverflow: 'ellipsis' 
+                      }}
+                      title={driver.displayName}
+                    >
                       {driver.displayName}
                     </h4>
-                    <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                    <span 
+                      style={{ 
+                        fontSize: '0.75rem', 
+                        color: '#94a3b8', 
+                        display: 'block', 
+                        whiteSpace: 'nowrap', 
+                        overflow: 'hidden', 
+                        textOverflow: 'ellipsis' 
+                      }}
+                    >
                       {driver.vehicleBrand} {driver.vehicleModel}
                     </span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px', fontSize: '0.75rem' }}>
@@ -194,7 +215,8 @@ export function FavoriteDriversList({
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    flexShrink: 0
                   }}
                 >
                   <Heart size={15} fill="#ef4444" />

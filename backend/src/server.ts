@@ -2,21 +2,57 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import admin from "firebase-admin";
+import path from "path";
+import fs from "fs";
 
 dotenv.config();
 
 let useFirestore = false;
 let db: admin.firestore.Firestore | null = null;
+let messaging: admin.messaging.Messaging | null = null;
 
 try {
   if (!admin.apps.length) {
-    admin.initializeApp({
-      credential: admin.credential.applicationDefault()
-    });
+    const keyPaths = [
+      path.resolve(__dirname, "../../firebase/serviceAccountKey.json"),
+      path.resolve(__dirname, "../../firebase/drivehora-firebase-adminsdk-fbsvc-649b59a442.json"),
+      path.resolve(process.cwd(), "firebase/serviceAccountKey.json"),
+      path.resolve(process.cwd(), "../firebase/serviceAccountKey.json")
+    ];
+
+    let serviceAccount: any = null;
+    if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+      try {
+        serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+      } catch (e) {}
+    }
+
+    if (!serviceAccount) {
+      for (const p of keyPaths) {
+        if (fs.existsSync(p)) {
+          serviceAccount = JSON.parse(fs.readFileSync(p, "utf-8"));
+          console.log(`Carregando credenciais Firebase de: ${p}`);
+          break;
+        }
+      }
+    }
+
+    if (serviceAccount) {
+      admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+        projectId: serviceAccount.project_id || "drivehora"
+      });
+    } else {
+      admin.initializeApp({
+        credential: admin.credential.applicationDefault()
+      });
+    }
   }
+
   db = admin.firestore();
+  messaging = admin.messaging();
   useFirestore = true;
-  console.log("Firebase Admin inicializado com sucesso.");
+  console.log("Firebase Admin SDK e Cloud Messaging inicializados com sucesso.");
 } catch (err: any) {
   console.warn("Aviso: Firebase Admin sem credenciais ativas. Rodando em modo de memória local (desenvolvimento).", err?.message);
   useFirestore = false;
@@ -247,6 +283,68 @@ app.post("/rides/:id/finish", async (req, res) => {
   }
 
   res.json({ ok: true, ride: memoryRides.get(id) });
+});
+
+// Disparo de Push Notifications via Firebase Cloud Messaging
+app.post(["/notifications/push", "/api/notifications/push"], async (req, res) => {
+  const { token, tokens, title, body, data } = req.body;
+
+  if (!messaging) {
+    return res.status(503).json({ 
+      error: "Firebase Cloud Messaging não inicializado",
+      detail: "Verifique o arquivo serviceAccountKey.json ou a variável FIREBASE_SERVICE_ACCOUNT."
+    });
+  }
+
+  try {
+    if (token) {
+      const response = await messaging.send({
+        token,
+        notification: { title: title || "DriveHora", body: body || "" },
+        data: data || {}
+      });
+      return res.json({ ok: true, messageId: response });
+    }
+
+    if (tokens && Array.isArray(tokens) && tokens.length > 0) {
+      const response = await messaging.sendEachForMulticast({
+        tokens,
+        notification: { title: title || "DriveHora", body: body || "" },
+        data: data || {}
+      });
+      return res.json({ 
+        ok: true, 
+        successCount: response.successCount, 
+        failureCount: response.failureCount 
+      });
+    }
+
+    return res.status(400).json({ error: "Informe 'token' ou 'tokens'" });
+  } catch (err: any) {
+    console.error("Erro ao enviar push via FCM:", err);
+    return res.status(500).json({ error: "Falha no envio de push FCM", detail: err?.message });
+  }
+});
+
+// Envio para Tópico (ex: 'drivers', 'clients')
+app.post(["/notifications/topic", "/api/notifications/topic"], async (req, res) => {
+  const { topic, title, body, data } = req.body;
+
+  if (!messaging) {
+    return res.status(503).json({ error: "Firebase Cloud Messaging não inicializado" });
+  }
+
+  try {
+    const response = await messaging.send({
+      topic: topic || "drivers",
+      notification: { title: title || "DriveHora Alerta", body: body || "" },
+      data: data || {}
+    });
+    return res.json({ ok: true, messageId: response });
+  } catch (err: any) {
+    console.error("Erro ao enviar push para tópico:", err);
+    return res.status(500).json({ error: "Falha no envio para tópico", detail: err?.message });
+  }
 });
 
 const PORT = Number(process.env.PORT || 3000);

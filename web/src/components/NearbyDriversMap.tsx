@@ -473,7 +473,7 @@ export function NearbyDriversMap({
             )}
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(310px, 1fr))', gap: '16px' }}>
             {onlineDrivers.map((d, index) => {
               const driverId = d.id || `driver_${d.userId || index}`;
               const driverLat = (d.currentLat && !isNaN(d.currentLat)) ? d.currentLat : userLocation.latitude;
@@ -482,7 +482,8 @@ export function NearbyDriversMap({
               const estimatedMins = Math.max(1, Math.round(Number(calculatedKm) * 2.2));
               const hasExactGps = Boolean(d.currentLat && d.currentLng);
 
-              const driverDisplayName = d.fullName || d.driverName || 'Motorista Parceiro';
+              const rawName = d.fullName || d.driverName || 'Motorista Parceiro';
+              const driverDisplayName = rawName;
               const isDriverFav = favoriteDriverIds.includes(driverId) || (d.userId ? favoriteDriverIds.includes(d.userId) : false);
 
               const handleCardOpenProfile = async (e: React.MouseEvent) => {
@@ -502,90 +503,182 @@ export function NearbyDriversMap({
                 }
               };
 
+              const vehicleName = d.vehicleBrand 
+                ? `${d.vehicleBrand} ${d.vehicleModel || ''}`.trim() 
+                : 'Veículo Particular';
+
               return (
                 <div 
                   key={driverId} 
                   className="glass-panel" 
                   style={{ 
-                    padding: '18px', 
+                    padding: '16px 18px', 
                     display: 'flex', 
                     flexDirection: 'column', 
                     gap: '12px',
                     cursor: 'pointer',
-                    transition: 'transform 0.2s, border-color 0.2s',
-                    borderColor: 'rgba(255, 255, 255, 0.08)'
+                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                    borderColor: 'rgba(255, 255, 255, 0.08)',
+                    borderRadius: '18px',
+                    overflow: 'hidden',
+                    boxSizing: 'border-box',
+                    position: 'relative'
                   }}
-                  onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'rgba(16, 185, 129, 0.4)')}
-                  onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)')}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = 'rgba(16, 185, 129, 0.45)';
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 8px 24px -6px rgba(16, 185, 129, 0.15)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
                   onClick={() => focusOnDriver(driverId, driverLat, driverLng)}
                   title="Clique para localizar no mapa"
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  {/* Cabeçalho do Card */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                    {/* Informações Principais (Avatar + Dados) */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: 1 }}>
                       <div style={{
-                        width: '44px',
-                        height: '44px',
-                        borderRadius: '50%',
+                        width: '46px',
+                        height: '46px',
+                        minWidth: '46px',
+                        flexShrink: 0,
+                        borderRadius: '14px',
                         background: 'linear-gradient(135deg, #10b981, #059669)',
                         color: '#fff',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         fontWeight: 800,
-                        fontSize: '1.1rem'
+                        fontSize: '1.2rem',
+                        overflow: 'hidden',
+                        boxShadow: '0 4px 12px rgba(16, 185, 129, 0.25)'
                       }}>
-                        🚗
+                        {d.selfieUrl ? (
+                          <img 
+                            src={d.selfieUrl} 
+                            alt={driverDisplayName} 
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                          />
+                        ) : (
+                          '🚗'
+                        )}
                       </div>
-                      <div>
-                        <h4 style={{ fontSize: '0.95rem', fontWeight: 700, margin: 0, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span>👤</span> {driverDisplayName}
+
+                      <div style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
+                        <h4 
+                          style={{ 
+                            fontSize: '0.95rem', 
+                            fontWeight: 700, 
+                            margin: 0, 
+                            color: '#fff', 
+                            whiteSpace: 'nowrap', 
+                            overflow: 'hidden', 
+                            textOverflow: 'ellipsis',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '5px'
+                          }} 
+                          title={driverDisplayName}
+                        >
+                          <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {driverDisplayName}
+                          </span>
                         </h4>
-                        <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '2px' }}>
-                          🚗 {d.vehicleBrand ? `${d.vehicleBrand} ${d.vehicleModel}` : 'Veículo Particular'}
+
+                        <div 
+                          style={{ 
+                            fontSize: '0.8rem', 
+                            color: '#94a3b8', 
+                            marginTop: '2px', 
+                            whiteSpace: 'nowrap', 
+                            overflow: 'hidden', 
+                            textOverflow: 'ellipsis' 
+                          }}
+                          title={vehicleName}
+                        >
+                          🚗 {vehicleName}
                         </div>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                          Placa: <strong>{d.vehiclePlate || 'Mercosul'}</strong> • {d.vehicleColor || 'Carro Executivo'}
+
+                        <div 
+                          style={{ 
+                            fontSize: '0.75rem', 
+                            color: 'var(--text-muted)', 
+                            marginTop: '1px', 
+                            whiteSpace: 'nowrap', 
+                            overflow: 'hidden', 
+                            textOverflow: 'ellipsis' 
+                          }}
+                        >
+                          Placa: <strong style={{ color: '#cbd5e1' }}>{d.vehiclePlate || 'Mercosul'}</strong> • {d.vehicleColor || 'Executivo'}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Botão Favoritar e Badge de Status */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px', flexShrink: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        {onToggleFavorite && (
+                          <button
+                            onClick={handleCardFavorite}
+                            title={isDriverFav ? 'Remover dos favoritos' : 'Favoritar este motorista'}
+                            style={{
+                              background: isDriverFav ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255, 255, 255, 0.06)',
+                              border: isDriverFav ? '1px solid rgba(239, 68, 68, 0.4)' : '1px solid rgba(255, 255, 255, 0.1)',
+                              color: isDriverFav ? '#ef4444' : '#94a3b8',
+                              width: '28px',
+                              height: '28px',
+                              borderRadius: '50%',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s'
+                            }}
+                          >
+                            <Heart size={14} fill={isDriverFav ? '#ef4444' : 'none'} />
+                          </button>
+                        )}
+
+                        <span style={{
+                          fontSize: '0.7rem',
+                          background: hasExactGps ? 'rgba(16, 185, 129, 0.15)' : 'rgba(99, 102, 241, 0.15)',
+                          color: hasExactGps ? '#10b981' : '#818cf8',
+                          border: `1px solid ${hasExactGps ? 'rgba(16, 185, 129, 0.3)' : 'rgba(99, 102, 241, 0.3)'}`,
+                          padding: '3px 8px',
+                          borderRadius: '8px',
+                          fontWeight: 700,
+                          whiteSpace: 'nowrap',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px'
+                        }}>
+                          <span style={{ 
+                            width: '6px', 
+                            height: '6px', 
+                            borderRadius: '50%', 
+                            background: hasExactGps ? '#10b981' : '#818cf8',
+                            boxShadow: hasExactGps ? '0 0 6px #10b981' : 'none'
+                          }}></span>
+                          {hasExactGps ? 'GPS Real' : 'Online'}
                         </span>
                       </div>
                     </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      {/* Botão Favoritar no Card */}
-                      {onToggleFavorite && (
-                        <button
-                          onClick={handleCardFavorite}
-                          title={isDriverFav ? 'Remover dos favoritos' : 'Favoritar este motorista'}
-                          style={{
-                            background: isDriverFav ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255, 255, 255, 0.06)',
-                            border: isDriverFav ? '1px solid rgba(239, 68, 68, 0.4)' : '1px solid rgba(255, 255, 255, 0.1)',
-                            color: isDriverFav ? '#ef4444' : '#fff',
-                            width: '30px',
-                            height: '30px',
-                            borderRadius: '50%',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          <Heart size={14} fill={isDriverFav ? '#ef4444' : 'none'} />
-                        </button>
-                      )}
-
-                      <span style={{
-                        fontSize: '0.7rem',
-                        background: 'rgba(16, 185, 129, 0.15)',
-                        color: '#10b981',
-                        padding: '3px 8px',
-                        borderRadius: '10px',
-                        fontWeight: 700
-                      }}>
-                        {hasExactGps ? '🟢 GPS Real' : '🟢 Online'}
-                      </span>
-                    </div>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', color: 'var(--text-secondary)', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '10px' }}>
+                  {/* Informações de Avaliação e Proximidade */}
+                  <div style={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center', 
+                    fontSize: '0.8rem', 
+                    color: 'var(--text-secondary)', 
+                    borderTop: '1px solid rgba(255,255,255,0.06)', 
+                    paddingTop: '10px' 
+                  }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#f59e0b', fontWeight: 700 }}>
                       <Star size={14} fill="#f59e0b" />
                       <span>{d.rating || '5.0'}</span>
@@ -604,7 +697,14 @@ export function NearbyDriversMap({
                       <button
                         onClick={handleCardOpenProfile}
                         className="btn-outline"
-                        style={{ width: '100%', padding: '7px', fontSize: '0.75rem', justifyContent: 'center' }}
+                        style={{ 
+                          width: '100%', 
+                          padding: '8px 12px', 
+                          fontSize: '0.78rem', 
+                          justifyContent: 'center',
+                          borderRadius: '10px',
+                          background: 'rgba(255, 255, 255, 0.04)'
+                        }}
                       >
                         <User size={13} />
                         <span>Ver Ficha Executiva</span>

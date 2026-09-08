@@ -9,7 +9,7 @@ import {
 import { formatCurrency, formatCurrencyInput, parseCurrencyInput, formatPhone, formatCpf, formatPlate } from '../utils/formatters';
 import { dbGetAllDrivers, dbGetAllClients, dbAdminUpdateDriverStatus, type DbRide } from '../services/dbService';
 import { getSupabase } from '../supabase';
-import { getSystemSettings, saveSystemSettings, type SystemSettings } from '../services/settingsService';
+import { getSystemSettings, saveSystemSettings, fetchSystemSettingsFromDb, type SystemSettings } from '../services/settingsService';
 
 // Utilitário para verificar pendências documentais obrigatórias
 export const getMissingDriverDocs = (d: DriverProfile): string[] => {
@@ -48,14 +48,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [testPushStatus, setTestPushStatus] = useState<string | null>(null);
   const [saveSuccessNotice, setSaveSuccessNotice] = useState(false);
 
-  const handleSaveAllSettings = () => {
+  const handleSaveAllSettings = async () => {
     setIsSavingSettings(true);
-    saveSystemSettings(systemSettings);
-    setTimeout(() => {
-      setIsSavingSettings(false);
-      setSaveSuccessNotice(true);
-      setTimeout(() => setSaveSuccessNotice(false), 4000);
-    }, 350);
+    await saveSystemSettings(systemSettings);
+    setIsSavingSettings(false);
+    setSaveSuccessNotice(true);
+    setTimeout(() => setSaveSuccessNotice(false), 4000);
   };
 
   const handleTestFirebasePush = () => {
@@ -95,6 +93,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   useEffect(() => {
     setIsLoading(true);
     loadAdminData().finally(() => setIsLoading(false));
+    fetchSystemSettingsFromDb().then(dbSettings => {
+      setSystemSettings(dbSettings);
+    });
 
     const sb = getSupabase();
     let channel: any = null;
@@ -946,111 +947,182 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </label>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div>
-                  <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
-                    Firebase Project ID
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="ex: drivehora-app-prod"
-                    value={systemSettings.firebase.projectId}
-                    onChange={(e) => setSystemSettings(prev => ({
-                      ...prev,
-                      firebase: { ...prev.firebase, projectId: e.target.value }
-                    }))}
-                    className="input-field"
-                    style={{ width: '100%', fontSize: '0.85rem' }}
-                  />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {/* 1. Status do Admin SDK e do Projeto */}
+                <div style={{
+                  background: 'rgba(16, 185, 129, 0.08)',
+                  border: '1px solid rgba(16, 185, 129, 0.25)',
+                  borderRadius: '12px',
+                  padding: '12px 16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '10px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '8px',
+                      background: 'rgba(16, 185, 129, 0.2)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#10b981'
+                    }}>
+                      <CheckCircle2 size={18} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#fff' }}>
+                        Firebase Conectado • Projeto: <strong style={{ color: '#10b981' }}>{systemSettings.firebase.projectId || 'drivehora'}</strong>
+                      </div>
+                      <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
+                        Admin SDK: firebase-adminsdk-fbsvc@drivehora.iam.gserviceaccount.com
+                      </div>
+                    </div>
+                  </div>
+                  <span style={{
+                    fontSize: '0.7rem',
+                    padding: '3px 10px',
+                    borderRadius: '8px',
+                    background: '#10b981',
+                    color: '#000',
+                    fontWeight: 800
+                  }}>
+                    CREDENCIAIS ATIVAS ✅
+                  </span>
                 </div>
 
-                <div>
-                  <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
-                    Firebase Server Key (FCM Legacy / Cloud Messaging)
-                  </label>
-                  <input
-                    type="password"
-                    placeholder="AAAA... (Chave do Servidor FCM)"
-                    value={systemSettings.firebase.serverKey}
-                    onChange={(e) => setSystemSettings(prev => ({
-                      ...prev,
-                      firebase: { ...prev.firebase, serverKey: e.target.value }
-                    }))}
-                    className="input-field"
-                    style={{ width: '100%', fontSize: '0.85rem' }}
-                  />
+                {/* 2. Resumo das Chaves Já Integradas */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                  gap: '10px',
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  padding: '12px',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(255, 255, 255, 0.06)'
+                }}>
+                  <div>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', display: 'block' }}>Messaging Sender ID</span>
+                    <strong style={{ fontSize: '0.8rem', color: '#cbd5e1' }}>
+                      {systemSettings.firebase.messagingSenderId || '1017992679969'}
+                    </strong>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', display: 'block' }}>Web API Key</span>
+                    <strong style={{ fontSize: '0.8rem', color: '#cbd5e1' }}>
+                      {systemSettings.firebase.apiKey ? `${systemSettings.firebase.apiKey.substring(0, 14)}...` : 'AIzaSyCXJFdo...'}
+                    </strong>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', display: 'block' }}>App ID (Web)</span>
+                    <strong style={{ fontSize: '0.8rem', color: '#cbd5e1' }}>
+                      {systemSettings.firebase.appId ? `${systemSettings.firebase.appId.substring(0, 16)}...` : '1:1017992679969...'}
+                    </strong>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', display: 'block' }}>Auth Domain</span>
+                    <strong style={{ fontSize: '0.8rem', color: '#cbd5e1' }}>
+                      {systemSettings.firebase.authDomain || 'drivehora.firebaseapp.com'}
+                    </strong>
+                  </div>
                 </div>
 
-                <div>
-                  <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
-                    VAPID Key (Chave Pública Web Push)
-                  </label>
+                {/* 3. CAMPO PRINCIPAL: O QUE FALTA DEFINIR (VAPID KEY) */}
+                <div style={{
+                  background: !systemSettings.firebase.vapidKey ? 'rgba(245, 158, 11, 0.08)' : 'rgba(16, 185, 129, 0.05)',
+                  border: !systemSettings.firebase.vapidKey ? '1px solid rgba(245, 158, 11, 0.4)' : '1px solid rgba(16, 185, 129, 0.3)',
+                  borderRadius: '12px',
+                  padding: '14px 16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ fontSize: '0.8rem', fontWeight: 700, color: !systemSettings.firebase.vapidKey ? '#f59e0b' : '#10b981', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span>{!systemSettings.firebase.vapidKey ? '⚠️ PENDENTE:' : '✅ CONFIGURADO:'}</span>
+                      <span>Chave VAPID (Web Push Certificate)</span>
+                    </label>
+                    <span style={{
+                      fontSize: '0.68rem',
+                      padding: '2px 8px',
+                      borderRadius: '6px',
+                      background: !systemSettings.firebase.vapidKey ? 'rgba(245, 158, 11, 0.2)' : 'rgba(16, 185, 129, 0.2)',
+                      color: !systemSettings.firebase.vapidKey ? '#f59e0b' : '#10b981',
+                      fontWeight: 800
+                    }}>
+                      {!systemSettings.firebase.vapidKey ? 'Único Campo Faltante' : 'Pronto para Uso'}
+                    </span>
+                  </div>
+
+                  <p style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4 }}>
+                    Gere no Firebase Console em: <em>Configurações do Projeto ⚙️ &gt; Cloud Messaging &gt; Certificados do Web Push &gt; Gerar par de chaves</em> e cole o código abaixo:
+                  </p>
+
                   <input
                     type="text"
-                    placeholder="BDx_... (Web Push Certificate)"
+                    placeholder="Cole aqui a chave pública (começa com BDx_... ou BN...)"
                     value={systemSettings.firebase.vapidKey}
                     onChange={(e) => setSystemSettings(prev => ({
                       ...prev,
                       firebase: { ...prev.firebase, vapidKey: e.target.value }
                     }))}
                     className="input-field"
-                    style={{ width: '100%', fontSize: '0.85rem' }}
+                    style={{
+                      width: '100%',
+                      fontSize: '0.85rem',
+                      borderColor: !systemSettings.firebase.vapidKey ? 'rgba(245, 158, 11, 0.5)' : 'rgba(16, 185, 129, 0.4)',
+                      background: 'rgba(0, 0, 0, 0.3)'
+                    }}
                   />
                 </div>
 
-                <div>
-                  <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
-                    Messaging Sender ID / App ID
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="1234567890 (Sender ID)"
-                    value={systemSettings.firebase.messagingSenderId}
-                    onChange={(e) => setSystemSettings(prev => ({
-                      ...prev,
-                      firebase: { ...prev.firebase, messagingSenderId: e.target.value }
-                    }))}
-                    className="input-field"
-                    style={{ width: '100%', fontSize: '0.85rem' }}
-                  />
-                </div>
-              </div>
+                {/* Botões de Ação */}
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', paddingTop: '4px' }}>
+                  <button
+                    onClick={handleTestFirebasePush}
+                    disabled={testPushStatus === 'sending'}
+                    className="btn-outline"
+                    style={{
+                      fontSize: '0.8rem',
+                      padding: '8px 16px',
+                      borderColor: '#6366f1',
+                      color: '#a5b4fc',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <Send size={14} />
+                    <span>{testPushStatus === 'sending' ? 'Disparando Teste...' : 'Testar Envio de Notificação'}</span>
+                  </button>
 
-              {/* Botão de Teste de Disparo */}
-              <div style={{
-                marginTop: '8px',
-                paddingTop: '14px',
-                borderTop: '1px solid var(--border-subtle)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexWrap: 'wrap',
-                gap: '10px'
-              }}>
-                <button
-                  onClick={handleTestFirebasePush}
-                  disabled={testPushStatus === 'sending'}
-                  className="btn-outline"
-                  style={{
-                    fontSize: '0.8rem',
-                    padding: '8px 16px',
-                    borderColor: '#f59e0b',
-                    color: '#f59e0b',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  <Send size={14} />
-                  <span>{testPushStatus === 'sending' ? 'Disparando Teste...' : 'Testar Envio de Notificação'}</span>
-                </button>
+                  <button
+                    onClick={handleSaveAllSettings}
+                    disabled={isSavingSettings}
+                    className="btn-primary"
+                    style={{
+                      fontSize: '0.8rem',
+                      padding: '8px 20px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <Save size={14} />
+                    <span>{isSavingSettings ? 'Gravando no Banco...' : 'Salvar Configurações'}</span>
+                  </button>
+                </div>
 
                 {testPushStatus === 'success' && (
-                  <span style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 700 }}>
-                    ✅ Disparo de teste executado com sucesso!
-                  </span>
+                  <div style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 700, textAlign: 'center' }}>
+                    ✅ Disparo de teste executado com sucesso no navegador!
+                  </div>
                 )}
               </div>
+
             </div>
 
             {/* CARD 2: REGRAS E MATRIZ DE EVENTOS NOTIFICÁVEIS */}

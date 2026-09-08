@@ -21,6 +21,8 @@ local.properties
 *.jks
 google-services.json
 serviceAccountKey.json
+firebase/*.json
+firebase-adminsdk*.json
 
 # IDEs
 .idea/
