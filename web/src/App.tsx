@@ -552,86 +552,154 @@ export function App() {
       
       {/* Top Header Logado */}
       <header style={{
-        background: 'rgba(9, 13, 22, 0.85)',
+        background: 'rgba(9, 13, 22, 0.95)',
         backdropFilter: 'blur(20px)',
         borderBottom: '1px solid var(--border-subtle)',
         position: 'sticky',
         top: 0,
         zIndex: 50,
-        padding: '12px 20px'
+        padding: '10px 16px'
       }}>
         <div style={{
           maxWidth: '1200px',
           margin: '0 auto',
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '12px'
+          flexDirection: 'column',
+          gap: '10px'
         }}>
-          {/* Logo & Marca */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{
-              background: 'var(--primary-gradient)',
-              width: '42px',
-              height: '42px',
-              borderRadius: '12px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 4px 15px rgba(99, 102, 241, 0.4)'
-            }}>
-              <Car size={24} color="#fff" />
+          {/* Linha 1: Logo & Marca na Esquerda + Usuário / Supabase na Direita */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px'
+          }}>
+            {/* Logo & Marca */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{
+                background: 'var(--primary-gradient)',
+                width: '38px',
+                height: '38px',
+                borderRadius: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 4px 15px rgba(99, 102, 241, 0.4)',
+                flexShrink: 0
+              }}>
+                <Car size={22} color="#fff" />
+              </div>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '1.15rem', fontWeight: 800, color: '#fff' }}>DriveHora</span>
+                  {isUserAdmin ? (
+                    <span style={{
+                      fontSize: '0.65rem',
+                      textTransform: 'uppercase',
+                      fontWeight: 800,
+                      letterSpacing: '0.05em',
+                      background: 'rgba(245, 158, 11, 0.2)',
+                      color: '#f59e0b',
+                      padding: '2px 6px',
+                      borderRadius: '8px',
+                      border: '1px solid rgba(245, 158, 11, 0.4)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '3px'
+                    }}>
+                      <Crown size={11} /> Admin
+                    </span>
+                  ) : (
+                    <span style={{
+                      fontSize: '0.65rem',
+                      textTransform: 'uppercase',
+                      fontWeight: 700,
+                      background: 'rgba(99, 102, 241, 0.2)',
+                      color: '#818cf8',
+                      padding: '2px 6px',
+                      borderRadius: '8px'
+                    }}>v1.0</span>
+                  )}
+                </div>
+              </div>
             </div>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '1.25rem', fontWeight: 800, color: '#fff' }}>DriveHora</span>
-                {isUserAdmin ? (
-                  <span style={{
-                    fontSize: '0.65rem',
-                    textTransform: 'uppercase',
-                    fontWeight: 800,
-                    letterSpacing: '0.05em',
-                    background: 'rgba(245, 158, 11, 0.2)',
-                    color: '#f59e0b',
-                    padding: '2px 8px',
-                    borderRadius: '12px',
-                    border: '1px solid rgba(245, 158, 11, 0.4)',
+
+            {/* Usuário & Logout & Supabase */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {isUserAdmin && (
+                <button
+                  onClick={() => setShowConfigModal(true)}
+                  className="hide-on-mobile"
+                  style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '4px'
-                  }}>
-                    <Crown size={12} /> Admin
+                    gap: '6px',
+                    fontSize: '0.75rem',
+                    padding: '6px 12px',
+                    background: supabaseConnected ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                    color: supabaseConnected ? '#10b981' : '#f59e0b',
+                    border: `1px solid ${supabaseConnected ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
+                    borderRadius: '20px',
+                    cursor: 'pointer',
+                    fontWeight: 600
+                  }}
+                >
+                  <Database size={13} />
+                  <span>{supabaseConnected ? 'Supabase ✅' : 'Supabase'}</span>
+                </button>
+              )}
+
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                background: 'rgba(15, 23, 42, 0.85)',
+                padding: '5px 10px',
+                borderRadius: '20px',
+                border: '1px solid var(--border-subtle)'
+              }}>
+                <div style={{
+                  width: '24px',
+                  height: '24px',
+                  borderRadius: '50%',
+                  background: isUserAdmin ? '#f59e0b' : currentUser.role === 'driver' ? '#10b981' : '#6366f1',
+                  color: isUserAdmin ? '#000' : '#fff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '0.75rem',
+                  fontWeight: 800,
+                  flexShrink: 0
+                }}>
+                  {isUserAdmin ? '👑' : currentUser.fullName.charAt(0)}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {currentUser.fullName.split(' ')[0]}
                   </span>
-                ) : (
-                  <span style={{
-                    fontSize: '0.65rem',
-                    textTransform: 'uppercase',
-                    fontWeight: 700,
-                    letterSpacing: '0.05em',
-                    background: 'rgba(99, 102, 241, 0.2)',
-                    color: '#818cf8',
-                    padding: '2px 8px',
-                    borderRadius: '12px',
-                    border: '1px solid rgba(99, 102, 241, 0.3)'
-                  }}>MVP v1.0</span>
-                )}
+                  <span style={{ fontSize: '0.6rem', color: isUserAdmin ? '#f59e0b' : 'var(--text-muted)' }}>
+                    {isUserAdmin ? 'Admin' : currentUser.role === 'client' ? 'Passageiro' : 'Motorista'}
+                  </span>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  title="Sair e voltar ao Login"
+                  style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '2px' }}
+                >
+                  <LogOut size={15} />
+                </button>
               </div>
-              <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Motorista particular sob demanda por hora</p>
             </div>
           </div>
 
-          {/* Seletor de Modos */}
-          <nav style={{
-            display: 'flex',
-            background: 'rgba(15, 23, 42, 0.9)',
+          {/* Linha 2: Navegação Horizontal Scrollable (Sem Quebra de Linhas) */}
+          <nav className="nav-scrollable" style={{
+            background: 'rgba(15, 23, 42, 0.95)',
             padding: '4px',
-            borderRadius: '14px',
+            borderRadius: '12px',
             border: '1px solid var(--border-subtle)',
-            gap: '4px',
-            flexWrap: 'wrap'
+            width: '100%'
           }}>
-            {/* Aba Admin (Exclusiva para Super Admins) */}
             {isUserAdmin && (
               <button
                 onClick={() => setActiveTab('admin')}
@@ -639,18 +707,19 @@ export function App() {
                   display: 'flex',
                   alignItems: 'center',
                   gap: '6px',
-                  padding: '8px 14px',
-                  borderRadius: '10px',
+                  padding: '7px 12px',
+                  borderRadius: '8px',
                   border: 'none',
                   cursor: 'pointer',
-                  fontSize: '0.85rem',
+                  fontSize: '0.8rem',
                   fontWeight: 700,
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
                   background: activeTab === 'admin' ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'transparent',
-                  color: activeTab === 'admin' ? '#000' : '#f59e0b',
-                  transition: 'all 0.2s'
+                  color: activeTab === 'admin' ? '#000' : '#f59e0b'
                 }}
               >
-                <Crown size={16} />
+                <Crown size={14} />
                 <span>Painel Admin</span>
               </button>
             )}
@@ -661,18 +730,19 @@ export function App() {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px',
-                padding: '8px 14px',
-                borderRadius: '10px',
+                padding: '7px 12px',
+                borderRadius: '8px',
                 border: 'none',
                 cursor: 'pointer',
-                fontSize: '0.85rem',
+                fontSize: '0.8rem',
                 fontWeight: 600,
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
                 background: activeTab === 'client' ? 'var(--primary-gradient)' : 'transparent',
-                color: activeTab === 'client' ? '#fff' : 'var(--text-secondary)',
-                transition: 'all 0.2s'
+                color: activeTab === 'client' ? '#fff' : 'var(--text-secondary)'
               }}
             >
-              <Users size={16} />
+              <Users size={14} />
               <span>Cliente</span>
             </button>
 
@@ -685,25 +755,26 @@ export function App() {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px',
-                padding: '8px 14px',
-                borderRadius: '10px',
+                padding: '7px 12px',
+                borderRadius: '8px',
                 border: 'none',
                 cursor: 'pointer',
-                fontSize: '0.85rem',
+                fontSize: '0.8rem',
                 fontWeight: 600,
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
                 background: activeTab === 'driver' ? 'linear-gradient(135deg, #10b981, #059669)' : 'transparent',
-                color: activeTab === 'driver' ? '#fff' : 'var(--text-secondary)',
-                transition: 'all 0.2s'
+                color: activeTab === 'driver' ? '#fff' : 'var(--text-secondary)'
               }}
             >
-              <Car size={16} />
+              <Car size={14} />
               <span>Motorista</span>
               {pendingRides.length > 0 && (
                 <span style={{
                   background: '#ef4444',
                   color: '#fff',
-                  fontSize: '0.7rem',
-                  padding: '1px 6px',
+                  fontSize: '0.65rem',
+                  padding: '1px 5px',
                   borderRadius: '10px'
                 }}>{pendingRides.length}</span>
               )}
@@ -715,18 +786,19 @@ export function App() {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px',
-                padding: '8px 14px',
-                borderRadius: '10px',
+                padding: '7px 12px',
+                borderRadius: '8px',
                 border: 'none',
                 cursor: 'pointer',
-                fontSize: '0.85rem',
+                fontSize: '0.8rem',
                 fontWeight: 600,
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
                 background: activeTab === 'dual' ? 'rgba(255, 255, 255, 0.12)' : 'transparent',
-                color: activeTab === 'dual' ? '#fff' : 'var(--text-secondary)',
-                transition: 'all 0.2s'
+                color: activeTab === 'dual' ? '#fff' : 'var(--text-secondary)'
               }}
             >
-              <Sparkles size={16} />
+              <Sparkles size={14} />
               <span>Visão Dupla</span>
             </button>
 
@@ -736,87 +808,22 @@ export function App() {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px',
-                padding: '8px 14px',
-                borderRadius: '10px',
+                padding: '7px 12px',
+                borderRadius: '8px',
                 border: 'none',
                 cursor: 'pointer',
-                fontSize: '0.85rem',
+                fontSize: '0.8rem',
                 fontWeight: 600,
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
                 background: activeTab === 'mobile' ? '#f59e0b' : 'transparent',
-                color: activeTab === 'mobile' ? '#000' : 'var(--text-secondary)',
-                transition: 'all 0.2s'
+                color: activeTab === 'mobile' ? '#000' : 'var(--text-secondary)'
               }}
             >
-              <Smartphone size={16} />
+              <Smartphone size={14} />
               <span>Celular</span>
             </button>
           </nav>
-
-          {/* Usuário & Configurações */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              background: 'rgba(15, 23, 42, 0.8)',
-              padding: '6px 12px',
-              borderRadius: '20px',
-              border: '1px solid var(--border-subtle)'
-            }}>
-              <div style={{
-                width: '26px',
-                height: '26px',
-                borderRadius: '50%',
-                background: isUserAdmin ? '#f59e0b' : currentUser.role === 'driver' ? '#10b981' : '#6366f1',
-                color: isUserAdmin ? '#000' : '#fff',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '0.8rem',
-                fontWeight: 800
-              }}>
-                {isUserAdmin ? '👑' : currentUser.fullName.charAt(0)}
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <span style={{ fontSize: '0.8rem', fontWeight: 700, maxWidth: '130px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {currentUser.fullName.split(' ')[0]}
-                </span>
-                <span style={{ fontSize: '0.65rem', color: isUserAdmin ? '#f59e0b' : 'var(--text-muted)' }}>
-                  {isUserAdmin ? 'Super Admin' : currentUser.role === 'client' ? 'Passageiro' : 'Motorista'}
-                </span>
-              </div>
-              <button
-                onClick={handleLogout}
-                title="Sair e voltar ao Login"
-                style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', marginLeft: '4px' }}
-              >
-                <LogOut size={16} />
-              </button>
-            </div>
-
-            {/* Supabase Button - Exclusivo para Administrador */}
-            {isUserAdmin && (
-              <button
-                onClick={() => setShowConfigModal(true)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  fontSize: '0.75rem',
-                  padding: '6px 12px',
-                  background: supabaseConnected ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-                  color: supabaseConnected ? '#10b981' : '#f59e0b',
-                  border: `1px solid ${supabaseConnected ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
-                  borderRadius: '20px',
-                  cursor: 'pointer',
-                  fontWeight: 600
-                }}
-              >
-                <Database size={14} />
-                <span>{supabaseConnected ? 'Supabase (Admin) ✅' : 'Supabase (Admin)'}</span>
-              </button>
-            )}
-          </div>
         </div>
       </header>
 

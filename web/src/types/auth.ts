@@ -57,6 +57,7 @@ export interface DriverProfile {
   vehicleYear: string;
   vehiclePlate: string;
   vehicleColor: string;
+  vehicleCategory?: string;
   cnhUrl?: string;
   crlvUrl?: string;
   selfieUrl?: string;
@@ -87,6 +88,7 @@ export interface DriverPublicProfile {
   vehicleYear: string;
   vehicleColor: string;
   vehiclePlate: string;
+  vehicleCategory?: string;
   isOnline?: boolean;
   currentLat?: number;
   currentLng?: number;

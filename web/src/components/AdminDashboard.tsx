@@ -1400,6 +1400,90 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
           </div>
 
+          {/* SEÇÃO 3: GESTÃO DE CATEGORIAS DE VEÍCULOS DEFINIDAS PELO ADMIN */}
+          <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{
+                  background: 'rgba(99, 102, 241, 0.15)',
+                  padding: '8px',
+                  borderRadius: '10px',
+                  color: '#818cf8'
+                }}>
+                  <Car size={20} />
+                </div>
+                <div>
+                  <h4 style={{ fontSize: '1rem', fontWeight: 700 }}>Categorias de Veículos da Plataforma</h4>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                    Defina as categorias disponíveis para enquadramento dos motoristas e multiplicador de preço
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px' }}>
+              {(systemSettings.vehicleCategories || []).map((cat, idx) => (
+                <div key={cat.id} style={{
+                  background: 'rgba(15, 23, 42, 0.8)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: '14px',
+                  padding: '16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '1.4rem' }}>{cat.icon}</span>
+                      <strong style={{ fontSize: '1rem', color: '#fff' }}>{cat.name}</strong>
+                    </div>
+                    <span style={{
+                      fontSize: '0.75rem',
+                      padding: '2px 8px',
+                      borderRadius: '6px',
+                      background: 'rgba(99, 102, 241, 0.2)',
+                      color: '#818cf8',
+                      fontWeight: 700
+                    }}>
+                      Multiplicador: {cat.rateMultiplier}x
+                    </span>
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '2px' }}>Descrição da Categoria</label>
+                    <input
+                      type="text"
+                      className="input-field"
+                      value={cat.description}
+                      onChange={(e) => {
+                        const updated = [...systemSettings.vehicleCategories];
+                        updated[idx] = { ...updated[idx], description: e.target.value };
+                        setSystemSettings(prev => ({ ...prev, vehicleCategories: updated }));
+                      }}
+                      style={{ fontSize: '0.8rem', padding: '8px 10px' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '2px' }}>Multiplicador de Tarifa</label>
+                    <input
+                      type="number"
+                      step="0.05"
+                      className="input-field"
+                      value={cat.rateMultiplier}
+                      onChange={(e) => {
+                        const updated = [...systemSettings.vehicleCategories];
+                        updated[idx] = { ...updated[idx], rateMultiplier: Number(e.target.value) };
+                        setSystemSettings(prev => ({ ...prev, vehicleCategories: updated }));
+                      }}
+                      style={{ fontSize: '0.8rem', padding: '8px 10px' }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
         </div>
       )}
 

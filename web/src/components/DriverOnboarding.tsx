@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { UserProfile, DriverProfile, DriverVerificationStatus } from '../types/auth';
 import { 
-  ShieldCheck, Car, FileText, Camera, CheckCircle2, 
-  UploadCloud, Check, RefreshCw, AlertCircle, Eye, Database, Edit3, X, Trash2, Video
+  ShieldCheck, Camera, CheckCircle2, 
+  UploadCloud, Check, AlertCircle, Eye, Database, Edit3, X,
+  ArrowRight, ArrowLeft
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { formatPhone, formatCpf, formatPlate, validateCpf, validateCnh, validatePlate, validatePhone } from '../utils/formatters';
 import { dbSaveDriverProfile, dbCheckSupabaseStatus } from '../services/dbService';
+import { getSystemSettings, type VehicleCategoryConfig } from '../services/settingsService';
 
 interface DriverOnboardingProps {
   user: UserProfile;
@@ -14,6 +16,20 @@ interface DriverOnboardingProps {
   onComplete: (driverProfile: DriverProfile) => void;
   onOpenSupabaseConfig?: () => void;
 }
+
+// Lista de comodidades padrão com ícones e descrições
+const AVAILABLE_AMENITIES = [
+  { id: 'ar_condicionado', label: 'Ar-Condicionado', icon: '❄️', desc: 'Climatização sempre ligada' },
+  { id: 'carregador_usb', label: 'Carregador USB / Tipo-C', icon: '🔌', desc: 'Cabos para Android e iPhone' },
+  { id: 'wifi', label: 'Wi-Fi 5G a Bordo', icon: '📶', desc: 'Internet rápida para o passageiro' },
+  { id: 'agua_mineral', label: 'Água Mineral Fresca', icon: '💧', desc: 'Garrafinhas lacradas' },
+  { id: 'balas_mimos', label: 'Balas / Mimos VIP', icon: '🍬', desc: 'Snacks e doces para a viagem' },
+  { id: 'porta_malas', label: 'Porta-Malas Grande', icon: '🧳', desc: 'Espaço para malas e compras' },
+  { id: 'pet_friendly', label: 'Aceita Pets (Pet Friendly)', icon: '🐾', desc: 'Transporte seguro de animais' },
+  { id: 'cadeirinha', label: 'Cadeirinha / Assento Infantil', icon: '👶', desc: 'Segurança para crianças' },
+  { id: 'musica_spotify', label: 'Escolha de Som / Spotify', icon: '🎵', desc: 'Passageiro escolhe a playlist' },
+  { id: 'blindado', label: 'Blindagem Certificada', icon: '🛡️', desc: 'Proteção Nível III-A' }
+];
 
 // Compressor de imagem no cliente (reduz fotos pesadas para ~120KB)
 const compressImageFile = (file: File): Promise<string> => {
@@ -67,7 +83,6 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
   onComplete,
   onOpenSupabaseConfig 
 }) => {
-  // 💾 Recuperar rascunho salvo em memória interna (localStorage)
   const getSavedDraft = () => {
     try {
       const raw = localStorage.getItem(`drivehora_driver_draft_${user.id}`);
@@ -81,8 +96,12 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
   const currentYear = new Date().getFullYear();
   const availableYears = Array.from({ length: currentYear + 2 - 2010 }, (_, i) => String(currentYear + 1 - i));
 
+  // Carregar categorias definidas no sistema
+  const systemSettings = getSystemSettings();
+  const categoriesList: VehicleCategoryConfig[] = systemSettings.vehicleCategories || [];
+
   const [step, setStep] = useState<number>(
-    initialProfile?.verificationStatus === 'under_review' ? 4 : draft?.step || 1
+    initialProfile?.verificationStatus === 'under_review' ? 5 : draft?.step || 1
   );
   
   const initialDriverPhone = (user.phone && user.phone !== '(11) 98765-4321')
@@ -93,20 +112,30 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
     ? draft.phone
     : '';
 
-  // Dados Pessoais & CNH (Recuperados do Rascunho Interno)
+  // ABA 1: Dados Pessoais & CNH
+  const [fullName, setFullName] = useState(draft?.fullName || initialProfile?.fullName || user.fullName || '');
   const [cpf, setCpf] = useState(draft?.cpf || formatCpf(initialProfile?.cpf || ''));
   const [phone, setPhone] = useState(initialDriverPhone);
   const [cnhNumber, setCnhNumber] = useState(draft?.cnhNumber || initialProfile?.cnhNumber || '');
   const [cnhCategory, setCnhCategory] = useState(draft?.cnhCategory || initialProfile?.cnhCategory || 'B');
 
-  // Dados do Veículo
+  // ABA 2: Dados do Veículo & Categoria de Atendimento
   const [vehicleBrand, setVehicleBrand] = useState(draft?.vehicleBrand || initialProfile?.vehicleBrand || 'Toyota');
   const [vehicleModel, setVehicleModel] = useState(draft?.vehicleModel || initialProfile?.vehicleModel || 'Corolla XEi');
   const [vehicleYear, setVehicleYear] = useState(draft?.vehicleYear || initialProfile?.vehicleYear || String(currentYear));
   const [vehiclePlate, setVehiclePlate] = useState(draft?.vehiclePlate || formatPlate(initialProfile?.vehiclePlate || 'BRA-2E19'));
   const [vehicleColor, setVehicleColor] = useState(draft?.vehicleColor || initialProfile?.vehicleColor || 'Preto');
+  const [vehicleCategory, setVehicleCategory] = useState(draft?.vehicleCategory || initialProfile?.vehicleCategory || 'classico');
 
-  // Uploads Reais de Documentos (Base64 Otimizado)
+  // ABA 3: Comodidades & Perfil / Bio
+  const [selectedAmenities, setSelectedAmenities] = useState<string[]>(
+    draft?.amenities || initialProfile?.amenities || ['Ar-Condicionado', 'Carregador USB / Tipo-C', 'Água Mineral Fresca']
+  );
+  const [bio, setBio] = useState<string>(
+    draft?.bio || initialProfile?.bio || 'Motorista particular experiente, pontual e atencioso. Direção suave e foco no conforto e segurança do passageiro.'
+  );
+
+  // ABA 4: Uploads de Documentos & Biometria
   const [cnhFileName, setCnhFileName] = useState<string>(draft?.cnhFileName || (initialProfile?.cnhUrl ? 'cnh_anexada.jpg' : ''));
   const [cnhUrl, setCnhUrl] = useState<string>(initialProfile?.cnhUrl || '');
 
@@ -122,21 +151,23 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
 
-  // Status
+  // Status & Gravação
   const [verificationStatus, setVerificationStatus] = useState<DriverVerificationStatus>(
     initialProfile?.verificationStatus || 'pending_docs'
   );
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isDbError, setIsDbError] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState<{ title: string; url: string } | null>(null);
 
-  // 💾 Salvar automaticamente em memória interna a cada alteração
+  // Salvar rascunho em localStorage
   useEffect(() => {
     try {
       localStorage.setItem(
         `drivehora_driver_draft_${user.id}`,
         JSON.stringify({
           step,
+          fullName,
           cpf,
           phone,
           cnhNumber,
@@ -146,15 +177,18 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
           vehicleYear,
           vehiclePlate,
           vehicleColor,
+          vehicleCategory,
+          amenities: selectedAmenities,
+          bio,
           cnhFileName,
           crlvFileName,
           selfieFileName
         })
       );
     } catch (e) {}
-  }, [step, cpf, phone, cnhNumber, cnhCategory, vehicleBrand, vehicleModel, vehicleYear, vehiclePlate, vehicleColor, cnhFileName, crlvFileName, selfieFileName, user.id]);
+  }, [step, fullName, cpf, phone, cnhNumber, cnhCategory, vehicleBrand, vehicleModel, vehicleYear, vehiclePlate, vehicleColor, vehicleCategory, selectedAmenities, bio, cnhFileName, crlvFileName, selfieFileName, user.id]);
 
-  // Manipulador de Câmera ao Vivo
+  // Câmera ao Vivo
   const startLiveCamera = async () => {
     setCameraError(null);
     setIsCameraOpen(true);
@@ -170,7 +204,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
       }
     } catch (err: any) {
       console.warn('Erro ao acessar webcam/câmera:', err);
-      setCameraError('Não foi possível abrir a câmera diretamente. Utilize a opção "Carregar Foto dos Arquivos" logo abaixo.');
+      setCameraError('Não foi possível abrir a câmera diretamente. Utilize a opção de anexar foto dos arquivos abaixo.');
     }
   };
 
@@ -200,7 +234,6 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
     }
   };
 
-  // Manipulador de upload de arquivo
   const handleFileUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
     setFileName: (name: string) => void,
@@ -224,77 +257,89 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
     }
   };
 
-  // Validação da Etapa 1
+  const toggleAmenity = (label: string) => {
+    setSelectedAmenities(prev => 
+      prev.includes(label) ? prev.filter(a => a !== label) : [...prev, label]
+    );
+  };
+
+  // Validadores de Etapas
   const handleStep1Submit = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
-    setIsDbError(false);
-
+    if (!fullName.trim()) {
+      setErrorMessage('Informe seu nome completo.');
+      return;
+    }
     if (!validateCpf(cpf)) {
-      setErrorMessage('CPF inválido. Insira um número de CPF válido.');
+      setErrorMessage('CPF inválido. Digite um CPF válido com 11 dígitos.');
       return;
     }
-
     if (!validatePhone(phone)) {
-      setErrorMessage('Telefone inválido. Insira um número válido com DDD.');
+      setErrorMessage('Telefone inválido. Digite o número com DDD.');
       return;
     }
-
     if (!validateCnh(cnhNumber)) {
-      setErrorMessage('Registro de CNH inválido. Verifique o número de 11 dígitos da sua Carteira Nacional de Habilitação.');
+      setErrorMessage('Registro de CNH inválido. Verifique o número de 11 dígitos da sua CNH.');
       return;
     }
-
     setStep(2);
   };
 
-  // Validação da Etapa 2
   const handleStep2Submit = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
-    setIsDbError(false);
-
-    if (!validatePlate(vehiclePlate)) {
-      setErrorMessage('Placa do veículo inválida. Insira uma placa válida no padrão Mercosul (ABC1D23) ou Tradicional (ABC-1234).');
+    if (!vehicleBrand.trim() || !vehicleModel.trim()) {
+      setErrorMessage('Informe a marca e o modelo do veículo.');
       return;
     }
-
+    if (!validatePlate(vehiclePlate)) {
+      setErrorMessage('Placa do veículo inválida. Digite no padrão Mercosul (ABC1D23) ou Tradicional (ABC-1234).');
+      return;
+    }
     setStep(3);
   };
 
-  // Validação e Envio da Etapa 3 com Verificação Segura do Banco
-  const handleStep3Submit = async () => {
+  const handleStep3Submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage(null);
+    if (!bio.trim() || bio.trim().length < 15) {
+      setErrorMessage('Por favor, escreva uma breve descrição sobre seu perfil profissional (mínimo 15 caracteres).');
+      return;
+    }
+    setStep(4);
+  };
+
+  const handleStep4Submit = async () => {
     setErrorMessage(null);
     setIsDbError(false);
 
     if (!cnhUrl || !crlvUrl || !selfieUrl) {
-      setErrorMessage('Documentação incompleta. É obrigatório anexar os 3 arquivos: Foto da CNH, Documento do Veículo (CRLV) e Selfie Facial.');
+      setErrorMessage('Documentação incompleta. É obrigatório anexar os 3 arquivos: Foto da CNH, CRLV do Veículo e Selfie Facial.');
       return;
     }
 
     setIsSaving(true);
     try {
-      // 🔒 1. Testar conexão com o banco
       const dbStatus = await dbCheckSupabaseStatus();
       if (!dbStatus.connected) {
         setIsDbError(true);
-        setErrorMessage(`⚠️ Impossível enviar documentos: Não há conexão com o banco de dados Supabase (${dbStatus.message || 'Desconectado'}). Conecte o banco primeiro para gravar seus documentos.`);
+        setErrorMessage(`⚠️ Não foi possível salvar: Banco Supabase desconectado (${dbStatus.message || 'Erro de conexão'}).`);
         return;
       }
 
-      // 💾 2. Salvar no Supabase (status = under_review)
       const saveResult = await saveToDatabase('under_review');
       if (!saveResult.success) {
         setIsDbError(true);
-        setErrorMessage(`Falha ao gravar no banco: ${saveResult.error}`);
+        setErrorMessage(`Falha ao gravar perfil: ${saveResult.error}`);
         return;
       }
 
       setVerificationStatus('under_review');
-      setStep(4);
+      setStep(5);
     } catch (err: any) {
       setIsDbError(true);
-      setErrorMessage(`Erro inesperado ao salvar: ${err.message || 'Falha de comunicação com o servidor'}`);
+      setErrorMessage(`Erro ao salvar: ${err.message || 'Falha de comunicação'}`);
     } finally {
       setIsSaving(false);
     }
@@ -304,6 +349,8 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
     const profile: DriverProfile = {
       id: 'driver_' + user.id,
       userId: user.id,
+      fullName,
+      driverName: fullName,
       cpf,
       phone,
       cnhNumber,
@@ -313,6 +360,10 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
       vehicleYear,
       vehiclePlate,
       vehicleColor,
+      vehicleCategory,
+      amenities: selectedAmenities,
+      bio,
+      languages: ['Português'],
       cnhUrl: cnhUrl || undefined,
       crlvUrl: crlvUrl || undefined,
       selfieUrl: selfieUrl || undefined,
@@ -335,6 +386,8 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
       const profile: DriverProfile = {
         id: 'driver_' + user.id,
         userId: user.id,
+        fullName,
+        driverName: fullName,
         cpf,
         phone,
         cnhNumber,
@@ -344,172 +397,139 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
         vehicleYear,
         vehiclePlate,
         vehicleColor,
+        vehicleCategory,
+        amenities: selectedAmenities,
+        bio,
+        languages: ['Português'],
         cnhUrl,
         crlvUrl,
         selfieUrl,
         verificationStatus: 'approved',
-        rating: initialProfile?.rating || 5.0,
-        totalRides: initialProfile?.totalRides || 0
+        rating: 5.0,
+        totalRides: 0
       };
       onComplete(profile);
     } else {
-      setErrorMessage(res.error || 'Erro ao aprovar.');
+      alert(`Falha ao aprovar: ${res.error}`);
     }
   };
 
-  const handleProceedToDriverPanel = () => {
-    const profile: DriverProfile = {
-      id: 'driver_' + user.id,
-      userId: user.id,
-      cpf,
-      phone,
-      cnhNumber,
-      cnhCategory,
-      vehicleBrand,
-      vehicleModel,
-      vehicleYear,
-      vehiclePlate,
-      vehicleColor,
-      cnhUrl,
-      crlvUrl,
-      selfieUrl,
-      verificationStatus,
-      rating: initialProfile?.rating || 5.0,
-      totalRides: initialProfile?.totalRides || 0
-    };
-    onComplete(profile);
-  };
-
   return (
-    <div style={{ maxWidth: '740px', margin: '20px auto', width: '100%' }}>
-      <div className="glass-panel" style={{ padding: '36px', boxShadow: 'var(--shadow-lg)' }}>
-        
-        {/* Cabeçalho do Onboarding */}
-        <div style={{ textAlign: 'center', marginBottom: '28px' }}>
-          <div style={{
-            background: 'rgba(16, 185, 129, 0.15)',
-            width: '56px',
-            height: '56px',
-            borderRadius: '16px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            margin: '0 auto 12px',
-            color: '#10b981'
-          }}>
-            <ShieldCheck size={32} />
-          </div>
-          <h2 style={{ fontSize: '1.45rem', fontWeight: 800 }}>Credenciamento Oficial de Motorista</h2>
-          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            Validação rigorosa de CNH (EAR), CRLV do Veículo e Biometria Facial no Banco de Dados
-          </p>
+    <div style={{ maxWidth: '800px', margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      
+      {/* HEADER DE ETAPAS / ABAS DE NAVEGAÇÃO DO MOTORISTA */}
+      <div className="glass-panel" style={{ padding: '16px 20px' }}>
+        <div className="nav-scrollable" style={{ justifyContent: 'space-between', gap: '8px' }}>
+          {[
+            { num: 1, label: '1. Identificação & CNH' },
+            { num: 2, label: '2. Veículo & Categoria' },
+            { num: 3, label: '3. Comodidades & Perfil' },
+            { num: 4, label: '4. Documentos & Fotos' },
+            { num: 5, label: '5. Homologação' }
+          ].map(s => {
+            const isActive = step === s.num;
+            const isDone = step > s.num;
 
-          {/* Stepper de progresso */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '8px',
-            marginTop: '20px'
-          }}>
-            {[
-              { num: 1, label: 'CNH' },
-              { num: 2, label: 'Veículo' },
-              { num: 3, label: 'Documentos' },
-              { num: 4, label: 'Validação' }
-            ].map((s) => (
-              <div key={s.num} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{
-                  width: '28px',
-                  height: '28px',
-                  borderRadius: '50%',
+            return (
+              <button
+                key={s.num}
+                type="button"
+                onClick={() => {
+                  if (step > s.num || verificationStatus === 'under_review' || verificationStatus === 'approved') {
+                    setStep(s.num);
+                  }
+                }}
+                style={{
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center',
+                  gap: '6px',
+                  padding: '8px 14px',
+                  borderRadius: '10px',
+                  border: isActive ? '1px solid #6366f1' : '1px solid var(--border-subtle)',
+                  background: isActive 
+                    ? 'linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(79, 70, 229, 0.2))' 
+                    : isDone 
+                    ? 'rgba(16, 185, 129, 0.12)' 
+                    : 'rgba(255, 255, 255, 0.02)',
+                  color: isActive ? '#fff' : isDone ? '#10b981' : 'var(--text-muted)',
                   fontSize: '0.8rem',
                   fontWeight: 700,
-                  background: step > s.num 
-                    ? '#10b981' 
-                    : step === s.num 
-                    ? '#6366f1' 
-                    : 'rgba(255, 255, 255, 0.1)',
-                  color: '#fff'
-                }}>
-                  {step > s.num ? <Check size={14} /> : s.num}
-                </div>
-                <span style={{
-                  fontSize: '0.8rem',
-                  fontWeight: step === s.num ? 700 : 500,
-                  color: step === s.num ? '#fff' : 'var(--text-muted)'
-                }}>
-                  {s.label}
-                </span>
-                {s.num < 4 && (
-                  <div style={{
-                    width: '24px',
-                    height: '2px',
-                    background: step > s.num ? '#10b981' : 'rgba(255, 255, 255, 0.1)'
-                  }} />
-                )}
-              </div>
-            ))}
-          </div>
+                  whiteSpace: 'nowrap',
+                  cursor: (step > s.num || verificationStatus !== 'pending_docs') ? 'pointer' : 'default',
+                  flexShrink: 0
+                }}
+              >
+                {isDone ? <Check size={14} color="#10b981" /> : <span>{s.num}.</span>}
+                <span>{s.label.split('. ')[1]}</span>
+              </button>
+            );
+          })}
         </div>
+      </div>
 
-        {/* Mensagem de Erro / Alerta */}
-        {errorMessage && (
-          <div style={{
-            background: isDbError ? 'rgba(239, 68, 68, 0.15)' : 'rgba(239, 68, 68, 0.12)',
-            border: '1px solid rgba(239, 68, 68, 0.4)',
-            padding: '14px 16px',
-            borderRadius: '12px',
-            marginBottom: '20px',
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: '12px'
-          }}>
-            <AlertCircle size={20} color="#ef4444" style={{ flexShrink: 0, marginTop: '2px' }} />
-            <div style={{ flex: 1 }}>
-              <strong style={{ color: '#ef4444', fontSize: '0.85rem' }}>Atenção nos Documentos:</strong>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '4px 0 0' }}>{errorMessage}</p>
-              {isDbError && onOpenSupabaseConfig && (
+      {/* MENSAGEM DE ERRO GERAL */}
+      {errorMessage && (
+        <div style={{
+          background: 'rgba(239, 68, 68, 0.15)',
+          border: '1px solid rgba(239, 68, 68, 0.4)',
+          borderRadius: '12px',
+          padding: '14px 16px',
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: '12px',
+          color: '#f87171',
+          fontSize: '0.85rem'
+        }}>
+          <AlertCircle size={20} style={{ flexShrink: 0, marginTop: '2px' }} />
+          <div style={{ flex: 1 }}>
+            <strong>Atenção:</strong> {errorMessage}
+            {isDbError && onOpenSupabaseConfig && (
+              <div style={{ marginTop: '10px' }}>
                 <button
                   type="button"
                   onClick={onOpenSupabaseConfig}
-                  className="btn-outline"
-                  style={{ marginTop: '8px', fontSize: '0.75rem', padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                  className="btn-primary"
+                  style={{ fontSize: '0.75rem', padding: '6px 14px' }}
                 >
-                  <Database size={12} /> Conectar Supabase Agora
+                  <Database size={13} /> Conectar Banco Supabase
                 </button>
-              )}
-            </div>
+              </div>
+            )}
           </div>
-        )}
+        </div>
+      )}
 
-        {/* ETAPA 1: DADOS PESSOAIS & CNH */}
-        {step === 1 && (
+      {/* ========================================================
+          ABA 1: IDENTIFICAÇÃO & CNH (EAR)
+      ======================================================== */}
+      {step === 1 && (
+        <div className="glass-panel" style={{ padding: '24px' }}>
+          <div style={{ marginBottom: '20px' }}>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#fff' }}>1. Identificação e Habilitação Profissional (EAR)</h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+              Informe seus dados pessoais e número de registro da CNH.
+            </p>
+          </div>
+
           <form onSubmit={handleStep1Submit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#818cf8' }}>
-              1. Identificação e Habilitação Profissional (EAR)
-            </h3>
-
             <div className="input-group">
-              <label>Nome Completo do Motorista</label>
+              <label>Nome Completo do Motorista *</label>
               <input
                 type="text"
-                className="custom-input"
-                value={user.fullName}
-                disabled
-                style={{ opacity: 0.7 }}
+                className="input-field"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                placeholder="Ex: Carlos Eduardo da Silva"
+                required
               />
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div className="form-grid-2">
               <div className="input-group">
                 <label>CPF *</label>
                 <input
-                  type="text"
-                  className="custom-input"
+                  type="tel"
+                  className="input-field"
                   value={cpf}
                   onChange={(e) => setCpf(formatCpf(e.target.value))}
                   placeholder="000.000.000-00"
@@ -521,8 +541,8 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
               <div className="input-group">
                 <label>WhatsApp / Celular com DDD *</label>
                 <input
-                  type="text"
-                  className="custom-input"
+                  type="tel"
+                  className="input-field"
                   value={phone}
                   onChange={(e) => setPhone(formatPhone(e.target.value))}
                   placeholder="(11) 98765-4321"
@@ -532,12 +552,12 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '12px' }}>
+            <div className="form-grid-2">
               <div className="input-group">
                 <label>Número de Registro da CNH (11 dígitos) *</label>
                 <input
-                  type="text"
-                  className="custom-input"
+                  type="tel"
+                  className="input-field"
                   value={cnhNumber}
                   onChange={(e) => setCnhNumber(e.target.value.replace(/\D/g, '').slice(0, 11))}
                   placeholder="12345678900"
@@ -549,482 +569,651 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
               <div className="input-group">
                 <label>Categoria CNH *</label>
                 <select
-                  className="custom-input"
+                  className="select-field"
                   value={cnhCategory}
                   onChange={(e) => setCnhCategory(e.target.value)}
-                  style={{ background: 'rgba(15, 23, 42, 0.8)' }}
                 >
-                  <option value="B">B (Carro)</option>
+                  <option value="B">B (Carros de Passeio)</option>
+                  <option value="C">C (Veículos de Carga)</option>
+                  <option value="D">D (Vans e Passageiros)</option>
+                  <option value="E">E (Veículos Articulados)</option>
                   <option value="AB">AB (Carro e Moto)</option>
-                  <option value="C">C (Caminhão Leve)</option>
-                  <option value="D">D (Passageiros / Van)</option>
-                  <option value="E">E (Articulados)</option>
                 </select>
               </div>
             </div>
 
             <div style={{
-              background: 'rgba(99, 102, 241, 0.08)',
-              border: '1px dashed rgba(99, 102, 241, 0.3)',
-              padding: '12px',
+              background: 'rgba(99, 102, 241, 0.1)',
+              border: '1px solid rgba(99, 102, 241, 0.25)',
               borderRadius: '10px',
+              padding: '12px 14px',
               fontSize: '0.8rem',
-              color: 'var(--text-secondary)'
+              color: '#c7d2fe'
             }}>
-              💡 <strong>Requisito Obrigatório:</strong> Sua CNH deve conter a observação <em>"Exerce Atividade Remunerada" (EAR)</em> para prestação de serviços por hora.
+              💡 <strong>Requisito Legal:</strong> Sua CNH deve conter a observação <em>"Exerce Atividade Remunerada" (EAR)</em> para prestação de serviços como motorista parceiro.
             </div>
 
-            <button type="submit" className="btn-primary" style={{ marginTop: '8px' }}>
-              Avançar para Dados do Veículo ➔
+            <button
+              type="submit"
+              className="btn-primary"
+              style={{ width: '100%', padding: '14px', fontSize: '0.95rem', marginTop: '6px' }}
+            >
+              <span>Avançar para Dados do Veículo</span>
+              <ArrowRight size={18} />
             </button>
           </form>
-        )}
+        </div>
+      )}
 
-        {/* ETAPA 2: DADOS DO VEÍCULO */}
-        {step === 2 && (
+      {/* ========================================================
+          ABA 2: DADOS DO VEÍCULO & CATEGORIA
+      ======================================================== */}
+      {step === 2 && (
+        <div className="glass-panel" style={{ padding: '24px' }}>
+          <div style={{ marginBottom: '20px' }}>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#fff' }}>2. Dados do Veículo & Categoria de Atendimento</h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+              Selecione o enquadramento do seu automóvel na frota DriveHora.
+            </p>
+          </div>
+
           <form onSubmit={handleStep2Submit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#818cf8' }}>
-              2. Cadastro do Veículo de Atendimento
-            </h3>
+            
+            {/* Seletor de Categoria com Cards Visuais */}
+            <div className="input-group">
+              <label>Categoria de Serviço do Veículo *</label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
+                {categoriesList.map(cat => {
+                  const isSelected = vehicleCategory === cat.id;
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  return (
+                    <div
+                      key={cat.id}
+                      onClick={() => setVehicleCategory(cat.id)}
+                      style={{
+                        padding: '14px',
+                        borderRadius: '12px',
+                        border: isSelected ? '2px solid #6366f1' : '1px solid var(--border-subtle)',
+                        background: isSelected ? 'rgba(99, 102, 241, 0.18)' : 'rgba(15, 23, 42, 0.6)',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '1.4rem' }}>{cat.icon}</span>
+                        {isSelected && <Check size={16} color="#818cf8" />}
+                      </div>
+                      <strong style={{ fontSize: '0.95rem', color: '#fff' }}>{cat.name}</strong>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', lineHeight: 1.3 }}>{cat.description}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="form-grid-2">
               <div className="input-group">
                 <label>Marca do Veículo *</label>
                 <input
                   type="text"
-                  className="custom-input"
+                  className="input-field"
                   value={vehicleBrand}
                   onChange={(e) => setVehicleBrand(e.target.value)}
-                  placeholder="Ex: Toyota, Honda, Hyundai..."
+                  placeholder="Ex: Toyota, Honda, Hyundai"
                   required
                 />
               </div>
 
               <div className="input-group">
-                <label>Modelo e Versão *</label>
+                <label>Modelo do Veículo *</label>
                 <input
                   type="text"
-                  className="custom-input"
+                  className="input-field"
                   value={vehicleModel}
                   onChange={(e) => setVehicleModel(e.target.value)}
-                  placeholder="Ex: Corolla XEi, Civic EXL..."
+                  placeholder="Ex: Corolla XEi, Civic, Creta"
                   required
                 />
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+            <div className="form-grid-3">
               <div className="input-group">
-                <label>Ano de Fabricação</label>
+                <label>Ano de Fabricação *</label>
                 <select
-                  className="custom-input"
+                  className="select-field"
                   value={vehicleYear}
                   onChange={(e) => setVehicleYear(e.target.value)}
-                  style={{ background: 'rgba(15, 23, 42, 0.8)' }}
                 >
-                  {availableYears.map(year => (
-                    <option key={year} value={year}>
-                      {year}
-                    </option>
+                  {availableYears.map(y => (
+                    <option key={y} value={y}>{y}</option>
                   ))}
                 </select>
               </div>
 
               <div className="input-group">
-                <label>Placa *</label>
+                <label>Placa do Veículo *</label>
                 <input
                   type="text"
-                  className="custom-input"
+                  className="input-field"
                   value={vehiclePlate}
                   onChange={(e) => setVehiclePlate(formatPlate(e.target.value))}
-                  placeholder="ABC-1D23"
+                  placeholder="ABC-1234 ou ABC1D23"
                   maxLength={8}
                   required
                 />
               </div>
 
               <div className="input-group">
-                <label>Cor *</label>
-                <input
-                  type="text"
-                  className="custom-input"
+                <label>Cor Predominante *</label>
+                <select
+                  className="select-field"
                   value={vehicleColor}
                   onChange={(e) => setVehicleColor(e.target.value)}
-                  placeholder="Preto, Prata..."
-                  required
-                />
+                >
+                  <option value="Preto">Preto</option>
+                  <option value="Prata">Prata</option>
+                  <option value="Branco">Branco</option>
+                  <option value="Cinza">Cinza</option>
+                  <option value="Azul">Azul</option>
+                  <option value="Vermelho">Vermelho</option>
+                  <option value="Outra">Outra</option>
+                </select>
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-              <button type="button" onClick={() => setStep(1)} className="btn-outline" style={{ flex: 1 }}>
-                Voltar
+            <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+              <button
+                type="button"
+                onClick={() => setStep(1)}
+                className="btn-outline"
+                style={{ flex: 1, padding: '14px', fontSize: '0.9rem' }}
+              >
+                <ArrowLeft size={16} /> Voltar
               </button>
-              <button type="submit" className="btn-success" style={{ flex: 2 }}>
-                Validar Veículo e Avançar para Uploads ➔
+              <button
+                type="submit"
+                className="btn-primary"
+                style={{ flex: 2, padding: '14px', fontSize: '0.95rem' }}
+              >
+                <span>Avançar para Comodidades</span>
+                <ArrowRight size={18} />
               </button>
             </div>
           </form>
-        )}
+        </div>
+      )}
 
-        {/* ETAPA 3: UPLOAD REAL DE DOCUMENTOS E BIOMETRIA FACIAL */}
-        {step === 3 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
-            <div>
-              <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#10b981', margin: 0 }}>
-                3. Upload Obrigatório de Documentos e Biometria Facial
-              </h3>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                Anexe fotos nítidas dos documentos e tire uma selfie facial para credenciamento.
-              </p>
-            </div>
+      {/* ========================================================
+          ABA 3: COMODIDADES DO VEÍCULO & PERFIL / BIO
+      ======================================================== */}
+      {step === 3 && (
+        <div className="glass-panel" style={{ padding: '24px' }}>
+          <div style={{ marginBottom: '20px' }}>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#fff' }}>3. Comodidades Oferecidas & Apresentação</h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+              Destaque os diferenciais do seu atendimento para atrair mais clientes VIPs.
+            </p>
+          </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              
-              {/* Card 1: CNH */}
-              <div style={{
-                background: 'rgba(15, 23, 42, 0.85)',
-                border: `1px solid ${cnhUrl ? '#10b981' : 'var(--border-subtle)'}`,
-                padding: '16px',
-                borderRadius: '14px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '12px'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <FileText size={24} color={cnhUrl ? '#10b981' : '#818cf8'} />
-                    <div>
-                      <strong style={{ fontSize: '0.9rem' }}>Foto da CNH Aberta (Frente e Verso) *</strong>
-                      <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '2px 0 0' }}>
-                        {cnhFileName ? `Arquivo: ${cnhFileName}` : 'Formatos: JPG, PNG, PDF'}
-                      </p>
-                    </div>
-                  </div>
+          <form onSubmit={handleStep3Submit} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+            
+            {/* Lista de Comodidades Interativa */}
+            <div className="input-group">
+              <label>Comodidades Disponíveis no seu Carro (Selecione todas que se aplicam):</label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
+                {AVAILABLE_AMENITIES.map(amenity => {
+                  const isChecked = selectedAmenities.includes(amenity.label);
 
-                  <label className={cnhUrl ? 'btn-success' : 'btn-outline'} style={{ padding: '8px 14px', fontSize: '0.8rem', cursor: 'pointer' }}>
-                    <input
-                      type="file"
-                      accept="image/*,application/pdf"
-                      style={{ display: 'none' }}
-                      onChange={(e) => handleFileUpload(e, setCnhFileName, setCnhUrl)}
-                    />
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      {cnhUrl ? <Check size={14} /> : <UploadCloud size={14} />}
-                      <span>{cnhUrl ? 'Trocar Arquivo' : 'Selecionar CNH'}</span>
-                    </div>
-                  </label>
-                </div>
-
-                {cnhUrl && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '10px' }}>
-                    {cnhUrl.startsWith('data:image') && (
-                      <img src={cnhUrl} alt="CNH Preview" style={{ width: '60px', height: '42px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #10b981' }} />
-                    )}
-                    <span style={{ fontSize: '0.8rem', color: '#10b981', fontWeight: 600 }}>✅ CNH carregada e validada</span>
-                    <button
-                      type="button"
-                      onClick={() => { setCnhUrl(''); setCnhFileName(''); }}
-                      className="btn-outline"
-                      style={{ marginLeft: 'auto', padding: '4px 8px', fontSize: '0.7rem', color: '#ef4444', borderColor: 'rgba(239,68,68,0.3)' }}
+                  return (
+                    <div
+                      key={amenity.id}
+                      onClick={() => toggleAmenity(amenity.label)}
+                      style={{
+                        padding: '12px 14px',
+                        borderRadius: '12px',
+                        background: isChecked ? 'rgba(16, 185, 129, 0.15)' : 'rgba(15, 23, 42, 0.6)',
+                        border: isChecked ? '1px solid #10b981' : '1px solid var(--border-subtle)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        transition: 'all 0.2s'
+                      }}
                     >
-                      <Trash2 size={12} /> Remover
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Card 2: CRLV */}
-              <div style={{
-                background: 'rgba(15, 23, 42, 0.85)',
-                border: `1px solid ${crlvUrl ? '#10b981' : 'var(--border-subtle)'}`,
-                padding: '16px',
-                borderRadius: '14px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '12px'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <Car size={24} color={crlvUrl ? '#10b981' : '#818cf8'} />
-                    <div>
-                      <strong style={{ fontSize: '0.9rem' }}>Documento do Veículo (CRLV-e) *</strong>
-                      <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '2px 0 0' }}>
-                        {crlvFileName ? `Arquivo: ${crlvFileName}` : 'Licenciamento do ano em exercício'}
-                      </p>
-                    </div>
-                  </div>
-
-                  <label className={crlvUrl ? 'btn-success' : 'btn-outline'} style={{ padding: '8px 14px', fontSize: '0.8rem', cursor: 'pointer' }}>
-                    <input
-                      type="file"
-                      accept="image/*,application/pdf"
-                      style={{ display: 'none' }}
-                      onChange={(e) => handleFileUpload(e, setCrlvFileName, setCrlvUrl)}
-                    />
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      {crlvUrl ? <Check size={14} /> : <UploadCloud size={14} />}
-                      <span>{crlvUrl ? 'Trocar Arquivo' : 'Selecionar CRLV'}</span>
-                    </div>
-                  </label>
-                </div>
-
-                {crlvUrl && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '10px' }}>
-                    {crlvUrl.startsWith('data:image') && (
-                      <img src={crlvUrl} alt="CRLV Preview" style={{ width: '60px', height: '42px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #10b981' }} />
-                    )}
-                    <span style={{ fontSize: '0.8rem', color: '#10b981', fontWeight: 600 }}>✅ CRLV carregado e validado</span>
-                    <button
-                      type="button"
-                      onClick={() => { setCrlvUrl(''); setCrlvFileName(''); }}
-                      className="btn-outline"
-                      style={{ marginLeft: 'auto', padding: '4px 8px', fontSize: '0.7rem', color: '#ef4444', borderColor: 'rgba(239,68,68,0.3)' }}
-                    >
-                      <Trash2 size={12} /> Remover
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Card 3: Selfie com CNH */}
-              <div style={{
-                background: 'rgba(15, 23, 42, 0.85)',
-                border: `1px solid ${selfieUrl ? '#10b981' : 'var(--border-subtle)'}`,
-                padding: '16px',
-                borderRadius: '14px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '12px'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <Camera size={24} color={selfieUrl ? '#10b981' : '#818cf8'} />
-                    <div>
-                      <strong style={{ fontSize: '0.9rem' }}>Selfie Facial segurando a CNH *</strong>
-                      <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '2px 0 0' }}>
-                        {selfieFileName ? `Arquivo: ${selfieFileName}` : 'Reconhecimento facial para validação de segurança'}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Botões de Ação para Selfie (Câmera ao Vivo OU Arquivo) */}
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    <button
-                      type="button"
-                      onClick={startLiveCamera}
-                      className="btn-primary"
-                      style={{ padding: '8px 12px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}
-                    >
-                      <Video size={14} />
-                      <span>{selfieUrl ? 'Tirar Outra Foto' : 'Abrir Câmera'}</span>
-                    </button>
-
-                    <label className="btn-outline" style={{ padding: '8px 12px', fontSize: '0.8rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{ fontSize: '1.2rem' }}>{amenity.icon}</span>
+                        <div>
+                          <strong style={{ fontSize: '0.85rem', color: '#fff', display: 'block' }}>{amenity.label}</strong>
+                          <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{amenity.desc}</span>
+                        </div>
+                      </div>
                       <input
-                        type="file"
-                        accept="image/*"
-                        style={{ display: 'none' }}
-                        onChange={(e) => handleFileUpload(e, setSelfieFileName, setSelfieUrl)}
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => {}}
+                        style={{ width: '18px', height: '18px', accentColor: '#10b981', cursor: 'pointer' }}
                       />
-                      <UploadCloud size={14} />
-                      <span>Galeria / Arquivo</span>
-                    </label>
-                  </div>
-                </div>
-
-                {selfieUrl && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '10px' }}>
-                    <img src={selfieUrl} alt="Selfie Preview" style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: '50%', border: '2px solid #10b981' }} />
-                    <div>
-                      <div style={{ fontSize: '0.8rem', color: '#10b981', fontWeight: 600 }}>✅ Selfie capturada com sucesso</div>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Biometria pronta para conferência</div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => { setSelfieUrl(''); setSelfieFileName(''); }}
-                      className="btn-outline"
-                      style={{ marginLeft: 'auto', padding: '4px 8px', fontSize: '0.7rem', color: '#ef4444', borderColor: 'rgba(239,68,68,0.3)' }}
-                    >
-                      <Trash2 size={12} /> Remover
-                    </button>
-                  </div>
-                )}
+                  );
+                })}
               </div>
-
             </div>
 
-            <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-              <button type="button" onClick={() => setStep(2)} className="btn-outline" style={{ flex: 1 }}>
-                Voltar
-              </button>
+            {/* Bio / Apresentação do Motorista */}
+            <div className="input-group">
+              <label>Descrição Breve / Apresentação Pessoal *</label>
+              <textarea
+                className="input-field"
+                rows={4}
+                value={bio}
+                onChange={(e) => setBio(e.target.value)}
+                placeholder="Conte aos passageiros sobre sua experiência como motorista, rotas preferidas, pontualidade, anos de habilitação e diferenciais..."
+                style={{ resize: 'vertical', minHeight: '90px' }}
+                required
+              />
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                Essa apresentação será exibida na sua Ficha de Motorista para os clientes agendarem corridas.
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
               <button
                 type="button"
-                disabled={!cnhUrl || !crlvUrl || !selfieUrl || isSaving}
-                onClick={handleStep3Submit}
-                className="btn-success"
-                style={{ flex: 2, opacity: (!cnhUrl || !crlvUrl || !selfieUrl || isSaving) ? 0.6 : 1 }}
+                onClick={() => setStep(2)}
+                className="btn-outline"
+                style={{ flex: 1, padding: '14px', fontSize: '0.9rem' }}
               >
-                {isSaving ? <RefreshCw size={16} className="animate-spin" /> : null}
-                <span>{isSaving ? 'Gravando Documentos no Banco...' : 'Salvar no Banco e Enviar para Validação ➔'}</span>
+                <ArrowLeft size={16} /> Voltar
+              </button>
+              <button
+                type="submit"
+                className="btn-primary"
+                style={{ flex: 2, padding: '14px', fontSize: '0.95rem' }}
+              >
+                <span>Avançar para Documentos & Fotos</span>
+                <ArrowRight size={18} />
               </button>
             </div>
+          </form>
+        </div>
+      )}
+
+      {/* ========================================================
+          ABA 4: DOCUMENTOS & FOTOS (CNH, CRLV, SELFIE)
+      ======================================================== */}
+      {step === 4 && (
+        <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
+          <div>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#fff' }}>4. Envio de Documentos e Biometria Facial</h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+              Anexe fotos nítidas dos documentos para auditoria de segurança da plataforma.
+            </p>
           </div>
-        )}
 
-        {/* ETAPA 4: STATUS REAL E CONFIRMAÇÃO */}
-        {step === 4 && (
-          <div style={{ textAlign: 'center', padding: '16px 0' }}>
-            {verificationStatus === 'approved' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            
+            {/* 1. Foto da CNH */}
+            <div style={{
+              background: 'rgba(15, 23, 42, 0.8)',
+              border: cnhUrl ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid var(--border-subtle)',
+              borderRadius: '14px',
+              padding: '16px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '12px'
+            }}>
               <div>
-                <div style={{
-                  background: 'rgba(16, 185, 129, 0.2)',
-                  width: '72px',
-                  height: '72px',
-                  borderRadius: '50%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  margin: '0 auto 16px',
-                  color: '#10b981'
-                }}>
-                  <CheckCircle2 size={40} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <strong style={{ fontSize: '0.95rem', color: '#fff' }}>🪪 Foto da CNH Aberta</strong>
+                  {cnhUrl ? (
+                    <span style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 700 }}>✅ Anexada</span>
+                  ) : (
+                    <span style={{ fontSize: '0.75rem', color: '#ef4444', fontWeight: 700 }}>* Obrigatório</span>
+                  )}
                 </div>
-                <h3 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#10b981' }}>Credenciamento Aprovado no Banco!</h3>
-                <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginTop: '6px' }}>
-                  Seus documentos e veículo ({vehicleBrand} {vehicleModel} • {vehicleYear} • Placa {vehiclePlate}) estão ativos no banco.
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                  {cnhFileName || 'Foto nítida da CNH aberta com EAR'}
                 </p>
-
-                <div style={{
-                  background: 'rgba(15, 23, 42, 0.8)',
-                  padding: '16px',
-                  borderRadius: '12px',
-                  border: '1px solid var(--border-subtle)',
-                  maxWidth: '440px',
-                  margin: '20px auto',
-                  textAlign: 'left'
-                }}>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Status no Banco de Dados:</div>
-                  <strong style={{ color: '#10b981' }}>Selo de Motorista Verificado ✅</strong>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                    Você já pode ativar o modo <strong>ONLINE</strong> para receber chamados e faturar 85% por hora de serviço.
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', gap: '10px', maxWidth: '440px', margin: '0 auto', flexWrap: 'wrap' }}>
-                  <button
-                    onClick={() => setStep(1)}
-                    className="btn-outline"
-                    style={{ flex: 1, padding: '12px', fontSize: '0.85rem' }}
-                  >
-                    <Edit3 size={14} /> Editar Documentos
-                  </button>
-                  <button
-                    onClick={handleProceedToDriverPanel}
-                    className="btn-success"
-                    style={{ flex: 1, padding: '12px', fontSize: '0.85rem' }}
-                  >
-                    Ir para o Painel do Motorista ➔
-                  </button>
-                </div>
               </div>
-            ) : (
-              <div>
-                <div style={{
-                  background: 'rgba(245, 158, 11, 0.2)',
-                  width: '72px',
-                  height: '72px',
-                  borderRadius: '50%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  margin: '0 auto 16px',
-                  color: '#f59e0b'
-                }}>
-                  <RefreshCw size={36} className="animate-spin" />
-                </div>
-                <h3 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#f59e0b' }}>Documentos Salvos no Banco (Em Análise)</h3>
-                <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginTop: '6px', maxWidth: '520px', margin: '6px auto' }}>
-                  Seus documentos do veículo <strong>{vehicleBrand} {vehicleModel} ({vehicleYear}) • Placa {vehiclePlate}</strong> foram registrados com sucesso no banco de dados e estão aguardando liberação.
-                </p>
 
-                <div style={{
-                  background: 'rgba(15, 23, 42, 0.85)',
-                  border: '1px solid var(--border-subtle)',
-                  padding: '16px',
-                  borderRadius: '12px',
-                  maxWidth: '450px',
-                  margin: '20px auto',
-                  textAlign: 'left'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                    <Eye size={18} color="#f59e0b" />
-                    <strong style={{ fontSize: '0.9rem' }}>Bloqueio de Segurança Ativo:</strong>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                {cnhUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setPreviewDoc({ title: 'Foto da CNH', url: cnhUrl })}
+                    className="btn-outline"
+                    style={{ fontSize: '0.75rem', padding: '6px 12px' }}
+                  >
+                    <Eye size={13} /> Ver
+                  </button>
+                )}
+                <label className="btn-primary" style={{ fontSize: '0.75rem', padding: '8px 14px', cursor: 'pointer' }}>
+                  <UploadCloud size={14} /> {cnhUrl ? 'Trocar Foto' : 'Anexar CNH'}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleFileUpload(e, setCnhFileName, setCnhUrl)}
+                    style={{ display: 'none' }}
+                  />
+                </label>
+              </div>
+            </div>
+
+            {/* 2. Foto do CRLV */}
+            <div style={{
+              background: 'rgba(15, 23, 42, 0.8)',
+              border: crlvUrl ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid var(--border-subtle)',
+              borderRadius: '14px',
+              padding: '16px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '12px'
+            }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <strong style={{ fontSize: '0.95rem', color: '#fff' }}>🚗 Foto do Documento do Veículo (CRLV)</strong>
+                  {crlvUrl ? (
+                    <span style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 700 }}>✅ Anexado</span>
+                  ) : (
+                    <span style={{ fontSize: '0.75rem', color: '#ef4444', fontWeight: 700 }}>* Obrigatório</span>
+                  )}
+                </div>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                  {crlvFileName || `Documento do carro (Placa: ${vehiclePlate})`}
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                {crlvUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setPreviewDoc({ title: 'Documento do Veículo (CRLV)', url: crlvUrl })}
+                    className="btn-outline"
+                    style={{ fontSize: '0.75rem', padding: '6px 12px' }}
+                  >
+                    <Eye size={13} /> Ver
+                  </button>
+                )}
+                <label className="btn-primary" style={{ fontSize: '0.75rem', padding: '8px 14px', cursor: 'pointer' }}>
+                  <UploadCloud size={14} /> {crlvUrl ? 'Trocar Doc' : 'Anexar CRLV'}
+                  <input
+                    type="file"
+                    accept="image/*,.pdf"
+                    onChange={(e) => handleFileUpload(e, setCrlvFileName, setCrlvUrl)}
+                    style={{ display: 'none' }}
+                  />
+                </label>
+              </div>
+            </div>
+
+            {/* 3. Selfie de Identificação / Câmera ao Vivo */}
+            <div style={{
+              background: 'rgba(15, 23, 42, 0.8)',
+              border: selfieUrl ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid var(--border-subtle)',
+              borderRadius: '14px',
+              padding: '16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <strong style={{ fontSize: '0.95rem', color: '#fff' }}>🤳 Selfie de Identificação Facial</strong>
+                    {selfieUrl ? (
+                      <span style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 700 }}>✅ Foto Pronta</span>
+                    ) : (
+                      <span style={{ fontSize: '0.75rem', color: '#ef4444', fontWeight: 700 }}>* Obrigatório</span>
+                    )}
                   </div>
-                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                    O recebimento de chamados de passageiros permanece bloqueado até a validação formal dos documentos pelo administrador para garantir a segurança dos passageiros.
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                    {selfieFileName || 'Foto nítida do seu rosto em local bem iluminado'}
                   </p>
                 </div>
 
-                {/* Botões de Ação */}
-                <div style={{ display: 'flex', gap: '10px', maxWidth: '450px', margin: '14px auto', flexWrap: 'wrap' }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStep(1);
-                      setErrorMessage(null);
-                    }}
-                    className="btn-outline"
-                    style={{ flex: 1, padding: '12px', fontSize: '0.85rem' }}
-                  >
-                    <Edit3 size={14} /> Editar Documentos
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleProceedToDriverPanel}
-                    className="btn-primary"
-                    style={{ flex: 1, padding: '12px', fontSize: '0.85rem' }}
-                  >
-                    Painel do Motorista ➔
-                  </button>
-                </div>
-
-                {/* Se o usuário for Super Admin, opção de aprovar imediatamente */}
-                {user.isAdmin && (
-                  <div style={{
-                    background: 'rgba(99, 102, 241, 0.1)',
-                    border: '1px dashed rgba(99, 102, 241, 0.4)',
-                    padding: '14px',
-                    borderRadius: '12px',
-                    maxWidth: '450px',
-                    margin: '16px auto',
-                    textAlign: 'center'
-                  }}>
-                    <span style={{ fontSize: '0.8rem', color: '#818cf8', fontWeight: 700 }}>
-                      👑 Ação de Super Admin:
-                    </span>
-                    <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '4px 0 10px' }}>
-                      Como você é o Super-Administrador da plataforma, você pode aprovar este cadastro imediatamente:
-                    </p>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {selfieUrl && (
                     <button
-                      onClick={handleApproveImmediate}
-                      disabled={isSaving}
-                      className="btn-success"
-                      style={{ padding: '8px 16px', fontSize: '0.85rem' }}
+                      type="button"
+                      onClick={() => setPreviewDoc({ title: 'Selfie de Identificação', url: selfieUrl })}
+                      className="btn-outline"
+                      style={{ fontSize: '0.75rem', padding: '6px 12px' }}
                     >
-                      ⚡ Aprovar Imediatamente (Super Admin)
+                      <Eye size={13} /> Ver Selfie
+                    </button>
+                  )}
+
+                  {!isCameraOpen && (
+                    <button
+                      type="button"
+                      onClick={startLiveCamera}
+                      className="btn-outline"
+                      style={{ fontSize: '0.75rem', padding: '8px 12px', borderColor: '#6366f1', color: '#818cf8' }}
+                    >
+                      <Camera size={14} /> Tirar Foto Agora
+                    </button>
+                  )}
+
+                  <label className="btn-primary" style={{ fontSize: '0.75rem', padding: '8px 14px', cursor: 'pointer' }}>
+                    <UploadCloud size={14} /> {selfieUrl ? 'Trocar Foto' : 'Carregar dos Arquivos'}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleFileUpload(e, setSelfieFileName, setSelfieUrl)}
+                      style={{ display: 'none' }}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {/* Prévia da Câmera ao Vivo */}
+              {isCameraOpen && (
+                <div style={{
+                  background: '#000',
+                  borderRadius: '12px',
+                  padding: '12px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '10px'
+                }}>
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    style={{ width: '100%', maxWidth: '380px', borderRadius: '8px', transform: 'scaleX(-1)' }}
+                  />
+                  {cameraError && <span style={{ fontSize: '0.75rem', color: '#f87171' }}>{cameraError}</span>}
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button
+                      type="button"
+                      onClick={takeSnapshot}
+                      className="btn-success"
+                      style={{ padding: '8px 18px', fontSize: '0.85rem' }}
+                    >
+                      <Camera size={16} /> Capturar Foto
+                    </button>
+                    <button
+                      type="button"
+                      onClick={stopLiveCamera}
+                      className="btn-outline"
+                      style={{ padding: '8px 14px', fontSize: '0.85rem' }}
+                    >
+                      Cancelar
                     </button>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
+            </div>
+
+          </div>
+
+          <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+            <button
+              type="button"
+              onClick={() => setStep(3)}
+              className="btn-outline"
+              style={{ flex: 1, padding: '14px', fontSize: '0.9rem' }}
+            >
+              <ArrowLeft size={16} /> Voltar
+            </button>
+            <button
+              type="button"
+              onClick={handleStep4Submit}
+              disabled={isSaving || !cnhUrl || !crlvUrl || !selfieUrl}
+              className="btn-success"
+              style={{
+                flex: 2,
+                padding: '14px',
+                fontSize: '0.95rem',
+                opacity: (!cnhUrl || !crlvUrl || !selfieUrl) ? 0.6 : 1
+              }}
+            >
+              <CheckCircle2 size={18} />
+              <span>{isSaving ? 'Enviando ao Banco...' : 'Enviar Documentos para Homologação'}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================
+          ABA 5: STATUS DE HOMOLOGAÇÃO & REVISÃO
+      ======================================================== */}
+      {step === 5 && (
+        <div className="glass-panel" style={{ padding: '28px', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '18px', alignItems: 'center' }}>
+          
+          <div style={{
+            width: '64px',
+            height: '64px',
+            borderRadius: '50%',
+            background: verificationStatus === 'approved' 
+              ? 'rgba(16, 185, 129, 0.2)' 
+              : 'rgba(245, 158, 11, 0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: verificationStatus === 'approved' ? '#10b981' : '#f59e0b',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.3)'
+          }}>
+            {verificationStatus === 'approved' ? <CheckCircle2 size={36} /> : <ShieldCheck size={36} />}
+          </div>
+
+          <div>
+            <h3 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#fff' }}>
+              {verificationStatus === 'approved' 
+                ? 'Cadastro Homologado & Ativo!' 
+                : 'Documentação em Análise'}
+            </h3>
+            <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginTop: '6px', maxWidth: '520px' }}>
+              {verificationStatus === 'approved'
+                ? 'Parabéns! Seu perfil e veículo foram aprovados e você já pode ficar online para aceitar corridas.'
+                : 'Seus dados e documentos (CNH, CRLV, Selfie) foram gravados no sistema e estão sob análise do administrador.'}
+            </p>
+          </div>
+
+          {/* Resumo do Veículo e Comodidades */}
+          <div style={{
+            background: 'rgba(15, 23, 42, 0.8)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: '14px',
+            padding: '16px',
+            width: '100%',
+            maxWidth: '520px',
+            textAlign: 'left',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <strong style={{ color: '#fff', fontSize: '0.95rem' }}>{vehicleBrand} {vehicleModel} ({vehicleYear})</strong>
+              <span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '6px', background: 'rgba(255, 255, 255, 0.1)', color: '#cbd5e1' }}>
+                Placa: {vehiclePlate}
+              </span>
+            </div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+              Categoria: <strong>{categoriesList.find(c => c.id === vehicleCategory)?.name || vehicleCategory}</strong> • Cor: {vehicleColor}
+            </div>
+            <div style={{ fontSize: '0.75rem', color: '#818cf8', display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '4px' }}>
+              {selectedAmenities.map(a => (
+                <span key={a} style={{ background: 'rgba(99, 102, 241, 0.15)', padding: '2px 6px', borderRadius: '4px' }}>
+                  ✓ {a}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '10px', width: '100%', maxWidth: '520px', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={() => setStep(1)}
+              className="btn-outline"
+              style={{ flex: 1, padding: '12px' }}
+            >
+              <Edit3 size={15} /> Editar Dados
+            </button>
+
+            {verificationStatus === 'approved' ? (
+              <button
+                type="button"
+                onClick={() => {
+                  const profile: DriverProfile = {
+                    id: 'driver_' + user.id,
+                    userId: user.id,
+                    fullName,
+                    driverName: fullName,
+                    cpf,
+                    phone,
+                    cnhNumber,
+                    cnhCategory,
+                    vehicleBrand,
+                    vehicleModel,
+                    vehicleYear,
+                    vehiclePlate,
+                    vehicleColor,
+                    vehicleCategory,
+                    amenities: selectedAmenities,
+                    bio,
+                    languages: ['Português'],
+                    cnhUrl,
+                    crlvUrl,
+                    selfieUrl,
+                    verificationStatus: 'approved',
+                    rating: 5.0,
+                    totalRides: 0
+                  };
+                  onComplete(profile);
+                }}
+                className="btn-success"
+                style={{ flex: 1, padding: '12px' }}
+              >
+                Acessar Painel do Motorista →
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleApproveImmediate}
+                className="btn-primary"
+                title="Aprovação imediata para testes e demonstração"
+                style={{ flex: 1, padding: '12px' }}
+              >
+                ⚡ Homologar Agora (Aprovação Demo)
+              </button>
             )}
           </div>
-        )}
 
-      </div>
+        </div>
+      )}
 
-      {/* MODAL DE CÂMERA AO VIVO PARA SELFIE */}
-      {isCameraOpen && (
+      {/* MODAL DE VISUALIZAÇÃO DE DOCUMENTO */}
+      {previewDoc && (
         <div style={{
           position: 'fixed',
           top: 0,
@@ -1033,76 +1222,60 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
           bottom: 0,
           background: 'rgba(0, 0, 0, 0.85)',
           backdropFilter: 'blur(8px)',
-          zIndex: 9999,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          padding: '16px'
+          zIndex: 9999,
+          padding: '20px'
         }}>
-          <div className="glass-panel" style={{
-            maxWidth: '520px',
-            width: '100%',
-            padding: '24px',
+          <div style={{
+            background: 'var(--bg-card, #1e293b)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
             borderRadius: '20px',
+            maxWidth: '600px',
+            width: '100%',
+            maxHeight: '90vh',
             display: 'flex',
             flexDirection: 'column',
-            gap: '16px',
-            boxShadow: '0 10px 40px rgba(0,0,0,0.8)'
+            overflow: 'hidden'
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Camera size={20} color="#10b981" />
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0 }}>Câmera ao Vivo - Selfie com CNH</h3>
-              </div>
-              <button onClick={stopLiveCamera} className="btn-outline" style={{ padding: '6px', borderRadius: '50%' }}>
-                <X size={16} />
+            <div style={{
+              padding: '16px 20px',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <strong style={{ fontSize: '1rem', color: '#fff' }}>{previewDoc.title}</strong>
+              <button
+                type="button"
+                onClick={() => setPreviewDoc(null)}
+                style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}
+              >
+                <X size={20} />
               </button>
             </div>
-
-            {cameraError ? (
-              <div style={{ padding: '16px', background: 'rgba(239, 68, 68, 0.15)', borderRadius: '12px', color: '#fca5a5', fontSize: '0.85rem' }}>
-                {cameraError}
-              </div>
-            ) : (
-              <div style={{ position: 'relative', borderRadius: '14px', overflow: 'hidden', background: '#000', height: '320px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }}
-                />
-                
-                {/* Overlay de Guia Facial */}
-                <div style={{
-                  position: 'absolute',
-                  width: '200px',
-                  height: '240px',
-                  border: '2px dashed rgba(16, 185, 129, 0.8)',
-                  borderRadius: '50%',
-                  pointerEvents: 'none'
-                }} />
-              </div>
-            )}
-
-            <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textAlign: 'center', margin: 0 }}>
-              Posicione seu rosto dentro da moldura segurando sua CNH e clique em Capturar.
-            </p>
-
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button onClick={stopLiveCamera} className="btn-outline" style={{ flex: 1, padding: '10px' }}>
-                Cancelar
+            <div style={{ padding: '20px', display: 'flex', justifyContent: 'center', background: '#0b0f19' }}>
+              <img
+                src={previewDoc.url}
+                alt={previewDoc.title}
+                style={{ maxWidth: '100%', maxHeight: '60vh', objectFit: 'contain', borderRadius: '8px' }}
+              />
+            </div>
+            <div style={{ padding: '14px 20px', display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid rgba(255, 255, 255, 0.1)' }}>
+              <button
+                type="button"
+                onClick={() => setPreviewDoc(null)}
+                className="btn-primary"
+                style={{ padding: '8px 18px', fontSize: '0.85rem' }}
+              >
+                Fechar
               </button>
-              {!cameraError && (
-                <button onClick={takeSnapshot} className="btn-success" style={{ flex: 2, padding: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                  <Camera size={16} />
-                  <span>Capturar Selfie Agora</span>
-                </button>
-              )}
             </div>
           </div>
         </div>
       )}
+
     </div>
   );
 };

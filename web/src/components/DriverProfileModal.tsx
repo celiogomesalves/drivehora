@@ -215,9 +215,24 @@ export function DriverProfileModal({
             border: '1px solid rgba(255, 255, 255, 0.08)',
             marginBottom: '18px'
           }}>
-            <h4 style={{ fontSize: '0.85rem', textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '0.05em', fontWeight: 700, margin: '0 0 12px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Car size={15} color="#818cf8" /> Detalhes do Veículo Executivo
-            </h4>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+              <h4 style={{ fontSize: '0.85rem', textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '0.05em', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Car size={15} color="#818cf8" /> Detalhes do Veículo
+              </h4>
+              {driver.vehicleCategory && (
+                <span style={{
+                  fontSize: '0.75rem',
+                  padding: '3px 10px',
+                  borderRadius: '8px',
+                  background: 'rgba(99, 102, 241, 0.2)',
+                  color: '#818cf8',
+                  fontWeight: 700,
+                  textTransform: 'capitalize'
+                }}>
+                  Categoria: {driver.vehicleCategory}
+                </span>
+              )}
+            </div>
             
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
               <div>

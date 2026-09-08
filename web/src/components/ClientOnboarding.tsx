@@ -199,9 +199,9 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div className="form-grid-2">
             <div className="input-group">
-              <label>Telefone / WhatsApp</label>
+              <label>Telefone / WhatsApp *</label>
               <input
                 type="tel"
                 className="custom-input"
@@ -214,9 +214,9 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({
             </div>
 
             <div className="input-group">
-              <label>CPF</label>
+              <label>CPF *</label>
               <input
-                type="text"
+                type="tel"
                 className="custom-input"
                 value={cpf}
                 onChange={(e) => setCpf(formatCpf(e.target.value))}
@@ -230,7 +230,7 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({
           {/* Campo de CEP com Busca Automática */}
           <div className="input-group">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <label>CEP (Busca Automática de Endereço)</label>
+              <label>CEP (Busca Automática de Endereço) *</label>
               {isLoadingCep && (
                 <span style={{ fontSize: '0.75rem', color: '#818cf8', display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <RefreshCw size={12} className="animate-spin" /> Buscando no ViaCEP...
@@ -245,7 +245,7 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({
             
             <div style={{ position: 'relative' }}>
               <input
-                type="text"
+                type="tel"
                 className="custom-input"
                 value={cep}
                 onChange={handleCepChange}
@@ -259,7 +259,7 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({
 
           {/* Campos Preenchidos Automaticamente */}
           <div className="input-group">
-            <label>Rua / Logradouro</label>
+            <label>Rua / Logradouro *</label>
             <input
               type="text"
               className="custom-input"
@@ -270,9 +270,9 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({
             />
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '12px' }}>
+          <div className="form-grid-2">
             <div className="input-group">
-              <label>Número</label>
+              <label>Número *</label>
               <input
                 type="text"
                 className="custom-input"
@@ -295,9 +295,9 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 70px', gap: '12px' }}>
+          <div className="form-grid-3">
             <div className="input-group">
-              <label>Bairro</label>
+              <label>Bairro *</label>
               <input
                 type="text"
                 className="custom-input"
@@ -309,7 +309,7 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({
             </div>
 
             <div className="input-group">
-              <label>Cidade</label>
+              <label>Cidade *</label>
               <input
                 type="text"
                 className="custom-input"
@@ -321,7 +321,7 @@ export const ClientOnboarding: React.FC<ClientOnboardingProps> = ({
             </div>
 
             <div className="input-group">
-              <label>UF</label>
+              <label>UF *</label>
               <input
                 type="text"
                 className="custom-input"
