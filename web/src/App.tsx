@@ -455,12 +455,21 @@ export function App() {
   };
 
   // Logout do Usuário -> Volta imediatamente para a Página de Login
-  const handleLogout = () => {
+  // Se for motorista, garante que ele ficará OFFLINE antes de sair
+  const handleLogout = async () => {
+    if (currentUser?.role === 'driver' && currentUser?.id) {
+      try {
+        await dbUpdateDriverOnlineStatus(currentUser.id, false);
+      } catch (e) {
+        console.warn('Erro ao colocar motorista offline no logout:', e);
+      }
+    }
     clearLocalSessionToken();
     localStorage.removeItem('drivehora_current_user');
     setCurrentUser(null);
     setClientProfile(null);
     setDriverProfile(null);
+    setIsDriverOnline(false);
   };
 
   // Solicitar corrida como cliente
