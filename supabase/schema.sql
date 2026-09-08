@@ -109,6 +109,22 @@ CREATE TABLE IF NOT EXISTS public.transactions (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- 6.1 Tabela de Motoristas Favoritos do Cliente (favorite_drivers)
+CREATE TABLE IF NOT EXISTS public.favorite_drivers (
+    id TEXT PRIMARY KEY,
+    client_id TEXT NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    driver_id TEXT NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(client_id, driver_id)
+);
+
+-- 6.2 Tabela de Configurações Globais do Sistema & Firebase (system_settings)
+CREATE TABLE IF NOT EXISTS public.system_settings (
+    key TEXT PRIMARY KEY,
+    value JSONB NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- 7. Índices para Otimização de Consultas
 CREATE INDEX IF NOT EXISTS idx_profiles_email ON public.profiles (email);
 CREATE INDEX IF NOT EXISTS idx_profiles_role ON public.profiles (role);
@@ -118,6 +134,7 @@ CREATE INDEX IF NOT EXISTS idx_rides_driver_id ON public.rides (driver_id);
 CREATE INDEX IF NOT EXISTS idx_rides_created_at ON public.rides (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_drivers_status ON public.drivers (verification_status);
 CREATE INDEX IF NOT EXISTS idx_drivers_online ON public.drivers (is_online);
+CREATE INDEX IF NOT EXISTS idx_favorite_drivers_client ON public.favorite_drivers (client_id);
 
 -- 8. Habilitar Row Level Security (RLS)
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
@@ -126,6 +143,8 @@ ALTER TABLE public.drivers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.rides ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ratings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.favorite_drivers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.system_settings ENABLE ROW LEVEL SECURITY;
 
 -- Políticas de acesso (Remove se já existir e recria com segurança)
 DROP POLICY IF EXISTS "Permitir tudo em perfis" ON public.profiles;
@@ -145,6 +164,12 @@ CREATE POLICY "Permitir tudo em avaliações" ON public.ratings FOR ALL USING (t
 
 DROP POLICY IF EXISTS "Permitir tudo em transações" ON public.transactions;
 CREATE POLICY "Permitir tudo em transações" ON public.transactions FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Permitir tudo em favoritos" ON public.favorite_drivers;
+CREATE POLICY "Permitir tudo em favoritos" ON public.favorite_drivers FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Permitir tudo em configurações" ON public.system_settings;
+CREATE POLICY "Permitir tudo em configurações" ON public.system_settings FOR ALL USING (true) WITH CHECK (true);
 
 -- 9. Habilitar Supabase Realtime (Com verificação se a tabela já foi adicionada)
 DO $$

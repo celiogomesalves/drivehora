@@ -1,5 +1,5 @@
 import { getSupabase } from '../supabase';
-import type { UserProfile, ClientProfile, DriverProfile, DriverVerificationStatus } from '../types/auth';
+import type { UserProfile, ClientProfile, DriverProfile, DriverPublicProfile, DriverVerificationStatus } from '../types/auth';
 import { isSuperAdminEmail } from '../types/auth';
 
 export interface DbRide {
@@ -687,4 +687,162 @@ export const dbSubscribeToDrivers = (onUpdate: () => void) => {
     return () => {};
   }
 };
+
+// 14. Buscar Lista de IDs de Motoristas Favoritos do Cliente
+export const dbGetFavoriteDriverIds = async (clientId: string): Promise<string[]> => {
+  if (!clientId) return [];
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      const res: any = await sb
+        .from('favorite_drivers')
+        .select('driver_id')
+        .eq('client_id', clientId);
+      if (res?.data) {
+        return res.data.map((item: any) => item.driver_id);
+      }
+    } catch (e) {
+      console.warn('Erro ao buscar favoritos no Supabase:', e);
+    }
+  }
+
+  try {
+    const local = localStorage.getItem(`drivehora_favs_${clientId}`);
+    return local ? JSON.parse(local) : [];
+  } catch (e) {
+    return [];
+  }
+};
+
+// 15. Alternar Favorito (Adicionar/Remover)
+export const dbToggleFavoriteDriver = async (
+  clientId: string, 
+  driverId: string
+): Promise<{ isFavorite: boolean }> => {
+  if (!clientId || !driverId) return { isFavorite: false };
+
+  let currentFavs: string[] = [];
+  try {
+    const local = localStorage.getItem(`drivehora_favs_${clientId}`);
+    if (local) currentFavs = JSON.parse(local);
+  } catch (e) {}
+
+  const exists = currentFavs.includes(driverId);
+  const nextFavs = exists 
+    ? currentFavs.filter(id => id !== driverId) 
+    : [...currentFavs, driverId];
+
+  try {
+    localStorage.setItem(`drivehora_favs_${clientId}`, JSON.stringify(nextFavs));
+  } catch (e) {}
+
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      if (exists) {
+        await sb
+          .from('favorite_drivers')
+          .delete()
+          .match({ client_id: clientId, driver_id: driverId });
+      } else {
+        await sb
+          .from('favorite_drivers')
+          .insert([{
+            id: `fav_${clientId}_${driverId}`,
+            client_id: clientId,
+            driver_id: driverId,
+            created_at: new Date().toISOString()
+          }]);
+      }
+    } catch (e) {
+      console.warn('Erro ao sincronizar favorito no Supabase:', e);
+    }
+  }
+
+  return { isFavorite: !exists };
+};
+
+// 16. Buscar Ficha Pública Segura do Motorista (Ocultando Dados Sensíveis)
+export const dbGetDriverPublicProfile = async (
+  driverId: string,
+  clientId?: string
+): Promise<DriverPublicProfile | null> => {
+  const allDrivers = await dbGetAllDrivers();
+  const driver = allDrivers.find(d => d.id === driverId || d.userId === driverId);
+  if (!driver) return null;
+
+  let isFavorite = false;
+  if (clientId) {
+    const favs = await dbGetFavoriteDriverIds(clientId);
+    isFavorite = favs.includes(driver.id) || favs.includes(driver.userId);
+  }
+
+  // Mascarar placa parcialmente se desejado ou exibir placa executiva
+  return {
+    id: driver.id,
+    userId: driver.userId,
+    displayName: driver.fullName || driver.driverName || 'Motorista Parceiro',
+    avatarUrl: driver.selfieUrl || undefined,
+    selfieUrl: driver.selfieUrl || undefined,
+    verificationStatus: driver.verificationStatus,
+    isVerified: driver.verificationStatus === 'approved',
+    rating: driver.rating || 5.0,
+    totalRides: driver.totalRides || 0,
+    vehicleBrand: driver.vehicleBrand || 'Veículo Executivo',
+    vehicleModel: driver.vehicleModel || 'Sedan Particular',
+    vehicleYear: driver.vehicleYear || '2023',
+    vehicleColor: driver.vehicleColor || 'Preto Executivo',
+    vehiclePlate: driver.vehiclePlate || 'Mercosul',
+    isOnline: driver.isOnline,
+    currentLat: driver.currentLat,
+    currentLng: driver.currentLng,
+    bio: driver.bio || 'Motorista executivo dedicado a viagens confortáveis, pontuais e seguras.',
+    languages: driver.languages || ['Português (Nativo)', 'Inglês (Básico)'],
+    amenities: driver.amenities || ['❄️ Ar-condicionado', '📶 Wi-Fi 5G', '🔌 Carregador USB-C', '🍬 Água mineral'],
+    memberSince: driver.memberSince || 'Membro desde 2025',
+    isFavorite
+  };
+};
+
+// 17. Buscar Lista de Motoristas Favoritos Completos
+export const dbGetFavoriteDrivers = async (clientId: string): Promise<DriverPublicProfile[]> => {
+  if (!clientId) return [];
+  const favIds = await dbGetFavoriteDriverIds(clientId);
+  if (favIds.length === 0) return [];
+
+  const allDrivers = await dbGetAllDrivers();
+  const list: DriverPublicProfile[] = [];
+
+  for (const driver of allDrivers) {
+    if (favIds.includes(driver.id) || favIds.includes(driver.userId)) {
+      list.push({
+        id: driver.id,
+        userId: driver.userId,
+        displayName: driver.fullName || driver.driverName || 'Motorista Parceiro',
+        avatarUrl: driver.selfieUrl || undefined,
+        selfieUrl: driver.selfieUrl || undefined,
+        verificationStatus: driver.verificationStatus,
+        isVerified: driver.verificationStatus === 'approved',
+        rating: driver.rating || 5.0,
+        totalRides: driver.totalRides || 0,
+        vehicleBrand: driver.vehicleBrand || 'Veículo Executivo',
+        vehicleModel: driver.vehicleModel || 'Sedan Particular',
+        vehicleYear: driver.vehicleYear || '2023',
+        vehicleColor: driver.vehicleColor || 'Preto Executivo',
+        vehiclePlate: driver.vehiclePlate || 'Mercosul',
+        isOnline: driver.isOnline,
+        currentLat: driver.currentLat,
+        currentLng: driver.currentLng,
+        bio: driver.bio || 'Motorista executivo experiente focado em conforto e segurança.',
+        languages: driver.languages || ['Português (Nativo)'],
+        amenities: driver.amenities || ['❄️ Ar-condicionado', '🔌 Carregador', '🍬 Água'],
+        memberSince: driver.memberSince || 'Membro desde 2025',
+        isFavorite: true
+      });
+    }
+  }
+
+  return list;
+};
+
 

@@ -4,12 +4,12 @@ import {
   Smartphone, Users, RefreshCw, CheckCircle2, 
   Radio, Award, PlayCircle, Sparkles, Compass, Database, 
   X, Check, LogOut, MapPin, Crown, AlertTriangle, UserCheck,
-  BellRing, Volume2, VolumeX, Ban, AlertOctagon
+  BellRing, Volume2, VolumeX, Ban, AlertOctagon, Heart
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import confetti from 'canvas-confetti';
 import { getSupabase, getSupabaseCredentials, saveSupabaseCredentials, initGlobalSupabaseConfig } from './supabase';
-import type { UserProfile, ClientProfile, DriverProfile } from './types/auth';
+import type { UserProfile, ClientProfile, DriverProfile, DriverPublicProfile } from './types/auth';
 import { isSuperAdminEmail } from './types/auth';
 import { LoginPage } from './components/LoginPage';
 import { ClientOnboarding } from './components/ClientOnboarding';
@@ -17,11 +17,14 @@ import { DriverOnboarding } from './components/DriverOnboarding';
 import { AdminDashboard } from './components/AdminDashboard';
 import { NearbyDriversMap } from './components/NearbyDriversMap';
 import { LiveRideTrackerMap } from './components/LiveRideTrackerMap';
+import { DriverProfileModal } from './components/DriverProfileModal';
+import { FavoriteDriversList } from './components/FavoriteDriversList';
 import { getCurrentPosition, reverseGeocode, searchAddressPlaces } from './services/gpsService';
 import { formatCurrency, formatCurrencyInput, parseCurrencyInput } from './utils/formatters';
 import { 
   dbGetClientProfile, dbGetDriverProfile, 
-  dbCreateRide, dbUpdateRide, dbCancelRide, dbUpdateDriverOnlineStatus, dbUpdateDriverLocation, type DbRide 
+  dbCreateRide, dbUpdateRide, dbCancelRide, dbUpdateDriverOnlineStatus, dbUpdateDriverLocation,
+  dbGetFavoriteDriverIds, dbToggleFavoriteDriver, type DbRide 
 } from './services/dbService';
 
 export function App() {
@@ -62,10 +65,37 @@ export function App() {
   const [isRequesting, setIsRequesting] = useState(false);
   const [isLocatingGPS, setIsLocatingGPS] = useState(false);
 
-  // Cliente: Sub-aba (Solicitar Corrida ou Radar de Motoristas Próximos)
-  const [clientSubTab, setClientSubTab] = useState<'request' | 'nearby_radar'>('request');
+  // Cliente: Sub-aba (Solicitar Corrida, Radar ou Favoritos VIP)
+  const [clientSubTab, setClientSubTab] = useState<'request' | 'nearby_radar' | 'favorites'>('request');
+  const [selectedDriverForProfile, setSelectedDriverForProfile] = useState<DriverPublicProfile | null>(null);
+  const [favoriteDriverIds, setFavoriteDriverIds] = useState<string[]>([]);
+  const [selectedDirectDriver, setSelectedDirectDriver] = useState<DriverPublicProfile | null>(null);
   const [now, setNow] = useState(Date.now());
   const [dismissedCancellationId, setDismissedCancellationId] = useState<string | null>(null);
+
+  // Carregar IDs de favoritos do cliente logado
+  useEffect(() => {
+    if (currentUser?.id) {
+      dbGetFavoriteDriverIds(currentUser.id).then(ids => setFavoriteDriverIds(ids));
+    }
+  }, [currentUser?.id]);
+
+  // Alternar favorito do cliente
+  const handleToggleFavorite = async (driverId: string) => {
+    if (!currentUser?.id) return;
+    const res = await dbToggleFavoriteDriver(currentUser.id, driverId);
+    if (res.isFavorite) {
+      setFavoriteDriverIds(prev => [...new Set([...prev, driverId])]);
+    } else {
+      setFavoriteDriverIds(prev => prev.filter(id => id !== driverId));
+    }
+  };
+
+  // Selecionar motorista para agendamento direto
+  const handleSelectDriverForBooking = (driver: DriverPublicProfile) => {
+    setSelectedDirectDriver(driver);
+    setClientSubTab('request');
+  };
 
   // Timer de 1 segundo para atualizar contadores regressivos
   useEffect(() => {
@@ -1049,7 +1079,7 @@ export function App() {
             ) : (
               <div>
                 {/* Switcher de Sub-Abas do Passageiro */}
-                <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+                <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
                   <button
                     onClick={() => setClientSubTab('request')}
                     className={clientSubTab === 'request' ? 'btn-primary' : 'btn-outline'}
@@ -1058,6 +1088,7 @@ export function App() {
                     <Car size={18} />
                     <span>Solicitar Corrida</span>
                   </button>
+
                   <button
                     onClick={() => setClientSubTab('nearby_radar')}
                     className={clientSubTab === 'nearby_radar' ? 'btn-primary' : 'btn-outline'}
@@ -1066,14 +1097,88 @@ export function App() {
                     <Radio size={18} className="animate-pulse" />
                     <span>Motoristas Próximos (Radar)</span>
                   </button>
+
+                  <button
+                    onClick={() => setClientSubTab('favorites')}
+                    className={clientSubTab === 'favorites' ? 'btn-primary' : 'btn-outline'}
+                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', fontSize: '0.9rem', borderRadius: '14px' }}
+                  >
+                    <Heart size={18} fill={clientSubTab === 'favorites' ? '#fff' : '#ef4444'} color={clientSubTab === 'favorites' ? '#fff' : '#ef4444'} />
+                    <span>Meus Favoritos (VIP)</span>
+                  </button>
                 </div>
 
                 {clientSubTab === 'nearby_radar' ? (
-                  <NearbyDriversMap onSelectDriverToRequest={() => setClientSubTab('request')} />
+                  <NearbyDriversMap 
+                    clientId={currentUser.id}
+                    favoriteDriverIds={favoriteDriverIds}
+                    onOpenDriverProfile={(driver) => setSelectedDriverForProfile(driver)}
+                    onToggleFavorite={handleToggleFavorite}
+                    onSelectDriverToRequest={() => setClientSubTab('request')} 
+                  />
+                ) : clientSubTab === 'favorites' ? (
+                  <FavoriteDriversList
+                    clientId={currentUser.id}
+                    onOpenDriverProfile={(driver) => setSelectedDriverForProfile(driver)}
+                    onSelectDriverForBooking={handleSelectDriverForBooking}
+                    onExploreRadar={() => setClientSubTab('nearby_radar')}
+                  />
                 ) : (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }}>
                     {/* Form de Solicitação */}
                     <div className="glass-panel" style={{ padding: '28px' }}>
+                      
+                      {/* Banner de Agendamento Direto com Motorista Favorito Selecionado */}
+                      {selectedDirectDriver && (
+                        <div style={{
+                          background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.2) 0%, rgba(16, 185, 129, 0.15) 100%)',
+                          border: '1px solid rgba(99, 102, 241, 0.4)',
+                          borderRadius: '16px',
+                          padding: '14px 16px',
+                          marginBottom: '20px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '12px'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div style={{
+                              width: '42px',
+                              height: '42px',
+                              borderRadius: '12px',
+                              background: '#10b981',
+                              color: '#fff',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '1.2rem',
+                              fontWeight: 800,
+                              flexShrink: 0
+                            }}>
+                              🚗
+                            </div>
+                            <div>
+                              <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#818cf8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                ⭐ Agendamento Direto VIP
+                              </div>
+                              <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#fff' }}>
+                                {selectedDirectDriver.displayName} ({selectedDirectDriver.vehicleBrand} {selectedDirectDriver.vehicleModel})
+                              </div>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => setSelectedDirectDriver(null)}
+                            className="btn-outline"
+                            style={{ fontSize: '0.75rem', padding: '4px 8px' }}
+                            title="Trocar para busca geral de motoristas"
+                          >
+                            Remover
+                          </button>
+                        </div>
+                      )}
+
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                           <div style={{
@@ -2221,6 +2326,16 @@ export function App() {
           </div>
         </div>
       </footer>
+
+      {/* Modal da Ficha Executiva do Motorista (Segura e sem dados sensíveis) */}
+      {selectedDriverForProfile && (
+        <DriverProfileModal
+          driver={selectedDriverForProfile}
+          onClose={() => setSelectedDriverForProfile(null)}
+          onToggleFavorite={handleToggleFavorite}
+          onRequestDirectRide={handleSelectDriverForBooking}
+        />
+      )}
     </div>
   );
 }

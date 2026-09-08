@@ -64,4 +64,41 @@ export interface DriverProfile {
   isOnline?: boolean;
   currentLat?: number;
   currentLng?: number;
+  bio?: string;
+  languages?: string[];
+  amenities?: string[];
+  memberSince?: string;
+}
+
+export interface DriverPublicProfile {
+  id: string;
+  userId: string;
+  displayName: string;
+  avatarUrl?: string;
+  selfieUrl?: string;
+  verificationStatus: DriverVerificationStatus;
+  isVerified: boolean;
+  rating: number;
+  totalRides: number;
+  vehicleBrand: string;
+  vehicleModel: string;
+  vehicleYear: string;
+  vehicleColor: string;
+  vehiclePlate: string;
+  isOnline?: boolean;
+  currentLat?: number;
+  currentLng?: number;
+  bio?: string;
+  languages: string[];
+  amenities: string[];
+  memberSince: string;
+  isFavorite?: boolean;
+}
+
+export interface FavoriteDriver {
+  id: string;
+  clientId: string;
+  driverId: string;
+  createdAt: string;
+  driver?: DriverPublicProfile;
 }

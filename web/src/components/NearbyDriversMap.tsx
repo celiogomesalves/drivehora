@@ -1,15 +1,25 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import L from 'leaflet';
-import { Radio, Car, Star, Navigation, RefreshCw, ShieldCheck, Zap, Maximize2 } from 'lucide-react';
-import { dbGetAllDrivers, dbSubscribeToDrivers } from '../services/dbService';
+import { Radio, Car, Star, Navigation, RefreshCw, ShieldCheck, Zap, Maximize2, Heart, User } from 'lucide-react';
+import { dbGetAllDrivers, dbSubscribeToDrivers, dbGetDriverPublicProfile } from '../services/dbService';
 import { getCurrentPosition, calculateDistanceKm, type Coordinates } from '../services/gpsService';
-import type { DriverProfile } from '../types/auth';
+import type { DriverProfile, DriverPublicProfile } from '../types/auth';
 
 interface NearbyDriversMapProps {
+  clientId?: string;
   onSelectDriverToRequest?: () => void;
+  onOpenDriverProfile?: (driver: DriverPublicProfile) => void;
+  onToggleFavorite?: (driverId: string) => Promise<void>;
+  favoriteDriverIds?: string[];
 }
 
-export function NearbyDriversMap({ onSelectDriverToRequest }: NearbyDriversMapProps) {
+export function NearbyDriversMap({ 
+  clientId,
+  onSelectDriverToRequest,
+  onOpenDriverProfile,
+  onToggleFavorite,
+  favoriteDriverIds = []
+}: NearbyDriversMapProps) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const userMarkerRef = useRef<L.Marker | null>(null);
@@ -440,6 +450,24 @@ export function NearbyDriversMap({ onSelectDriverToRequest }: NearbyDriversMapPr
               const hasExactGps = Boolean(d.currentLat && d.currentLng);
 
               const driverDisplayName = d.fullName || d.driverName || 'Motorista Parceiro';
+              const isDriverFav = favoriteDriverIds.includes(driverId) || (d.userId ? favoriteDriverIds.includes(d.userId) : false);
+
+              const handleCardOpenProfile = async (e: React.MouseEvent) => {
+                e.stopPropagation();
+                if (onOpenDriverProfile) {
+                  const fullProfile = await dbGetDriverPublicProfile(driverId, clientId);
+                  if (fullProfile) {
+                    onOpenDriverProfile(fullProfile);
+                  }
+                }
+              };
+
+              const handleCardFavorite = async (e: React.MouseEvent) => {
+                e.stopPropagation();
+                if (onToggleFavorite) {
+                  await onToggleFavorite(d.userId || driverId);
+                }
+              };
 
               return (
                 <div 
@@ -488,16 +516,40 @@ export function NearbyDriversMap({ onSelectDriverToRequest }: NearbyDriversMapPr
                       </div>
                     </div>
 
-                    <span style={{
-                      fontSize: '0.7rem',
-                      background: 'rgba(16, 185, 129, 0.15)',
-                      color: '#10b981',
-                      padding: '3px 8px',
-                      borderRadius: '10px',
-                      fontWeight: 700
-                    }}>
-                      {hasExactGps ? '🟢 GPS Real' : '🟢 Online'}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      {/* Botão Favoritar no Card */}
+                      {onToggleFavorite && (
+                        <button
+                          onClick={handleCardFavorite}
+                          title={isDriverFav ? 'Remover dos favoritos' : 'Favoritar este motorista'}
+                          style={{
+                            background: isDriverFav ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255, 255, 255, 0.06)',
+                            border: isDriverFav ? '1px solid rgba(239, 68, 68, 0.4)' : '1px solid rgba(255, 255, 255, 0.1)',
+                            color: isDriverFav ? '#ef4444' : '#fff',
+                            width: '30px',
+                            height: '30px',
+                            borderRadius: '50%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <Heart size={14} fill={isDriverFav ? '#ef4444' : 'none'} />
+                        </button>
+                      )}
+
+                      <span style={{
+                        fontSize: '0.7rem',
+                        background: 'rgba(16, 185, 129, 0.15)',
+                        color: '#10b981',
+                        padding: '3px 8px',
+                        borderRadius: '10px',
+                        fontWeight: 700
+                      }}>
+                        {hasExactGps ? '🟢 GPS Real' : '🟢 Online'}
+                      </span>
+                    </div>
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', color: 'var(--text-secondary)', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '10px' }}>
@@ -512,6 +564,20 @@ export function NearbyDriversMap({ onSelectDriverToRequest }: NearbyDriversMapPr
                       <span>~{calculatedKm} km ({estimatedMins} min)</span>
                     </div>
                   </div>
+
+                  {/* Ações do Card */}
+                  {onOpenDriverProfile && (
+                    <div style={{ display: 'flex', gap: '8px', paddingTop: '2px' }}>
+                      <button
+                        onClick={handleCardOpenProfile}
+                        className="btn-outline"
+                        style={{ width: '100%', padding: '7px', fontSize: '0.75rem', justifyContent: 'center' }}
+                      >
+                        <User size={13} />
+                        <span>Ver Ficha Executiva</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}
