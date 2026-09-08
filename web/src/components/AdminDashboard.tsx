@@ -3,11 +3,24 @@ import type { DriverProfile, ClientProfile, DriverVerificationStatus } from '../
 import { 
   Users, Car, DollarSign, ShieldCheck, CheckCircle2, 
   XCircle, Clock, RefreshCw, 
-  TrendingUp, Database
+  TrendingUp, Database, Image, AlertTriangle, Eye, X, Check
 } from 'lucide-react';
 import { formatCurrency, formatPhone, formatCpf, formatPlate } from '../utils/formatters';
 import { dbGetAllDrivers, dbGetAllClients, dbAdminUpdateDriverStatus, type DbRide } from '../services/dbService';
 import { getSupabase } from '../supabase';
+
+// Utilitário para verificar pendências documentais obrigatórias
+export const getMissingDriverDocs = (d: DriverProfile): string[] => {
+  const missing: string[] = [];
+  if (!d.cnhUrl && !d.cnhNumber) missing.push('Foto da CNH (ou Número)');
+  if (!d.crlvUrl && !d.vehiclePlate) missing.push('Foto do CRLV (Doc. do Veículo)');
+  if (!d.selfieUrl) missing.push('Selfie de Identificação com CNH');
+  if (!d.cpf || d.cpf.replace(/\D/g, '').length < 11) missing.push('CPF Válido');
+  if (!d.phone) missing.push('Telefone de Contato');
+  if (!d.vehicleBrand || !d.vehicleModel) missing.push('Marca/Modelo do Veículo');
+  if (!d.vehiclePlate) missing.push('Placa do Veículo');
+  return missing;
+};
 
 interface AdminDashboardProps {
   rides: DbRide[];
@@ -25,6 +38,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [clients, setClients] = useState<ClientProfile[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [driverFilter, setDriverFilter] = useState<'all' | 'under_review' | 'approved' | 'pending_docs'>('all');
+  const [previewDoc, setPreviewDoc] = useState<{ title: string; url: string } | null>(null);
 
   const loadAdminData = async () => {
     const [driverList, clientList] = await Promise.all([
@@ -60,9 +74,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     };
   }, []);
 
-  const handleUpdateStatus = async (driverId: string, status: DriverVerificationStatus) => {
-    await dbAdminUpdateDriverStatus(driverId, status);
-    setDrivers(prev => prev.map(d => d.id === driverId ? { ...d, verificationStatus: status } : d));
+  const handleUpdateStatus = async (driver: DriverProfile, status: DriverVerificationStatus) => {
+    if (status === 'approved') {
+      const missing = getMissingDriverDocs(driver);
+      if (missing.length > 0) {
+        alert(
+          `⚠️ APROVAÇÃO BLOQUEADA!\n\nNão é possível aprovar este motorista pois existem documentos/dados obrigatórios pendentes:\n\n• ${missing.join('\n• ')}\n\nO motorista precisa enviar todas as fotos e dados antes da liberação.`
+        );
+        return;
+      }
+    }
+
+    const res = await dbAdminUpdateDriverStatus(driver.id, status);
+    if (res.success) {
+      setDrivers(prev => prev.map(d => (d.id === driver.id || d.userId === driver.userId) ? { ...d, verificationStatus: status } : d));
+      if (status === 'approved') {
+        alert(`✅ Motorista "${driver.vehicleBrand} ${driver.vehicleModel}" aprovado com sucesso!`);
+      }
+    } else {
+      alert(`Erro ao atualizar status: ${res.error || 'Falha de comunicação com o banco'}`);
+    }
   };
 
   // Cálculos de métricas
@@ -390,80 +421,251 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {filteredDrivers.map(d => (
-                <div key={d.id} style={{
-                  background: 'rgba(15, 23, 42, 0.85)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: '14px',
-                  padding: '16px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  flexWrap: 'wrap',
-                  gap: '14px'
-                }}>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <strong style={{ fontSize: '1rem', color: '#fff' }}>{d.vehicleBrand} {d.vehicleModel} ({d.vehicleYear})</strong>
-                      <span style={{
-                        fontSize: '0.75rem',
-                        padding: '2px 8px',
-                        borderRadius: '6px',
-                        background: 'rgba(255, 255, 255, 0.08)',
-                        fontWeight: 700
-                      }}>
-                        Placa: {formatPlate(d.vehiclePlate)}
-                      </span>
+              {filteredDrivers.map(d => {
+                const missingDocs = getMissingDriverDocs(d);
+                const isReadyToApprove = missingDocs.length === 0;
+
+                return (
+                  <div key={d.id} style={{
+                    background: 'rgba(15, 23, 42, 0.85)',
+                    border: isReadyToApprove ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(239, 68, 68, 0.2)',
+                    borderRadius: '16px',
+                    padding: '18px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '14px',
+                    boxShadow: '0 4px 16px rgba(0, 0, 0, 0.25)'
+                  }}>
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'flex-start',
+                      flexWrap: 'wrap',
+                      gap: '14px'
+                    }}>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                          <strong style={{ fontSize: '1.05rem', color: '#fff' }}>
+                            {d.vehicleBrand ? `${d.vehicleBrand} ${d.vehicleModel}` : 'Veículo não informado'} {d.vehicleYear ? `(${d.vehicleYear})` : ''}
+                          </strong>
+                          {d.vehiclePlate && (
+                            <span style={{
+                              fontSize: '0.75rem',
+                              padding: '3px 8px',
+                              borderRadius: '6px',
+                              background: 'rgba(255, 255, 255, 0.08)',
+                              fontWeight: 700,
+                              color: '#94a3b8'
+                            }}>
+                              Placa: {formatPlate(d.vehiclePlate)}
+                            </span>
+                          )}
+                          <span style={{
+                            fontSize: '0.75rem',
+                            padding: '3px 10px',
+                            borderRadius: '8px',
+                            fontWeight: 700,
+                            background: d.verificationStatus === 'approved' 
+                              ? 'rgba(16, 185, 129, 0.15)' 
+                              : d.verificationStatus === 'under_review' 
+                              ? 'rgba(245, 158, 11, 0.15)' 
+                              : 'rgba(239, 68, 68, 0.15)',
+                            color: d.verificationStatus === 'approved' 
+                              ? '#10b981' 
+                              : d.verificationStatus === 'under_review' 
+                              ? '#f59e0b' 
+                              : '#ef4444'
+                          }}>
+                            {d.verificationStatus === 'approved' ? 'Aprovado ✅' : d.verificationStatus === 'under_review' ? 'Em Análise ⏳' : 'Pendente Docs ⚠️'}
+                          </span>
+                        </div>
+
+                        <div style={{ fontSize: '0.85rem', color: '#cbd5e1', marginTop: '6px', display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+                          <span>📞 Telefone: <strong>{formatPhone(d.phone) || 'Não informado'}</strong></span>
+                          <span>🆔 CPF: <strong>{formatCpf(d.cpf) || 'Não informado'}</strong></span>
+                          <span>🪪 CNH: <strong>{d.cnhNumber || 'Não informada'}</strong> (Cat. {d.cnhCategory || 'B'})</span>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '10px', marginTop: '6px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                          <span>⭐ Avaliação: {d.rating}</span>
+                          <span>• 🚗 Total de Corridas: {d.totalRides}</span>
+                        </div>
+                      </div>
+
+                      {/* Ações de Moderação */}
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        {d.verificationStatus !== 'approved' && (
+                          <button
+                            onClick={() => handleUpdateStatus(d, 'approved')}
+                            className={isReadyToApprove ? "btn-success" : "btn-outline"}
+                            title={isReadyToApprove ? "Aprovar motorista" : `Faltam documentos: ${missingDocs.join(', ')}`}
+                            style={{ 
+                              padding: '8px 16px', 
+                              fontSize: '0.8rem',
+                              opacity: isReadyToApprove ? 1 : 0.65,
+                              cursor: isReadyToApprove ? 'pointer' : 'not-allowed',
+                              border: isReadyToApprove ? undefined : '1px dashed #ef4444',
+                              color: isReadyToApprove ? '#fff' : '#f87171'
+                            }}
+                          >
+                            <CheckCircle2 size={15} /> Aprovar Motorista
+                          </button>
+                        )}
+
+                        {d.verificationStatus === 'approved' && (
+                          <button
+                            onClick={() => handleUpdateStatus(d, 'under_review')}
+                            className="btn-outline"
+                            style={{ padding: '8px 14px', fontSize: '0.8rem', color: '#f59e0b' }}
+                          >
+                            <Clock size={14} /> Suspender / Reavaliar
+                          </button>
+                        )}
+
+                        <button
+                          onClick={() => handleUpdateStatus(d, 'rejected')}
+                          className="btn-outline"
+                          style={{ padding: '8px 14px', fontSize: '0.8rem', color: '#ef4444' }}
+                        >
+                          <XCircle size={14} /> Reprovar
+                        </button>
+                      </div>
                     </div>
 
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                      Telefone: <strong>{formatPhone(d.phone)}</strong> • CNH: <strong>{d.cnhNumber || 'N/I'}</strong> (Cat. {d.cnhCategory}) • CPF: <strong>{formatCpf(d.cpf)}</strong>
-                    </div>
+                    {/* Documentos Anexados & Miniaturas */}
+                    <div style={{
+                      background: 'rgba(0, 0, 0, 0.3)',
+                      borderRadius: '10px',
+                      padding: '12px 14px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px',
+                      borderTop: '1px solid rgba(255, 255, 255, 0.05)'
+                    }}>
+                      <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Documentos para Auditoria:
+                      </div>
 
-                    <div style={{ display: 'flex', gap: '8px', marginTop: '6px', fontSize: '0.75rem' }}>
-                      <span style={{
-                        color: d.verificationStatus === 'approved' ? '#10b981' : d.verificationStatus === 'under_review' ? '#f59e0b' : '#ef4444',
-                        fontWeight: 700
-                      }}>
-                        Status: {d.verificationStatus === 'approved' ? 'Aprovado ✅' : d.verificationStatus === 'under_review' ? 'Em Análise ⏳' : 'Pendente Documentos ⚠️'}
-                      </span>
-                      <span>• Avaliação: ⭐ {d.rating}</span>
-                      <span>• Total de Corridas: {d.totalRides}</span>
+                      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+                        {/* CNH */}
+                        {d.cnhUrl ? (
+                          <button
+                            onClick={() => setPreviewDoc({ title: `CNH - ${d.vehicleBrand} ${d.vehicleModel}`, url: d.cnhUrl! })}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '6px 12px',
+                              borderRadius: '8px',
+                              background: 'rgba(99, 102, 241, 0.15)',
+                              border: '1px solid rgba(99, 102, 241, 0.4)',
+                              color: '#818cf8',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <Eye size={13} /> Ver Foto CNH
+                          </button>
+                        ) : (
+                          <span style={{ fontSize: '0.75rem', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <X size={13} /> CNH não enviada
+                          </span>
+                        )}
+
+                        {/* CRLV */}
+                        {d.crlvUrl ? (
+                          <button
+                            onClick={() => setPreviewDoc({ title: `CRLV (Doc. Veículo) - Placa ${d.vehiclePlate}`, url: d.crlvUrl! })}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '6px 12px',
+                              borderRadius: '8px',
+                              background: 'rgba(99, 102, 241, 0.15)',
+                              border: '1px solid rgba(99, 102, 241, 0.4)',
+                              color: '#818cf8',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <Eye size={13} /> Ver Doc. Veículo (CRLV)
+                          </button>
+                        ) : (
+                          <span style={{ fontSize: '0.75rem', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <X size={13} /> CRLV não enviado
+                          </span>
+                        )}
+
+                        {/* Selfie */}
+                        {d.selfieUrl ? (
+                          <button
+                            onClick={() => setPreviewDoc({ title: `Selfie de Identificação - ${d.vehicleBrand} ${d.vehicleModel}`, url: d.selfieUrl! })}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '6px 12px',
+                              borderRadius: '8px',
+                              background: 'rgba(99, 102, 241, 0.15)',
+                              border: '1px solid rgba(99, 102, 241, 0.4)',
+                              color: '#818cf8',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <Eye size={13} /> Ver Selfie / Rosto
+                          </button>
+                        ) : (
+                          <span style={{ fontSize: '0.75rem', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <X size={13} /> Selfie não enviada
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Alerta de Documentos Faltantes ou Badge Completo */}
+                      {!isReadyToApprove ? (
+                        <div style={{
+                          marginTop: '4px',
+                          padding: '8px 12px',
+                          borderRadius: '8px',
+                          background: 'rgba(239, 68, 68, 0.12)',
+                          border: '1px solid rgba(239, 68, 68, 0.3)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          color: '#f87171',
+                          fontSize: '0.75rem'
+                        }}>
+                          <AlertTriangle size={15} style={{ flexShrink: 0 }} />
+                          <span>
+                            <strong>Bloqueio de Aprovação ({missingDocs.length} pendências):</strong> Faltando {missingDocs.join(', ')}.
+                          </span>
+                        </div>
+                      ) : (
+                        <div style={{
+                          marginTop: '4px',
+                          padding: '6px 12px',
+                          borderRadius: '8px',
+                          background: 'rgba(16, 185, 129, 0.1)',
+                          border: '1px solid rgba(16, 185, 129, 0.25)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          color: '#34d399',
+                          fontSize: '0.75rem'
+                        }}>
+                          <Check size={14} />
+                          <span><strong>Documentação completa e validada.</strong> Motorista pronto para aprovação.</span>
+                        </div>
+                      )}
                     </div>
                   </div>
-
-                  {/* Ações de Moderação */}
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    {d.verificationStatus !== 'approved' && (
-                      <button
-                        onClick={() => handleUpdateStatus(d.id, 'approved')}
-                        className="btn-success"
-                        style={{ padding: '8px 14px', fontSize: '0.8rem' }}
-                      >
-                        <CheckCircle2 size={14} /> Aprovar Motorista
-                      </button>
-                    )}
-
-                    {d.verificationStatus === 'approved' && (
-                      <button
-                        onClick={() => handleUpdateStatus(d.id, 'under_review')}
-                        className="btn-outline"
-                        style={{ padding: '8px 14px', fontSize: '0.8rem', color: '#f59e0b' }}
-                      >
-                        <Clock size={14} /> Suspender / Reavaliar
-                      </button>
-                    )}
-
-                    <button
-                      onClick={() => handleUpdateStatus(d.id, 'rejected')}
-                      className="btn-outline"
-                      style={{ padding: '8px 14px', fontSize: '0.8rem', color: '#ef4444' }}
-                    >
-                      <XCircle size={14} /> Reprovar
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -580,6 +782,114 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* MODAL DE VISUALIZAÇÃO DE DOCUMENTO (CNH / CRLV / SELFIE) */}
+      {previewDoc && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.85)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: 'var(--bg-card, #1e293b)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: '20px',
+            maxWidth: '700px',
+            width: '100%',
+            maxHeight: '90vh',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)'
+          }}>
+            <div style={{
+              padding: '16px 20px',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <strong style={{ fontSize: '1rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Image size={18} color="#818cf8" />
+                {previewDoc.title}
+              </strong>
+              <button
+                onClick={() => setPreviewDoc(null)}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  border: 'none',
+                  color: '#fff',
+                  borderRadius: '50%',
+                  width: '32px',
+                  height: '32px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer'
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{
+              padding: '20px',
+              overflowY: 'auto',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: '#0b0f19'
+            }}>
+              <img
+                src={previewDoc.url}
+                alt={previewDoc.title}
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: '65vh',
+                  objectFit: 'contain',
+                  borderRadius: '10px',
+                  boxShadow: '0 8px 30px rgba(0, 0, 0, 0.5)'
+                }}
+              />
+            </div>
+
+            <div style={{
+              padding: '14px 20px',
+              borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: '10px',
+              background: 'rgba(15, 23, 42, 0.5)'
+            }}>
+              <a
+                href={previewDoc.url}
+                target="_blank"
+                rel="noreferrer"
+                className="btn-outline"
+                style={{ fontSize: '0.8rem', padding: '6px 14px', textDecoration: 'none' }}
+              >
+                Abrir em Nova Aba
+              </a>
+              <button
+                onClick={() => setPreviewDoc(null)}
+                className="btn-primary"
+                style={{ fontSize: '0.8rem', padding: '6px 16px' }}
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

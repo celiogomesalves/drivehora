@@ -348,7 +348,7 @@ export const dbGetDriverProfile = async (userId: string, email?: string): Promis
       }
 
       if (!res?.error && res?.data) {
-        return {
+        const profile: DriverProfile = {
           id: res.data.id,
           userId: res.data.user_id,
           cpf: res.data.cpf || '',
@@ -368,6 +368,13 @@ export const dbGetDriverProfile = async (userId: string, email?: string): Promis
           totalRides: Number(res.data.total_rides) || 0,
           isOnline: Boolean(res.data.is_online)
         };
+
+        try {
+          localStorage.setItem(`drivehora_driver_profile_${res.data.user_id}`, JSON.stringify(profile));
+          localStorage.setItem(`drivehora_driver_profile_${userId}`, JSON.stringify(profile));
+        } catch (e) {}
+
+        return profile;
       }
     } catch (e) {}
   }
@@ -603,15 +610,42 @@ export const dbGetAllClients = async (): Promise<ClientProfile[]> => {
 export const dbAdminUpdateDriverStatus = async (
   driverId: string, 
   status: DriverVerificationStatus
-): Promise<void> => {
+): Promise<{ success: boolean; error?: string }> => {
   const sb = getSupabase();
   if (sb) {
     try {
-      await sb.from('drivers').update({ verification_status: status }).eq('id', driverId);
-    } catch (e) {
+      const res: any = await sb
+        .from('drivers')
+        .update({ verification_status: status })
+        .or(`id.eq.${driverId},user_id.eq.${driverId}`);
+      if (res?.error) {
+        console.warn('Erro ao atualizar status do motorista no Supabase:', res.error);
+        return { success: false, error: res.error.message };
+      }
+    } catch (e: any) {
       console.warn('Erro ao atualizar status do motorista:', e);
+      return { success: false, error: e.message };
     }
   }
+
+  // Atualizar cache local do storage para consistência imediata
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('drivehora_driver_profile_')) {
+        const item = localStorage.getItem(key);
+        if (item) {
+          const parsed = JSON.parse(item);
+          if (parsed.id === driverId || parsed.userId === driverId) {
+            parsed.verificationStatus = status;
+            localStorage.setItem(key, JSON.stringify(parsed));
+          }
+        }
+      }
+    }
+  } catch (e) {}
+
+  return { success: true };
 };
 
 // 11. Atualizar Status Online/Offline do Motorista no Banco Supabase
