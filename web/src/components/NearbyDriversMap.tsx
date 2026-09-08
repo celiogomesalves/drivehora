@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import L from 'leaflet';
-import { Radio, Car, Star, Navigation, RefreshCw, ShieldCheck, Zap } from 'lucide-react';
+import { Radio, Car, Star, Navigation, RefreshCw, ShieldCheck, Zap, Maximize2 } from 'lucide-react';
 import { dbGetAllDrivers, dbSubscribeToDrivers } from '../services/dbService';
 import { getCurrentPosition, calculateDistanceKm, type Coordinates } from '../services/gpsService';
 import type { DriverProfile } from '../types/auth';
@@ -15,11 +15,52 @@ export function NearbyDriversMap({ onSelectDriverToRequest }: NearbyDriversMapPr
   const userMarkerRef = useRef<L.Marker | null>(null);
   const driverMarkersRef = useRef<Map<string, L.Marker>>(new Map());
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
+  const hasAutoFittedRef = useRef<boolean>(false);
 
   const [userLocation, setUserLocation] = useState<Coordinates>({ latitude: -19.8157, longitude: -43.9542 }); // Default BH
   const [onlineDrivers, setOnlineDrivers] = useState<DriverProfile[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<Date>(new Date());
+
+  // Função de Auto-Zoom Inteligente: calcula enquadramento ótimo para todos os motoristas + cliente
+  const fitMapToAllDrivers = useCallback((isSmooth = true) => {
+    if (!mapInstanceRef.current) return;
+
+    const points: [number, number][] = [
+      [userLocation.latitude, userLocation.longitude]
+    ];
+
+    onlineDrivers.forEach((driver, idx) => {
+      const offsetLat = (Math.sin(idx * 1.7) * 0.008) + (idx % 2 === 0 ? 0.003 : -0.004);
+      const offsetLng = (Math.cos(idx * 1.7) * 0.009) + (idx % 2 === 0 ? -0.003 : 0.004);
+      const driverLat = (driver.currentLat && !isNaN(driver.currentLat)) ? driver.currentLat : (userLocation.latitude + offsetLat);
+      const driverLng = (driver.currentLng && !isNaN(driver.currentLng)) ? driver.currentLng : (userLocation.longitude + offsetLng);
+      points.push([driverLat, driverLng]);
+    });
+
+    if (points.length === 1) {
+      mapInstanceRef.current.setView(points[0], 14, { animate: isSmooth });
+    } else {
+      const bounds = L.latLngBounds(points);
+      mapInstanceRef.current.fitBounds(bounds, {
+        padding: [60, 60],
+        maxZoom: 15,
+        animate: isSmooth,
+        duration: 0.8
+      });
+    }
+  }, [userLocation, onlineDrivers]);
+
+  // Focar em um motorista específico e abrir o popup
+  const focusOnDriver = (driverId: string, lat: number, lng: number) => {
+    if (!mapInstanceRef.current) return;
+    mapInstanceRef.current.flyTo([lat, lng], 16, { duration: 1.0 });
+    const marker = driverMarkersRef.current.get(driverId);
+    if (marker) {
+      setTimeout(() => marker.openPopup(), 600);
+    }
+    mapContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
 
   // 1. Obter e monitorar GPS real do Cliente (Sem forçar remontagem do mapa)
   useEffect(() => {
@@ -53,14 +94,21 @@ export function NearbyDriversMap({ onSelectDriverToRequest }: NearbyDriversMapPr
       const all = await dbGetAllDrivers();
       // Filtrar motoristas que estão com modo ONLINE ativo ou credenciados
       const online = all.filter(d => d.isOnline || d.verificationStatus === 'approved');
-      setOnlineDrivers(online.length > 0 ? online : all);
+      const finalDrivers = online.length > 0 ? online : all;
+      setOnlineDrivers(finalDrivers);
       setLastSyncTime(new Date());
+
+      // Auto-enquadramento inteligente na primeira carga ou sincronização manual
+      if ((!hasAutoFittedRef.current || isManual) && finalDrivers.length > 0) {
+        hasAutoFittedRef.current = true;
+        setTimeout(() => fitMapToAllDrivers(true), 300);
+      }
     } catch (e) {
       console.warn('Erro ao sincronizar motoristas:', e);
     } finally {
       if (isManual) setIsSyncing(false);
     }
-  }, []);
+  }, [fitMapToAllDrivers]);
 
   // 3. Inscrição em Tempo Real (Supabase Realtime) + Polling Suave
   useEffect(() => {
@@ -248,12 +296,23 @@ export function NearbyDriversMap({ onSelectDriverToRequest }: NearbyDriversMapPr
               </span>
             </div>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: '4px 0 0' }}>
-              Posicionamento geográfico contínuo dos motoristas conectados na sua região.
+              Posicionamento geográfico contínuo dos motoristas conectados com auto-enquadramento inteligente.
             </p>
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          {/* Botão de Auto-Zoom / Enquadrar Todos */}
+          <button
+            onClick={() => fitMapToAllDrivers(true)}
+            title="Ajustar zoom para enquadrar a maior quantidade possível de motoristas"
+            className="btn-outline"
+            style={{ fontSize: '0.8rem', padding: '8px 14px', display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(99, 102, 241, 0.1)', borderColor: 'rgba(99, 102, 241, 0.4)', color: '#a5b4fc' }}
+          >
+            <Maximize2 size={14} />
+            <span>Auto-Zoom ({onlineDrivers.length})</span>
+          </button>
+
           <button
             onClick={() => loadDrivers(true)}
             disabled={isSyncing}
@@ -277,42 +336,85 @@ export function NearbyDriversMap({ onSelectDriverToRequest }: NearbyDriversMapPr
         </div>
       </div>
 
-      {/* Mapa Interativo Estável (Sem Piscar) */}
+      {/* Mapa Interativo Estável com Controles de Auto-Zoom */}
       <div className="glass-panel" style={{ padding: '0', overflow: 'hidden', borderRadius: '20px', position: 'relative', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
         <div 
           ref={mapContainerRef} 
-          style={{ width: '100%', height: '460px', background: '#090d16', zIndex: 1 }} 
+          style={{ width: '100%', height: '480px', background: '#090d16', zIndex: 1 }} 
         />
 
-        {/* Overlay informativo sobre o mapa */}
+        {/* Overlay informativo e Botão Flutuante de Auto-Enquadramento */}
         <div style={{
           position: 'absolute',
           top: '16px',
           right: '16px',
-          background: 'rgba(15, 23, 42, 0.9)',
-          backdropFilter: 'blur(10px)',
-          border: '1px solid rgba(255, 255, 255, 0.15)',
-          borderRadius: '12px',
-          padding: '10px 16px',
-          zIndex: 500,
-          fontSize: '0.8rem',
-          color: '#fff',
           display: 'flex',
-          alignItems: 'center',
+          flexDirection: 'column',
+          alignItems: 'flex-end',
           gap: '8px',
-          boxShadow: '0 4px 20px rgba(0,0,0,0.5)'
+          zIndex: 500
         }}>
-          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981' }}></span>
-          <span><strong>{onlineDrivers.length}</strong> motorista(s) com GPS ativo</span>
+          <div style={{
+            background: 'rgba(15, 23, 42, 0.92)',
+            backdropFilter: 'blur(10px)',
+            border: '1px solid rgba(255, 255, 255, 0.15)',
+            borderRadius: '12px',
+            padding: '8px 14px',
+            fontSize: '0.8rem',
+            color: '#fff',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.5)'
+          }}>
+            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981' }}></span>
+            <span><strong>{onlineDrivers.length}</strong> motorista(s) visíveis</span>
+          </div>
+
+          <button
+            onClick={() => fitMapToAllDrivers(true)}
+            style={{
+              background: 'rgba(15, 23, 42, 0.92)',
+              backdropFilter: 'blur(10px)',
+              border: '1px solid rgba(99, 102, 241, 0.5)',
+              borderRadius: '10px',
+              padding: '7px 12px',
+              fontSize: '0.75rem',
+              color: '#818cf8',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontWeight: 700,
+              boxShadow: '0 4px 15px rgba(0,0,0,0.4)',
+              transition: 'all 0.2s'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(99, 102, 241, 0.25)';
+              e.currentTarget.style.color = '#fff';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'rgba(15, 23, 42, 0.92)';
+              e.currentTarget.style.color = '#818cf8';
+            }}
+          >
+            <Maximize2 size={13} />
+            <span>Enquadrar Visão Geral</span>
+          </button>
         </div>
       </div>
 
       {/* Lista de Motoristas Disponíveis */}
       <div>
-        <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <ShieldCheck size={20} color="#10b981" />
-          Motoristas Online no Seu Raio de Atendimento
-        </h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+          <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <ShieldCheck size={20} color="#10b981" />
+            Motoristas Online no Seu Raio de Atendimento
+          </h3>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+            Clique no card para focar a câmera no mapa
+          </span>
+        </div>
 
         {onlineDrivers.length === 0 ? (
           <div className="glass-panel" style={{ padding: '36px', textAlign: 'center' }}>
@@ -330,6 +432,7 @@ export function NearbyDriversMap({ onSelectDriverToRequest }: NearbyDriversMapPr
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
             {onlineDrivers.map((d, index) => {
+              const driverId = d.id || `driver_${d.userId || index}`;
               const driverLat = (d.currentLat && !isNaN(d.currentLat)) ? d.currentLat : userLocation.latitude;
               const driverLng = (d.currentLng && !isNaN(d.currentLng)) ? d.currentLng : userLocation.longitude;
               const calculatedKm = calculateDistanceKm(userLocation, { latitude: driverLat, longitude: driverLng });
@@ -339,7 +442,23 @@ export function NearbyDriversMap({ onSelectDriverToRequest }: NearbyDriversMapPr
               const driverDisplayName = d.fullName || d.driverName || 'Motorista Parceiro';
 
               return (
-                <div key={d.id || index} className="glass-panel" style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div 
+                  key={driverId} 
+                  className="glass-panel" 
+                  style={{ 
+                    padding: '18px', 
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    gap: '12px',
+                    cursor: 'pointer',
+                    transition: 'transform 0.2s, border-color 0.2s',
+                    borderColor: 'rgba(255, 255, 255, 0.08)'
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'rgba(16, 185, 129, 0.4)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)')}
+                  onClick={() => focusOnDriver(driverId, driverLat, driverLng)}
+                  title="Clique para localizar no mapa"
+                >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                       <div style={{
