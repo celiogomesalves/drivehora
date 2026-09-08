@@ -109,10 +109,9 @@ export function NearbyDriversMap({
     if (isManual) setIsSyncing(true);
     try {
       const all = await dbGetAllDrivers();
-      // Filtrar motoristas que estão com modo ONLINE ativo ou credenciados
-      const online = all.filter(d => d.isOnline || d.verificationStatus === 'approved');
-      const finalDrivers = online.length > 0 ? online : all;
-      setOnlineDrivers(finalDrivers);
+      // Exibir APENAS motoristas que estão com modo ONLINE ativo no momento
+      const online = all.filter(d => d.isOnline === true);
+      setOnlineDrivers(online);
       setLastSyncTime(new Date());
     } catch (e) {
       console.warn('Erro ao sincronizar motoristas:', e);
