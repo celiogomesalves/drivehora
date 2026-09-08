@@ -44,6 +44,8 @@ export type DriverVerificationStatus = 'pending_docs' | 'under_review' | 'approv
 export interface DriverProfile {
   id: string;
   userId: string;
+  fullName?: string;
+  driverName?: string;
   cpf: string;
   phone: string;
   cnhNumber: string;

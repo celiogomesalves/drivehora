@@ -52,7 +52,7 @@ export function App() {
 
   // Formulário do cliente & Busca Automática de Endereços
   const [origin, setOrigin] = useState('Av. Paulista, 1000 - Bela Vista');
-  const [destination, setDestination] = useState('Aeroporto de Guarulhos (GRU) - Terminal 3');
+  const [destination, setDestination] = useState('');
   const [originSuggestions, setOriginSuggestions] = useState<string[]>([]);
   const [destSuggestions, setDestSuggestions] = useState<string[]>([]);
   const [isSearchingOrigin, setIsSearchingOrigin] = useState(false);
@@ -1261,49 +1261,6 @@ export function App() {
                           ))}
                         </div>
                       )}
-                    </div>
-
-                    {/* Atalhos Rápidos */}
-                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOrigin('Aeroporto de Congonhas (CGH)');
-                          setDestination('Centro de Convenções Anhembi');
-                          setHours(4);
-                        }}
-                        style={{
-                          background: 'rgba(255, 255, 255, 0.05)',
-                          border: '1px solid var(--border-subtle)',
-                          color: 'var(--text-secondary)',
-                          fontSize: '0.75rem',
-                          padding: '4px 10px',
-                          borderRadius: '8px',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        ✈️ Aeroporto ➔ Evento (4h)
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOrigin('Hotel Fasano - Jardins');
-                          setDestination('Tour Gastronômico e Compras');
-                          setHours(6);
-                        }}
-                        style={{
-                          background: 'rgba(255, 255, 255, 0.05)',
-                          border: '1px solid var(--border-subtle)',
-                          color: 'var(--text-secondary)',
-                          fontSize: '0.75rem',
-                          padding: '4px 10px',
-                          borderRadius: '8px',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        🛍️ Diária / Passeio (6h)
-                      </button>
                     </div>
 
                     {/* Seletor de Horas */}

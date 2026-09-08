@@ -496,15 +496,18 @@ export const dbGetAllDrivers = async (): Promise<DriverProfile[]> => {
       const list: DriverProfile[] = (driversRes.data || []).map((d: any) => {
         const p = profileMap.get(d.user_id);
         const isOnline = d.is_online === true || d.is_online === 'true' || d.is_online === 1 || Boolean(d.is_online);
+        const driverName = p?.full_name || p?.fullName || d.driver_name || d.full_name || 'Motorista Parceiro';
         return {
           id: d.id,
           userId: d.user_id,
+          fullName: driverName,
+          driverName: driverName,
           cpf: d.cpf || p?.cpf || '',
           phone: d.phone || p?.phone || '',
           cnhNumber: d.cnh_number || '',
           cnhCategory: d.cnh_category || 'B',
           vehicleBrand: d.vehicle_brand || 'Motorista',
-          vehicleModel: d.vehicle_model || (p?.full_name ? `${p.full_name}` : 'Parceiro'),
+          vehicleModel: d.vehicle_model || 'Veículo Particular',
           vehicleYear: d.vehicle_year || '',
           vehiclePlate: d.vehicle_plate || 'Mercosul',
           vehicleColor: d.vehicle_color || 'Prata',

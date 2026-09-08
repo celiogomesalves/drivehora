@@ -156,22 +156,26 @@ export function NearbyDriversMap({ onSelectDriverToRequest }: NearbyDriversMapPr
 
       const dist = calculateDistanceKm(userLocation, { latitude: driverLat, longitude: driverLng });
       const etaMin = Math.max(1, Math.round(Number(dist) * 2.2));
+      const driverFullName = driver.fullName || driver.driverName || 'Motorista Parceiro';
 
       const popupHtml = `
-        <div style="font-family: sans-serif; padding: 4px; min-width: 190px;">
-          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
-            <span style="font-size: 11px; background: #10b981; color: #fff; padding: 2px 6px; border-radius: 6px; font-weight: bold;">
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 6px; min-width: 210px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+            <span style="font-size: 11px; background: #10b981; color: #fff; padding: 2px 7px; border-radius: 6px; font-weight: bold;">
               🟢 ONLINE ${hasExactGps ? '• GPS REAL' : ''}
             </span>
             <span style="font-size: 11px; font-weight: bold; color: #10b981;">~${dist} km</span>
           </div>
-          <div style="font-size: 13px; font-weight: bold; margin-bottom: 2px;">
-            ${driver.vehicleBrand || 'Motorista'} ${driver.vehicleModel || 'Parceiro'}
+          <div style="font-size: 14px; font-weight: 800; color: #0f172a; margin-bottom: 3px; display: flex; align-items: center; gap: 4px;">
+            👤 ${driverFullName}
           </div>
-          <div style="font-size: 11px; color: #666; margin-bottom: 4px;">
+          <div style="font-size: 12px; font-weight: 600; color: #334155; margin-bottom: 2px;">
+            🚗 ${driver.vehicleBrand || 'Veículo'} ${driver.vehicleModel || 'Particular'}
+          </div>
+          <div style="font-size: 11px; color: #64748b; margin-bottom: 6px;">
             Placa: <strong>${driver.vehiclePlate || 'Mercosul'}</strong> (${driver.vehicleColor || 'Prata'})
           </div>
-          <div style="font-size: 11px; color: #333; display: flex; justify-content: space-between; border-top: 1px solid #eee; padding-top: 4px;">
+          <div style="font-size: 11px; color: #333; display: flex; justify-content: space-between; border-top: 1px solid #e2e8f0; padding-top: 6px;">
             <span>⭐ ${driver.rating || 5.0} (${driver.totalRides || 0} corridas)</span>
             <span style="color: #6366f1; font-weight: bold;">Chegada: ~${etaMin} min</span>
           </div>
@@ -332,6 +336,8 @@ export function NearbyDriversMap({ onSelectDriverToRequest }: NearbyDriversMapPr
               const estimatedMins = Math.max(1, Math.round(Number(calculatedKm) * 2.2));
               const hasExactGps = Boolean(d.currentLat && d.currentLng);
 
+              const driverDisplayName = d.fullName || d.driverName || 'Motorista Parceiro';
+
               return (
                 <div key={d.id || index} className="glass-panel" style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -351,9 +357,12 @@ export function NearbyDriversMap({ onSelectDriverToRequest }: NearbyDriversMapPr
                         🚗
                       </div>
                       <div>
-                        <h4 style={{ fontSize: '0.95rem', fontWeight: 700, margin: 0 }}>
-                          {d.vehicleBrand ? `${d.vehicleBrand} ${d.vehicleModel}` : 'Motorista Parceiro'}
+                        <h4 style={{ fontSize: '0.95rem', fontWeight: 700, margin: 0, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span>👤</span> {driverDisplayName}
                         </h4>
+                        <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '2px' }}>
+                          🚗 {d.vehicleBrand ? `${d.vehicleBrand} ${d.vehicleModel}` : 'Veículo Particular'}
+                        </div>
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                           Placa: <strong>{d.vehiclePlate || 'Mercosul'}</strong> • {d.vehicleColor || 'Carro Executivo'}
                         </span>
