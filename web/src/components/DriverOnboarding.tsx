@@ -3,7 +3,7 @@ import type { UserProfile, DriverProfile, DriverVerificationStatus } from '../ty
 import { 
   ShieldCheck, Camera, CheckCircle2, 
   UploadCloud, Check, AlertCircle, Eye, Database, Edit3, X,
-  ArrowRight, ArrowLeft
+  ArrowRight, ArrowLeft, Lock, Send, MessageSquare
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { formatPhone, formatCpf, formatPlate, validateCpf, validateCnh, validatePlate, validatePhone } from '../utils/formatters';
@@ -159,6 +159,13 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isDbError, setIsDbError] = useState(false);
   const [previewDoc, setPreviewDoc] = useState<{ title: string; url: string } | null>(null);
+
+  // Modal de Solicitação de Alteração de Dados (motorista aprovado)
+  const [showChangeRequest, setShowChangeRequest] = useState(false);
+  const [changeRequestText, setChangeRequestText] = useState('');
+  const [changeRequestSent, setChangeRequestSent] = useState(false);
+
+  const isApproved = verificationStatus === 'approved';
 
   // Salvar rascunho em localStorage
   useEffect(() => {
@@ -416,51 +423,110 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
 
   return (
     <div style={{ maxWidth: '800px', margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      
-      {/* HEADER DE ETAPAS / ABAS DE NAVEGAÇÃO DO MOTORISTA */}
-      <div className="glass-panel" style={{ padding: '16px 20px' }}>
-        <div className="nav-scrollable" style={{ justifyContent: 'space-between', gap: '8px' }}>
+
+      {/* BANNER: MOTORISTA APROVADO — EDIÇÃO BLOQUEADA */}
+      {isApproved && (
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(5, 150, 105, 0.08))',
+          border: '1px solid rgba(16, 185, 129, 0.35)',
+          borderRadius: '16px',
+          padding: '16px 20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '14px',
+          flexWrap: 'wrap'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{
+              width: '42px', height: '42px', borderRadius: '50%',
+              background: 'rgba(16, 185, 129, 0.2)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+            }}>
+              <Lock size={20} color="#10b981" />
+            </div>
+            <div>
+              <p style={{ fontSize: '0.95rem', fontWeight: 800, color: '#10b981', margin: 0 }}>
+                ✅ Cadastro Aprovado e Protegido
+              </p>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '2px 0 0' }}>
+                Seus dados são bloqueados após a aprovação. Para alterações, solicite ao administrador.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => { setShowChangeRequest(true); setChangeRequestSent(false); setChangeRequestText(''); }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '8px',
+              padding: '10px 18px', borderRadius: '12px',
+              background: 'rgba(16, 185, 129, 0.2)',
+              border: '1px solid rgba(16, 185, 129, 0.4)',
+              color: '#10b981', fontWeight: 700, fontSize: '0.85rem',
+              cursor: 'pointer', flexShrink: 0
+            }}
+          >
+            <MessageSquare size={16} />
+            Solicitar Alteração de Dados
+          </button>
+        </div>
+      )}
+
+      {/* HEADER DE ETAPAS — GRADE RESPONSIVA (nunca oculta abas) */}
+      <div className="glass-panel" style={{ padding: '12px 16px' }}>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(5, 1fr)',
+          gap: '6px'
+        }}>
           {[
-            { num: 1, label: '1. Identificação & CNH' },
-            { num: 2, label: '2. Veículo & Categoria' },
-            { num: 3, label: '3. Comodidades & Perfil' },
-            { num: 4, label: '4. Documentos & Fotos' },
-            { num: 5, label: '5. Homologação' }
+            { num: 1, label: 'Identificação & CNH', short: 'Identificação' },
+            { num: 2, label: 'Veículo & Categoria', short: 'Veículo' },
+            { num: 3, label: 'Comodidades & Perfil', short: 'Comodidades' },
+            { num: 4, label: 'Documentos & Fotos', short: 'Documentos' },
+            { num: 5, label: 'Homologação', short: 'Homologação' }
           ].map(s => {
             const isActive = step === s.num;
-            const isDone = step > s.num;
+            const isDone = step > s.num || isApproved;
+            const canClick = step > s.num || verificationStatus === 'under_review' || isApproved;
 
             return (
               <button
                 key={s.num}
                 type="button"
-                onClick={() => {
-                  if (step > s.num || verificationStatus === 'under_review' || verificationStatus === 'approved') {
-                    setStep(s.num);
-                  }
-                }}
+                onClick={() => { if (canClick) setStep(s.num); }}
                 style={{
                   display: 'flex',
+                  flexDirection: 'column',
                   alignItems: 'center',
-                  gap: '6px',
-                  padding: '8px 14px',
+                  justifyContent: 'center',
+                  gap: '4px',
+                  padding: '8px 6px',
                   borderRadius: '10px',
-                  border: isActive ? '1px solid #6366f1' : '1px solid var(--border-subtle)',
-                  background: isActive 
-                    ? 'linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(79, 70, 229, 0.2))' 
-                    : isDone 
-                    ? 'rgba(16, 185, 129, 0.12)' 
+                  border: isActive ? '1px solid #6366f1' : isDone ? '1px solid rgba(16,185,129,0.3)' : '1px solid var(--border-subtle)',
+                  background: isActive
+                    ? 'linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(79, 70, 229, 0.2))'
+                    : isDone
+                    ? 'rgba(16, 185, 129, 0.1)'
                     : 'rgba(255, 255, 255, 0.02)',
                   color: isActive ? '#fff' : isDone ? '#10b981' : 'var(--text-muted)',
-                  fontSize: '0.8rem',
+                  fontSize: '0.7rem',
                   fontWeight: 700,
-                  whiteSpace: 'nowrap',
-                  cursor: (step > s.num || verificationStatus !== 'pending_docs') ? 'pointer' : 'default',
-                  flexShrink: 0
+                  cursor: canClick ? 'pointer' : 'default',
+                  transition: 'all 0.2s',
+                  textAlign: 'center',
+                  minWidth: 0
                 }}
               >
-                {isDone ? <Check size={14} color="#10b981" /> : <span>{s.num}.</span>}
-                <span>{s.label.split('. ')[1]}</span>
+                <span style={{
+                  width: '22px', height: '22px', borderRadius: '50%',
+                  background: isActive ? '#6366f1' : isDone ? 'rgba(16,185,129,0.25)' : 'rgba(255,255,255,0.05)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '0.7rem', flexShrink: 0
+                }}>
+                  {isDone && !isActive ? <Check size={12} /> : s.num}
+                </span>
+                <span style={{ lineHeight: 1.2, wordBreak: 'break-word' }}>{s.short}</span>
               </button>
             );
           })}
@@ -511,7 +577,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
             </p>
           </div>
 
-          <form onSubmit={handleStep1Submit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <form onSubmit={isApproved ? e => e.preventDefault() : handleStep1Submit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div className="input-group">
               <label>Nome Completo do Motorista *</label>
               <input
@@ -521,6 +587,8 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
                 onChange={(e) => setFullName(e.target.value)}
                 placeholder="Ex: Carlos Eduardo da Silva"
                 required
+                disabled={isApproved}
+                style={isApproved ? { opacity: 0.6, cursor: 'not-allowed' } : {}}
               />
             </div>
 
@@ -535,6 +603,8 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
                   placeholder="000.000.000-00"
                   maxLength={14}
                   required
+                  disabled={isApproved}
+                  style={isApproved ? { opacity: 0.6, cursor: 'not-allowed' } : {}}
                 />
               </div>
 
@@ -545,9 +615,11 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
                   className="input-field"
                   value={phone}
                   onChange={(e) => setPhone(formatPhone(e.target.value))}
-                  placeholder="(11) 98765-4321"
+                  placeholder="(00) 00000-0000"
                   maxLength={15}
                   required
+                  disabled={isApproved}
+                  style={isApproved ? { opacity: 0.6, cursor: 'not-allowed' } : {}}
                 />
               </div>
             </div>
@@ -563,6 +635,8 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
                   placeholder="12345678900"
                   maxLength={11}
                   required
+                  disabled={isApproved}
+                  style={isApproved ? { opacity: 0.6, cursor: 'not-allowed' } : {}}
                 />
               </div>
 
@@ -572,6 +646,8 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
                   className="select-field"
                   value={cnhCategory}
                   onChange={(e) => setCnhCategory(e.target.value)}
+                  disabled={isApproved}
+                  style={isApproved ? { opacity: 0.6, cursor: 'not-allowed' } : {}}
                 >
                   <option value="B">B (Carros de Passeio)</option>
                   <option value="C">C (Veículos de Carga)</option>
@@ -593,14 +669,16 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
               💡 <strong>Requisito Legal:</strong> Sua CNH deve conter a observação <em>"Exerce Atividade Remunerada" (EAR)</em> para prestação de serviços como motorista parceiro.
             </div>
 
-            <button
-              type="submit"
-              className="btn-primary"
-              style={{ width: '100%', padding: '14px', fontSize: '0.95rem', marginTop: '6px' }}
-            >
-              <span>Avançar para Dados do Veículo</span>
-              <ArrowRight size={18} />
-            </button>
+            {!isApproved && (
+              <button
+                type="submit"
+                className="btn-primary"
+                style={{ width: '100%', padding: '14px', fontSize: '0.95rem', marginTop: '6px' }}
+              >
+                <span>Avançar para Dados do Veículo</span>
+                <ArrowRight size={18} />
+              </button>
+            )}
           </form>
         </div>
       )}
@@ -1272,6 +1350,133 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
                 Fechar
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE SOLICITAÇÃO DE ALTERAÇÃO DE DADOS */}
+      {showChangeRequest && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0, 0, 0, 0.85)',
+          backdropFilter: 'blur(10px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: '#0d1527',
+            border: '1px solid rgba(99, 102, 241, 0.35)',
+            borderRadius: '24px',
+            padding: '28px 24px',
+            maxWidth: '500px',
+            width: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#fff', margin: 0 }}>
+                  📝 Solicitar Alteração de Dados
+                </h3>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                  Informe quais dados precisam ser alterados. O administrador irá avaliar e atualizar seu cadastro.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowChangeRequest(false)}
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', flexShrink: 0 }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {changeRequestSent ? (
+              <div style={{
+                background: 'rgba(16, 185, 129, 0.12)',
+                border: '1px solid rgba(16, 185, 129, 0.3)',
+                borderRadius: '14px',
+                padding: '20px',
+                textAlign: 'center'
+              }}>
+                <CheckCircle2 size={36} color="#10b981" style={{ margin: '0 auto 12px' }} />
+                <p style={{ fontWeight: 700, color: '#10b981', margin: 0 }}>Solicitação enviada!</p>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '6px' }}>
+                  O administrador foi notificado e entrará em contato em breve.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowChangeRequest(false)}
+                  className="btn-primary"
+                  style={{ marginTop: '16px', padding: '8px 24px', fontSize: '0.85rem' }}
+                >
+                  Fechar
+                </button>
+              </div>
+            ) : (
+              <>
+                <textarea
+                  value={changeRequestText}
+                  onChange={e => setChangeRequestText(e.target.value)}
+                  placeholder="Descreva quais dados precisam ser alterados e o motivo. Ex: Troca de veículo — novo modelo Toyota Corolla 2027, placa XYZ-1234."
+                  style={{
+                    width: '100%',
+                    minHeight: '130px',
+                    background: 'rgba(255,255,255,0.04)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: '12px',
+                    padding: '12px',
+                    color: '#fff',
+                    fontSize: '0.875rem',
+                    resize: 'vertical',
+                    fontFamily: 'inherit',
+                    boxSizing: 'border-box'
+                  }}
+                />
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowChangeRequest(false)}
+                    className="btn-outline"
+                    style={{ flex: 1, padding: '10px', fontSize: '0.85rem', justifyContent: 'center' }}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!changeRequestText.trim() || changeRequestText.trim().length < 15}
+                    onClick={() => {
+                      // Salvar solicitação no localStorage para o admin visualizar
+                      const requests = JSON.parse(localStorage.getItem('drivehora_change_requests') || '[]');
+                      requests.push({
+                        driverId: user.id,
+                        driverName: fullName || user.fullName,
+                        driverEmail: user.email,
+                        message: changeRequestText.trim(),
+                        createdAt: new Date().toISOString(),
+                        status: 'pending'
+                      });
+                      localStorage.setItem('drivehora_change_requests', JSON.stringify(requests));
+                      setChangeRequestSent(true);
+                    }}
+                    className="btn-primary"
+                    style={{
+                      flex: 2, padding: '10px', fontSize: '0.85rem',
+                      justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '8px',
+                      opacity: changeRequestText.trim().length >= 15 ? 1 : 0.5
+                    }}
+                  >
+                    <Send size={15} />
+                    Enviar Solicitação
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
