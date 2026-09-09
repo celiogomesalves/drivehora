@@ -855,7 +855,7 @@ export const dbUpdateDriverOnlineStatus = async (
   if (sb) {
     try {
       const res: any = await withTimeout(
-        sb.from('drivers').update({ is_online: isOnline, updated_at: new Date().toISOString() }).or(`user_id.eq.${userId},id.eq.${userId}`),
+        sb.from('drivers').update({ is_online: isOnline }).or(`user_id.eq.${userId},id.eq.${userId}`),
         8000
       );
       if (res?.error) {
