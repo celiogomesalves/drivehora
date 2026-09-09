@@ -25,6 +25,7 @@ export function NearbyDriversMap({
   const userMarkerRef = useRef<L.Marker | null>(null);
   const driverMarkersRef = useRef<Map<string, L.Marker>>(new Map());
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
+  const hasInitialFittedRef = useRef(false);
 
   const [userLocation, setUserLocation] = useState<Coordinates>({ latitude: -19.8157, longitude: -43.9542 }); // Default BH
   const [onlineDrivers, setOnlineDrivers] = useState<DriverProfile[]>([]);
@@ -179,21 +180,26 @@ export function NearbyDriversMap({
 
     userMarkerRef.current = userMarker;
 
-    // Ajustar tamanho e enquadrar automaticamente em múltiplos estágios pós-renderização
+    // Ajustar tamanho inicial pós-renderização
     const t1 = setTimeout(() => {
       map.invalidateSize();
-      fitMapToAllDrivers(false);
+      if (!hasInitialFittedRef.current && onlineDrivers.length > 0) {
+        hasInitialFittedRef.current = true;
+        fitMapToAllDrivers(false);
+      }
     }, 100);
 
     const t2 = setTimeout(() => {
       map.invalidateSize();
-      fitMapToAllDrivers(true);
+      if (!hasInitialFittedRef.current && onlineDrivers.length > 0) {
+        hasInitialFittedRef.current = true;
+        fitMapToAllDrivers(true);
+      }
     }, 500);
 
     const handleResize = () => {
       if (mapInstanceRef.current) {
         mapInstanceRef.current.invalidateSize();
-        fitMapToAllDrivers(true);
       }
     };
     window.addEventListener('resize', handleResize);
@@ -210,15 +216,16 @@ export function NearbyDriversMap({
     };
   }, []); // Run once on mount
 
-  // 4.1 Enquadramento automático sempre que a lista de motoristas carregar ou GPS atualizar
+  // 4.1 Enquadramento automático EXCLUSIVAMENTE na primeira carga (ao abrir a página)
   useEffect(() => {
-    if (onlineDrivers.length > 0 && mapInstanceRef.current) {
+    if (!hasInitialFittedRef.current && onlineDrivers.length > 0 && mapInstanceRef.current) {
+      hasInitialFittedRef.current = true;
       const timer = setTimeout(() => {
         fitMapToAllDrivers(true);
-      }, 150);
+      }, 200);
       return () => clearTimeout(timer);
     }
-  }, [onlineDrivers.length, userLocation.latitude, userLocation.longitude, fitMapToAllDrivers]);
+  }, [onlineDrivers.length, fitMapToAllDrivers]);
 
   // 5. Atualizar posição do passageiro de forma suave (Sem recriar o mapa)
   useEffect(() => {
@@ -344,15 +351,15 @@ export function NearbyDriversMap({
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          {/* Botão de Auto-Zoom / Enquadrar Todos */}
+          {/* Botão de Enquadrar Visão Geral */}
           <button
             onClick={() => fitMapToAllDrivers(true)}
-            title="Ajustar zoom para enquadrar a maior quantidade possível de motoristas"
+            title="Ajustar zoom para enquadrar a visão geral de todos os motoristas"
             className="btn-outline"
             style={{ fontSize: '0.8rem', padding: '8px 14px', display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(99, 102, 241, 0.1)', borderColor: 'rgba(99, 102, 241, 0.4)', color: '#a5b4fc' }}
           >
             <Maximize2 size={14} />
-            <span>Auto-Zoom ({onlineDrivers.length})</span>
+            <span>Enquadrar Visão Geral</span>
           </button>
 
           <button
