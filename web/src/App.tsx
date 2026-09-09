@@ -214,7 +214,7 @@ export function App() {
   // Checagem Contínua da Saúde do Gateway de Pagamentos (Asaas / MP / Stripe)
   const checkGatewayHealth = async (customSettings?: SystemSettings) => {
     try {
-      const activeConf = customSettings?.paymentGateway || systemSettings.paymentGateway;
+      const activeConf = (customSettings || getSystemSettings()).paymentGateway;
       const res = await testGatewayConnection({
         activeGateway: activeConf.activeGateway,
         environment: activeConf.environment,
@@ -223,9 +223,11 @@ export function App() {
       });
       setGatewayOperational(res.operational);
       setGatewayHealthMsg(res.message);
+      return res;
     } catch {
       setGatewayOperational(false);
       setGatewayHealthMsg('Erro de comunicação com o gateway de pagamentos.');
+      return { operational: false, message: 'Erro de comunicação.' };
     }
   };
 
@@ -577,10 +579,13 @@ export function App() {
     }
   }, [activeTab]);
 
-  // Re-validação periódica a cada 45s em background
+  // Re-validação periódica e ao alternar de aba (Cliente / Motorista / Admin)
   useEffect(() => {
     checkGatewayHealth();
-    const interval = setInterval(() => checkGatewayHealth(), 45000);
+  }, [activeTab]);
+
+  useEffect(() => {
+    const interval = setInterval(() => checkGatewayHealth(), 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -2203,17 +2208,48 @@ export function App() {
                         border: '1px solid rgba(239, 68, 68, 0.35)',
                         display: 'flex',
                         alignItems: 'center',
+                        justifyContent: 'space-between',
                         gap: '10px'
                       }}>
-                        <AlertTriangle size={20} color="#ef4444" style={{ flexShrink: 0 }} />
-                        <div style={{ fontSize: '0.78rem', color: '#fca5a5', lineHeight: 1.4 }}>
-                          <strong>Indisponibilidade Momentânea:</strong> Estamos realizando uma breve manutenção preventiva em nosso sistema de solicitações. O serviço será normalizado em instantes. Agradecemos a compreensão.
-                          {isUserAdmin && gatewayHealthMsg && (
-                            <div style={{ marginTop: '4px', fontSize: '0.7rem', color: '#fecaca', opacity: 0.85 }}>
-                              [Aviso Admin: {gatewayHealthMsg}]
-                            </div>
-                          )}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <AlertTriangle size={20} color="#ef4444" style={{ flexShrink: 0 }} />
+                          <div style={{ fontSize: '0.78rem', color: '#fca5a5', lineHeight: 1.4 }}>
+                            <strong>Indisponibilidade Momentânea:</strong> Estamos realizando uma breve manutenção preventiva em nosso sistema de solicitações. O serviço será normalizado em instantes. Agradecemos a compreensão.
+                            {isUserAdmin && gatewayHealthMsg && (
+                              <div style={{ marginTop: '4px', fontSize: '0.7rem', color: '#fecaca', opacity: 0.85 }}>
+                                [Aviso Admin: {gatewayHealthMsg}]
+                              </div>
+                            )}
+                          </div>
                         </div>
+                        {isUserAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              checkGatewayHealth().then(res => {
+                                if (res?.operational) {
+                                  showToast('Gateway operacional! Sistema liberado.', 'success');
+                                } else {
+                                  showToast(res?.message || 'Gateway ainda indisponível', 'error');
+                                }
+                              });
+                            }}
+                            className="btn-outline"
+                            style={{
+                              padding: '6px 10px',
+                              fontSize: '0.72rem',
+                              whiteSpace: 'nowrap',
+                              borderColor: 'rgba(252, 165, 165, 0.5)',
+                              color: '#fff',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                          >
+                            <RefreshCw size={12} />
+                            <span>Revalidar</span>
+                          </button>
+                        )}
                       </div>
                     )}
 

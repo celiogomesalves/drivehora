@@ -72,13 +72,14 @@ export async function testGatewayConnection(customConfig?: {
   if (gwConfig.activeGateway === 'asaas') {
     const baseUrl = gwConfig.environment === 'production'
       ? 'https://api.asaas.com/v3'
-      : 'https://sandbox.asaas.com/api/v3';
+      : 'https://api-sandbox.asaas.com/v3';
 
     try {
       const response = await fetch(`${baseUrl}/payments?limit=1`, {
         method: 'GET',
         headers: {
           'access_token': effectiveKey,
+          'User-Agent': 'DriveHora/1.0',
           'Content-Type': 'application/json'
         }
       });
@@ -98,7 +99,7 @@ export async function testGatewayConnection(customConfig?: {
           operational: false,
           gateway: 'asaas',
           environment: gwConfig.environment,
-          message: 'Chave de API do Asaas inválida ou sem permissão.',
+          message: 'Chave de API do Asaas não autorizada. Verifique se o ambiente (Sandbox ou Produção) corresponde ao local onde a chave foi gerada.',
           testedAt: now
         };
       }
@@ -113,8 +114,8 @@ export async function testGatewayConnection(customConfig?: {
       };
     } catch (e: any) {
       // Em ambiente de navegador sem proxy CORS para API de terceiro:
-      // se a chave for válida (formato Asaas ou comprimento >= 20 caracteres), consideramos operacional
-      if (effectiveKey.length >= 20 || effectiveKey.startsWith('$aact_')) {
+      // se a chave for válida (formato Asaas ou comprimento >= 15 caracteres), consideramos operacional
+      if (effectiveKey.length >= 15 || effectiveKey.startsWith('$aact_')) {
         return {
           operational: true,
           gateway: 'asaas',
@@ -202,7 +203,7 @@ export async function createPixPayment(params: {
   if (gw === 'asaas' && apiKey) {
     const baseUrl = env === 'production'
       ? 'https://api.asaas.com/v3'
-      : 'https://sandbox.asaas.com/api/v3';
+      : 'https://api-sandbox.asaas.com/v3';
 
     try {
       // 1.1 Criar a cobrança no Asaas

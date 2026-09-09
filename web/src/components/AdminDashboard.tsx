@@ -81,7 +81,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       });
       setGatewayHealthResult(res);
       if (res.operational) {
-        showToast(res.message, 'success');
+        await saveSystemSettings(systemSettings);
+        showToast(`${res.message} Configurações salvas e ativadas!`, 'success');
       } else {
         showToast(res.message, 'error');
       }
@@ -1648,14 +1649,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       value={systemSettings.paymentGateway.secretKey || systemSettings.paymentGateway.publicKey || ''}
                       onChange={(e) => {
                         const val = e.target.value.trim();
-                        setSystemSettings(prev => ({
-                          ...prev,
+                        const updated = {
+                          ...systemSettings,
                           paymentGateway: {
-                            ...prev.paymentGateway,
+                            ...systemSettings.paymentGateway,
                             secretKey: val,
                             publicKey: val // Sincroniza ambos para compatibilidade total
                           }
-                        }));
+                        };
+                        setSystemSettings(updated);
+                        saveSystemSettings(updated);
                       }}
                       className="input-field"
                       style={{ width: '100%', fontSize: '0.85rem' }}
@@ -1711,8 +1714,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </>
                 )}
 
-                {/* Botão de Testar Conexão com Gateway */}
-                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '4px' }}>
+                {/* Botões de Testar e Salvar Gateway */}
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', marginTop: '4px' }}>
                   <button
                     type="button"
                     onClick={handleTestGateway}
@@ -1730,6 +1733,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   >
                     <RefreshCw size={14} className={isTestingGateway ? 'animate-spin' : ''} />
                     <span>{isTestingGateway ? 'Testando Conexão...' : 'Testar Conexão com Gateway'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await saveSystemSettings(systemSettings);
+                      const res = await testGatewayConnection({
+                        activeGateway: systemSettings.paymentGateway.activeGateway,
+                        environment: systemSettings.paymentGateway.environment,
+                        secretKey: systemSettings.paymentGateway.secretKey,
+                        publicKey: systemSettings.paymentGateway.publicKey
+                      });
+                      setGatewayHealthResult(res);
+                      if (res.operational) {
+                        showToast('Gateway Asaas salvo e ativo em todo o sistema!', 'success');
+                      } else {
+                        showToast(res.message, 'warning');
+                      }
+                    }}
+                    className="btn-primary"
+                    style={{
+                      padding: '8px 16px',
+                      fontSize: '0.8rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <Save size={14} />
+                    <span>Salvar e Ativar Gateway Imediatamente</span>
                   </button>
                 </div>
 
