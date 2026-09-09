@@ -101,8 +101,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       concurrentSessionData.user.role
     );
 
-    await completeLogin(concurrentSessionData.user, newToken, deviceName);
+    const sessionUser = concurrentSessionData.user;
     setConcurrentSessionData(null);
+    await completeLogin(sessionUser, newToken, deviceName);
   };
 
   return (
