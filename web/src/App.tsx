@@ -4,7 +4,7 @@ import {
   Smartphone, Users, RefreshCw, CheckCircle2, 
   Radio, Award, PlayCircle, Sparkles, Compass, Database, 
   X, Check, LogOut, MapPin, Crown, AlertTriangle, UserCheck,
-  BellRing, Volume2, VolumeX, Ban, AlertOctagon, Heart, ShieldAlert
+  BellRing, Volume2, VolumeX, Ban, AlertOctagon, Heart, ShieldAlert, RotateCcw
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import confetti from 'canvas-confetti';
@@ -22,7 +22,7 @@ import { FavoriteDriversList } from './components/FavoriteDriversList';
 import { getCurrentPosition, reverseGeocode, searchAddressPlaces } from './services/gpsService';
 import { formatCurrency, formatCurrencyInput, parseCurrencyInput } from './utils/formatters';
 import { 
-  dbGetClientProfile, dbGetDriverProfile, 
+  dbGetClientProfile, dbGetDriverProfile, dbGetAllDrivers,
   dbCreateRide, dbUpdateRide, dbCancelRide, dbUpdateDriverOnlineStatus, dbUpdateDriverLocation,
   dbGetFavoriteDriverIds, dbToggleFavoriteDriver, dbSaveUserDeviceToken, dbCheckUserSession, type DbRide 
 } from './services/dbService';
@@ -219,6 +219,29 @@ export function App() {
   const [driverEarnings, setDriverEarnings] = useState(0);
   const [dismissedRideId, setDismissedRideId] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState(false);
+  const [allDriversList, setAllDriversList] = useState<DriverProfile[]>([]);
+  const [searchCancellationReason, setSearchCancellationReason] = useState<{
+    rideId: string;
+    reason: 'no_drivers_online' | 'timeout_10min';
+  } | null>(null);
+
+  // Monitorar motoristas online cadastrados no sistema
+  useEffect(() => {
+    const loadDrivers = async () => {
+      try {
+        const list = await dbGetAllDrivers();
+        setAllDriversList(list);
+      } catch (e) {}
+    };
+    loadDrivers();
+    const interval = setInterval(loadDrivers, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Total de motoristas atualmente online e aprovados
+  const onlineDriversCount = allDriversList.filter(
+    d => d.isOnline && (d.verificationStatus === 'approved' || isSuperAdminEmail(d.phone || ''))
+  ).length;
 
   // Identificar solicitação de corrida pendente em busca de motorista
   const incomingRide = rides.find(r => r.status === 'searching');
@@ -755,7 +778,47 @@ export function App() {
     r => r.status === 'cancelled' && r.driverId === currentUser?.id
   );
 
-  // Contador de 5 minutos para cancelamento gratuito pelo cliente
+  // Identificar se a solicitação do cliente está em busca de motorista
+  const isClientRideSearching = activeClientRide?.status === 'searching';
+  
+  // Limite máximo de busca: 10 minutos (600 segundos)
+  const MAX_SEARCH_DURATION_SECS = 600;
+  const searchElapsedSeconds = isClientRideSearching 
+    ? Math.max(0, Math.floor((now - (activeClientRide.createdAt || now)) / 1000))
+    : 0;
+  const searchSecondsRemaining = Math.max(0, MAX_SEARCH_DURATION_SECS - searchElapsedSeconds);
+  const searchRemainingMinutes = Math.floor(searchSecondsRemaining / 60);
+  const searchRemainingSecs = searchSecondsRemaining % 60;
+  const formattedSearchCountdown = `${String(searchRemainingMinutes).padStart(2, '0')}:${String(searchRemainingSecs).padStart(2, '0')}`;
+
+  // Efeito de auto-cancelamento quando: 1) Passar de 10 min OU 2) Não houver nenhum motorista online
+  useEffect(() => {
+    if (activeClientRide && activeClientRide.status === 'searching') {
+      // Caso 1: Passou de 10 minutos de busca
+      if (searchElapsedSeconds >= MAX_SEARCH_DURATION_SECS) {
+        dbCancelRide(activeClientRide.id);
+        setSearchCancellationReason({
+          rideId: activeClientRide.id,
+          reason: 'timeout_10min'
+        });
+        fetchRides();
+        return;
+      }
+
+      // Caso 2: Nenhum motorista online e já buscou por pelo menos 15 segundos
+      if (allDriversList.length > 0 && onlineDriversCount === 0 && searchElapsedSeconds >= 15) {
+        dbCancelRide(activeClientRide.id);
+        setSearchCancellationReason({
+          rideId: activeClientRide.id,
+          reason: 'no_drivers_online'
+        });
+        fetchRides();
+        return;
+      }
+    }
+  }, [activeClientRide?.id, activeClientRide?.status, searchElapsedSeconds, onlineDriversCount, allDriversList.length]);
+
+  // Contador de 5 minutos para cancelamento gratuito pelo cliente após o aceite
   const acceptedTimestamp = activeClientRide?.acceptedAt || activeClientRide?.createdAt || Date.now();
   const secondsSinceAccepted = Math.floor((now - acceptedTimestamp) / 1000);
   const cancelSecondsRemaining = Math.max(0, 300 - secondsSinceAccepted);
@@ -1866,23 +1929,39 @@ export function App() {
                             </div>
                           </div>
 
-                          {/* Mensagem e Alerta de Busca Ativa */}
+                          {/* Mensagem e Alerta de Busca Ativa com Contador de 10 min */}
                           <div style={{ flex: 1 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{
+                                  display: 'inline-block',
+                                  width: '8px',
+                                  height: '8px',
+                                  borderRadius: '50%',
+                                  background: onlineDriversCount > 0 ? '#10b981' : '#f59e0b',
+                                  boxShadow: `0 0 8px ${onlineDriversCount > 0 ? '#10b981' : '#f59e0b'}`
+                                }} className="animate-pulse" />
+                                <strong style={{ fontSize: '0.95rem', color: '#fff', letterSpacing: '-0.01em' }}>
+                                  {onlineDriversCount > 0 
+                                    ? `Radar Ativo • Notificando ${onlineDriversCount} Motorista${onlineDriversCount > 1 ? 's' : ''} Online`
+                                    : 'Aguardando Motoristas Ficarem Online...'}
+                                </strong>
+                              </div>
+
                               <span style={{
-                                display: 'inline-block',
-                                width: '8px',
-                                height: '8px',
-                                borderRadius: '50%',
-                                background: '#10b981',
-                                boxShadow: '0 0 8px #10b981'
-                              }} className="animate-pulse" />
-                              <strong style={{ fontSize: '0.95rem', color: '#fff', letterSpacing: '-0.01em' }}>
-                                Radar Ativo • Notificando Motoristas Próximos
-                              </strong>
+                                fontSize: '0.75rem',
+                                color: '#a5b4fc',
+                                background: 'rgba(99, 102, 241, 0.25)',
+                                padding: '2px 8px',
+                                borderRadius: '10px',
+                                fontWeight: 700
+                              }}>
+                                ⏱️ Tempo restante: {formattedSearchCountdown}
+                              </span>
                             </div>
-                            <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: '#c7d2fe', lineHeight: 1.4 }}>
-                              Aguarde um instante. Assim que um motorista online aceitar, seus dados e veículo aparecerão aqui em tempo real.
+
+                            <p style={{ margin: '6px 0 0 0', fontSize: '0.8rem', color: '#c7d2fe', lineHeight: 1.4 }}>
+                              A solicitação permanece ativa enquanto houver motoristas disponíveis. Se não houver resposta dentro de 10 minutos, a busca será cancelada automaticamente.
                             </p>
                           </div>
                         </div>
@@ -2067,6 +2146,55 @@ export function App() {
                           </div>
                         </div>
                       )}
+                    </div>
+                  ) : searchCancellationReason ? (
+                    <div className="glass-panel" style={{
+                      padding: '30px',
+                      border: '1.5px solid #f59e0b',
+                      background: 'radial-gradient(circle at center, rgba(245, 158, 11, 0.12) 0%, rgba(15, 23, 42, 0.9) 100%)',
+                      borderRadius: '18px',
+                      textAlign: 'center'
+                    }}>
+                      <div style={{
+                        width: '56px',
+                        height: '56px',
+                        borderRadius: '50%',
+                        background: 'rgba(245, 158, 11, 0.2)',
+                        color: '#f59e0b',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        margin: '0 auto 16px'
+                      }}>
+                        <AlertTriangle size={28} />
+                      </div>
+
+                      <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#fff', marginBottom: '8px' }}>
+                        {searchCancellationReason.reason === 'no_drivers_online'
+                          ? 'Nenhum motorista online no momento'
+                          : 'Tempo limite de busca esgotado (10 minutos)'}
+                      </h3>
+
+                      <p style={{ fontSize: '0.88rem', color: '#cbd5e1', lineHeight: 1.5, maxWidth: '420px', margin: '0 auto 20px' }}>
+                        {searchCancellationReason.reason === 'no_drivers_online'
+                          ? 'A busca foi encerrada automaticamente pois não há motoristas parceiros conectados no radar agora. Sugerimos tentar novamente em alguns minutos ou selecionar um motorista favorito.'
+                          : 'Procuramos por motoristas parceiros durante 10 minutos sem confirmação de aceite. Recomendamos realizar uma nova solicitação ajustando o valor ou horário.'}
+                      </p>
+
+                      <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSearchCancellationReason(null);
+                            setCurrentRideId(null);
+                          }}
+                          className="btn-primary"
+                          style={{ padding: '12px 20px', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '8px' }}
+                        >
+                          <RotateCcw size={16} />
+                          <span>Fazer Nova Solicitação</span>
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     <div className="glass-panel" style={{ padding: '36px', textAlign: 'center' }}>
