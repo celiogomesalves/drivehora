@@ -4,7 +4,8 @@ import {
   Smartphone, Users, RefreshCw, CheckCircle2, 
   Radio, Award, PlayCircle, Compass, Database, 
   X, Check, LogOut, MapPin, Crown, AlertTriangle, UserCheck,
-  BellRing, Volume2, VolumeX, Ban, AlertOctagon, Heart, ShieldAlert, RotateCcw
+  BellRing, Volume2, VolumeX, Ban, AlertOctagon, Heart, ShieldAlert, RotateCcw,
+  Filter
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import confetti from 'canvas-confetti';
@@ -97,8 +98,10 @@ export function App() {
   const [isRequesting, setIsRequesting] = useState(false);
   const [isLocatingGPS, setIsLocatingGPS] = useState(false);
 
-  // Cliente: Sub-aba (Solicitar Corrida, Radar ou Favoritos VIP)
-  const [clientSubTab, setClientSubTab] = useState<'request' | 'nearby_radar' | 'favorites'>('request');
+  // Cliente: Sub-aba (Solicitar Corrida, Radar, Favoritos VIP ou Histórico de Corridas)
+  const [clientSubTab, setClientSubTab] = useState<'request' | 'nearby_radar' | 'favorites' | 'history'>('request');
+  const [clientDateFilter, setClientDateFilter] = useState<'all' | 'today' | 'week' | '15days' | '30days' | 'custom'>('week');
+  const [clientCustomDate, setClientCustomDate] = useState<string>('');
   const [selectedDriverForProfile, setSelectedDriverForProfile] = useState<DriverPublicProfile | null>(null);
   const [favoriteDriverIds, setFavoriteDriverIds] = useState<string[]>([]);
   const [selectedDirectDriver, setSelectedDirectDriver] = useState<DriverPublicProfile | null>(null);
@@ -246,6 +249,9 @@ export function App() {
   const [dismissedRideId, setDismissedRideId] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [allDriversList, setAllDriversList] = useState<DriverProfile[]>([]);
+  const [driverDateFilter, setDriverDateFilter] = useState<'all' | 'today' | 'week' | '15days' | '30days' | 'custom'>('week');
+  const [driverCustomDate, setDriverCustomDate] = useState<string>('');
+  const [driverSubTab, setDriverSubTab] = useState<'radar' | 'history'>('radar');
   const [searchCancellationReason, setSearchCancellationReason] = useState<{
     rideId: string;
     reason: 'no_drivers_online' | 'timeout_10min';
@@ -1505,9 +1511,18 @@ export function App() {
                     <Heart size={18} fill={clientSubTab === 'favorites' ? '#fff' : '#ef4444'} color={clientSubTab === 'favorites' ? '#fff' : '#ef4444'} />
                     <span>Meus Favoritos (VIP)</span>
                   </button>
+
+                  <button
+                    onClick={() => setClientSubTab('history')}
+                    className={clientSubTab === 'history' ? 'btn-primary' : 'btn-outline'}
+                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', fontSize: '0.9rem', borderRadius: '14px' }}
+                  >
+                    <Clock size={18} />
+                    <span>Histórico de Corridas</span>
+                  </button>
                 </div>
 
-                {clientSubTab === 'nearby_radar' ? (
+                {clientSubTab === 'nearby_radar' && (
                   <NearbyDriversMap 
                     clientId={currentUser.id}
                     favoriteDriverIds={favoriteDriverIds}
@@ -1515,14 +1530,18 @@ export function App() {
                     onToggleFavorite={handleToggleFavorite}
                     onSelectDriverToRequest={() => setClientSubTab('request')} 
                   />
-                ) : clientSubTab === 'favorites' ? (
+                )}
+
+                {clientSubTab === 'favorites' && (
                   <FavoriteDriversList
                     clientId={currentUser.id}
                     onOpenDriverProfile={(driver) => setSelectedDriverForProfile(driver)}
                     onSelectDriverForBooking={handleSelectDriverForBooking}
                     onExploreRadar={() => setClientSubTab('nearby_radar')}
                   />
-                ) : (
+                )}
+
+                {clientSubTab === 'request' && (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }}>
                     {/* Form de Solicitação */}
                     <div className="glass-panel" style={{ padding: '28px' }}>
@@ -2313,10 +2332,280 @@ export function App() {
                 </div>
               </div>
             )}
-          </div>
-        )}
-      </div>
-    )}
+
+            {clientSubTab === 'history' && (
+              /* SUB-ABA: HISTÓRICO DE CORRIDAS DO CLIENTE COM FILTROS DE DATA (PADRÃO: ESTA SEMANA) */
+              (() => {
+                const now = Date.now();
+                const startOfToday = new Date();
+                startOfToday.setHours(0, 0, 0, 0);
+
+                const myRides = rides.filter(r => r.clientId === currentUser.id);
+
+                const filteredClientRides = myRides.filter(r => {
+                  const rideTime = r.createdAt || (r as any).created_at ? new Date(r.createdAt || (r as any).created_at).getTime() : now;
+                  if (clientDateFilter === 'today') {
+                    return rideTime >= startOfToday.getTime();
+                  }
+                  if (clientDateFilter === 'week') {
+                    const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+                    return rideTime >= sevenDaysAgo;
+                  }
+                  if (clientDateFilter === '15days') {
+                    const fifteenDaysAgo = now - 15 * 24 * 60 * 60 * 1000;
+                    return rideTime >= fifteenDaysAgo;
+                  }
+                  if (clientDateFilter === '30days') {
+                    const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
+                    return rideTime >= thirtyDaysAgo;
+                  }
+                  if (clientDateFilter === 'custom') {
+                    if (!clientCustomDate) return true;
+                    const targetDateStr = new Date(rideTime).toISOString().slice(0, 10);
+                    return targetDateStr === clientCustomDate;
+                  }
+                  return true;
+                });
+
+                const totalSpent = filteredClientRides.reduce((acc, curr) => acc + (curr.total || 0), 0);
+
+                return (
+                  <div className="glass-panel" style={{ padding: '24px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px', marginBottom: '20px' }}>
+                      <div>
+                        <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <Clock size={22} color="#6366f1" />
+                          Meu Histórico de Corridas ({filteredClientRides.length})
+                        </h3>
+                        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                          Visualize todas as suas viagens solicitadas e acompanhe seus gastos.
+                        </p>
+                      </div>
+
+                      <div style={{
+                        background: 'rgba(99, 102, 241, 0.12)',
+                        border: '1px solid rgba(99, 102, 241, 0.3)',
+                        padding: '10px 18px',
+                        borderRadius: '12px',
+                        textAlign: 'right'
+                      }}>
+                        <div style={{ fontSize: '0.7rem', color: '#a5b4fc' }}>Total Investido no Período</div>
+                        <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#818cf8' }}>{formatCurrency(totalSpent)}</div>
+                      </div>
+                    </div>
+
+                    {/* Barra de Filtros de Período Fixos e Personalizado (Padrão: Esta semana) */}
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: '8px',
+                      padding: '12px 16px',
+                      background: 'rgba(255, 255, 255, 0.03)',
+                      borderRadius: '12px',
+                      border: '1px solid var(--border-subtle)',
+                      marginBottom: '20px'
+                    }}>
+                      <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginRight: '4px' }}>
+                        <Filter size={15} color="#818cf8" />
+                        Filtrar por:
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={() => setClientDateFilter('all')}
+                        style={{
+                          padding: '6px 14px',
+                          borderRadius: '20px',
+                          fontSize: '0.8rem',
+                          fontWeight: 600,
+                          border: '1px solid var(--border-subtle)',
+                          background: clientDateFilter === 'all' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
+                          color: clientDateFilter === 'all' ? '#fff' : 'var(--text-secondary)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Todas
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setClientDateFilter('today')}
+                        style={{
+                          padding: '6px 14px',
+                          borderRadius: '20px',
+                          fontSize: '0.8rem',
+                          fontWeight: 600,
+                          border: '1px solid var(--border-subtle)',
+                          background: clientDateFilter === 'today' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
+                          color: clientDateFilter === 'today' ? '#fff' : 'var(--text-secondary)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Hoje
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setClientDateFilter('week')}
+                        style={{
+                          padding: '6px 14px',
+                          borderRadius: '20px',
+                          fontSize: '0.8rem',
+                          fontWeight: 600,
+                          border: '1px solid var(--border-subtle)',
+                          background: clientDateFilter === 'week' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
+                          color: clientDateFilter === 'week' ? '#fff' : 'var(--text-secondary)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Esta semana (7 dias)
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setClientDateFilter('15days')}
+                        style={{
+                          padding: '6px 14px',
+                          borderRadius: '20px',
+                          fontSize: '0.8rem',
+                          fontWeight: 600,
+                          border: '1px solid var(--border-subtle)',
+                          background: clientDateFilter === '15days' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
+                          color: clientDateFilter === '15days' ? '#fff' : 'var(--text-secondary)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        15 dias
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setClientDateFilter('30days')}
+                        style={{
+                          padding: '6px 14px',
+                          borderRadius: '20px',
+                          fontSize: '0.8rem',
+                          fontWeight: 600,
+                          border: '1px solid var(--border-subtle)',
+                          background: clientDateFilter === '30days' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
+                          color: clientDateFilter === '30days' ? '#fff' : 'var(--text-secondary)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        30 dias
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setClientDateFilter('custom')}
+                        style={{
+                          padding: '6px 14px',
+                          borderRadius: '20px',
+                          fontSize: '0.8rem',
+                          fontWeight: 600,
+                          border: '1px solid var(--border-subtle)',
+                          background: clientDateFilter === 'custom' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
+                          color: clientDateFilter === 'custom' ? '#fff' : 'var(--text-secondary)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Data Específica
+                      </button>
+
+                      {clientDateFilter === 'custom' && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>
+                          <input
+                            type="date"
+                            value={clientCustomDate}
+                            onChange={(e) => setClientCustomDate(e.target.value)}
+                            className="input-field"
+                            style={{
+                              padding: '5px 10px',
+                              fontSize: '0.8rem',
+                              background: 'rgba(15, 23, 42, 0.9)',
+                              color: '#fff',
+                              border: '1px solid #6366f1',
+                              borderRadius: '8px'
+                            }}
+                          />
+                          {clientCustomDate && (
+                            <button
+                              type="button"
+                              onClick={() => setClientCustomDate('')}
+                              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.75rem' }}
+                              title="Limpar data"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {filteredClientRides.length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)' }}>
+                        <Car size={36} style={{ margin: '0 auto 8px', opacity: 0.5 }} />
+                        <p style={{ fontWeight: 600 }}>Nenhuma corrida encontrada neste período.</p>
+                        <p style={{ fontSize: '0.8rem', marginTop: '4px' }}>Alterne os filtros acima para visualizar outras datas.</p>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        {filteredClientRides.map(r => {
+                          const rideTime = r.createdAt || (r as any).created_at ? new Date(r.createdAt || (r as any).created_at) : null;
+                          return (
+                            <div key={r.id} style={{
+                              background: 'rgba(15, 23, 42, 0.85)',
+                              border: '1px solid var(--border-subtle)',
+                              borderRadius: '14px',
+                              padding: '16px',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              flexWrap: 'wrap',
+                              gap: '10px'
+                            }}>
+                              <div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                                  <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>{r.origin} ➔ {r.destination}</span>
+                                  <span style={{
+                                    fontSize: '0.7rem',
+                                    fontWeight: 700,
+                                    padding: '2px 8px',
+                                    borderRadius: '10px',
+                                    background: r.status === 'finished' ? 'rgba(16, 185, 129, 0.15)' : r.status === 'in_progress' ? 'rgba(59, 130, 246, 0.15)' : r.status === 'accepted' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                                    color: r.status === 'finished' ? '#10b981' : r.status === 'in_progress' ? '#3b82f6' : r.status === 'accepted' ? '#f59e0b' : '#ef4444'
+                                  }}>
+                                    {r.status === 'finished' ? 'CONCLUÍDA' : r.status === 'in_progress' ? 'EM ANDAMENTO' : r.status === 'accepted' ? 'ACEITA' : r.status === 'searching' ? 'BUSCANDO' : 'CANCELADA'}
+                                  </span>
+                                </div>
+                                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                  Motorista: <strong>{r.driverName || 'Aguardando'}</strong> • Horas: <strong>{r.hours}h</strong> ({formatCurrency(r.hourlyRate)}/h)
+                                </div>
+                                {rideTime && (
+                                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '3px' }}>
+                                    Data: {rideTime.toLocaleDateString('pt-BR')} às {rideTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                  </div>
+                                )}
+                              </div>
+
+                              <div style={{ textAlign: 'right' }}>
+                                <div style={{ fontWeight: 800, color: '#fff', fontSize: '1.05rem' }}>{formatCurrency(r.total)}</div>
+                                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>ID: #{r.id.slice(-6)}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()
+            )}
+            </div>
+          )}
+        </div>
+      )}
 
         {/* TAB 2: MOTORISTA */}
         {activeTab === 'driver' && (
@@ -2411,6 +2700,48 @@ export function App() {
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <div style={{
+                        display: 'flex',
+                        background: 'rgba(15, 23, 42, 0.8)',
+                        padding: '3px',
+                        borderRadius: '10px',
+                        border: '1px solid var(--border-subtle)',
+                        marginRight: '6px'
+                      }}>
+                        <button
+                          type="button"
+                          onClick={() => setDriverSubTab('radar')}
+                          style={{
+                            padding: '5px 12px',
+                            borderRadius: '8px',
+                            border: 'none',
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            background: driverSubTab === 'radar' ? 'var(--primary-gradient)' : 'transparent',
+                            color: driverSubTab === 'radar' ? '#fff' : 'var(--text-secondary)'
+                          }}
+                        >
+                          Radar & Chamados
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDriverSubTab('history')}
+                          style={{
+                            padding: '5px 12px',
+                            borderRadius: '8px',
+                            border: 'none',
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            background: driverSubTab === 'history' ? 'var(--primary-gradient)' : 'transparent',
+                            color: driverSubTab === 'history' ? '#fff' : 'var(--text-secondary)'
+                          }}
+                        >
+                          Meu Histórico
+                        </button>
+                      </div>
+
                       {isUserAdmin && (
                         <button
                           onClick={() => setActiveTab('admin')}
@@ -2541,142 +2872,424 @@ export function App() {
                     border: '1px solid var(--border-subtle)',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '10px'
+                    gap: '10px',
+                    marginBottom: '20px'
                   }}>
                     <Compass size={20} color={isDriverOnline ? '#10b981' : 'var(--text-muted)'} />
-                    <span style={{ fontSize: '0.85rem', color: isDriverOnline ? '#10b981' : 'var(--text-muted)' }}>
-                      {isDriverOnline ? 'Aguardando novas solicitações de clientes...' : 'Você está offline. Ative o modo ONLINE para receber chamados.'}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Lista de Chamadas em Aberto */}
-                <div className="glass-panel" style={{ padding: '28px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                    <h3 style={{ fontSize: '1.15rem', fontWeight: 700 }}>Solicitações Disponíveis</h3>
-                    <span style={{
-                      background: 'rgba(99, 102, 241, 0.2)',
-                      color: '#818cf8',
-                      padding: '3px 10px',
-                      borderRadius: '12px',
-                      fontSize: '0.75rem',
-                      fontWeight: 600
-                    }}>
-                      {pendingRides.length} pendentes
-                    </span>
-                  </div>
-
-                  {pendingRides.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
-                      <Clock size={40} style={{ margin: '0 auto 10px', opacity: 0.5 }} />
-                      <p style={{ fontSize: '0.9rem' }}>Nenhuma corrida pendente no momento.</p>
-                      <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                        Crie uma solicitação na aba <strong>Cliente</strong> para testar.
+                    <div style={{ flex: 1, fontSize: '0.85rem' }}>
+                      <span style={{ fontWeight: 700, color: isDriverOnline ? '#10b981' : 'var(--text-muted)' }}>
+                        {isDriverOnline ? 'Radar de Passageiros Ativo' : 'Radar Desconectado'}
+                      </span>
+                      <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: 0 }}>
+                        {isDriverOnline
+                          ? 'Sua localização está sendo transmitida e você receberá solicitações em tempo real.'
+                          : 'Clique no botão acima para ficar ONLINE e começar a receber chamadas de passageiros.'}
                       </p>
                     </div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                      {pendingRides.map(r => (
-                        <div
-                          key={r.id}
-                          style={{
-                            background: 'rgba(15, 23, 42, 0.9)',
-                            border: '1px solid rgba(255, 255, 255, 0.1)',
-                            borderRadius: '14px',
-                            padding: '16px'
-                          }}
-                        >
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                            <span style={{
-                              fontSize: '0.75rem',
-                              background: 'rgba(16, 185, 129, 0.15)',
-                              color: '#10b981',
-                              padding: '2px 8px',
-                              borderRadius: '8px',
-                              fontWeight: 700
-                            }}>
-                              ⏱️ {r.hours}h de serviço
-                            </span>
-                            <strong style={{ color: '#10b981', fontSize: '1.1rem' }}>
-                              Ganho Líquido: {formatCurrency(r.driverNet)}
-                            </strong>
-                          </div>
+                  </div>
 
-                          <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', marginBottom: '4px' }}>
-                            <strong>Passageiro:</strong> {r.clientName || 'Cliente'}
-                          </div>
-                          <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', marginBottom: '4px' }}>
-                            <strong>Partida:</strong> {r.origin}
-                          </div>
-                          <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', marginBottom: '12px' }}>
-                            <strong>Destino:</strong> {r.destination}
-                          </div>
-
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '10px', borderTop: '1px solid var(--border-subtle)' }}>
-                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                              Total Cliente: {formatCurrency(r.total)}
-                            </span>
-                            <button
-                              onClick={() => handleAcceptRide(r.id)}
-                              className="btn-success"
-                              style={{ padding: '8px 16px', fontSize: '0.85rem' }}
-                            >
-                              Aceitar Corrida
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Corridas Aceitas / Em Andamento pelo Motorista */}
-                  {myDriverRides.length > 0 && (
-                    <div style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid var(--border-subtle)' }}>
-                      <h4 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '12px', color: '#f59e0b' }}>
-                        🚗 Minhas Corridas em Atendimento
-                      </h4>
-                      {myDriverRides.map(r => (
-                        <div
-                          key={r.id}
-                          style={{
-                            background: 'rgba(245, 158, 11, 0.08)',
-                            border: '1px solid rgba(245, 158, 11, 0.3)',
+                  {driverSubTab === 'radar' ? (
+                    <>
+                      {/* Lista de Chamadas em Aberto */}
+                      <div className="glass-panel" style={{ padding: '28px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                          <h3 style={{ fontSize: '1.15rem', fontWeight: 700 }}>Solicitações Disponíveis</h3>
+                          <span style={{
+                            background: 'rgba(99, 102, 241, 0.2)',
+                            color: '#818cf8',
+                            padding: '3px 10px',
                             borderRadius: '12px',
-                            padding: '14px',
-                            marginBottom: '10px'
-                          }}
-                        >
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                            <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>{r.origin} ➔ {r.destination}</span>
-                            <span style={{ fontSize: '0.75rem', color: '#f59e0b', fontWeight: 700, textTransform: 'uppercase' }}>{r.status}</span>
-                          </div>
-                          <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
-                            {r.status === 'accepted' && (
-                              <button
-                                onClick={() => handleStartRide(r.id)}
-                                className="btn-primary"
-                                style={{ flex: 1, padding: '8px', fontSize: '0.8rem' }}
-                              >
-                                <PlayCircle size={14} /> Iniciar Trajeto
-                              </button>
-                            )}
-                            {r.status === 'in_progress' && (
-                              <button
-                                onClick={() => handleFinishRide(r.id)}
-                                className="btn-success"
-                                style={{ flex: 1, padding: '8px', fontSize: '0.8rem' }}
-                              >
-                                <CheckCircle2 size={14} /> Concluir e Receber {formatCurrency(r.driverNet)}
-                              </button>
-                            )}
-                          </div>
+                            fontSize: '0.75rem',
+                            fontWeight: 600
+                          }}>
+                            {pendingRides.length} pendentes
+                          </span>
                         </div>
-                      ))}
-                    </div>
+
+                        {pendingRides.length === 0 ? (
+                          <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
+                            <Radio size={48} style={{ margin: '0 auto 12px', opacity: 0.4 }} className={isDriverOnline ? 'animate-pulse' : ''} />
+                            <p style={{ fontSize: '1rem', fontWeight: 600 }}>Nenhuma chamada pendente no momento</p>
+                            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                              {isDriverOnline ? 'Mantenha a tela aberta para receber chamadas de passageiros instantaneamente.' : 'Fique online para receber notificações de novos passageiros.'}
+                            </p>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                            {pendingRides.map(r => (
+                              <div
+                                key={r.id}
+                                style={{
+                                  background: 'rgba(15, 23, 42, 0.7)',
+                                  border: '1px solid var(--border-subtle)',
+                                  borderRadius: '14px',
+                                  padding: '16px'
+                                }}
+                              >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                                  <span style={{
+                                    fontSize: '0.75rem',
+                                    background: 'rgba(16, 185, 129, 0.15)',
+                                    color: '#10b981',
+                                    padding: '2px 8px',
+                                    borderRadius: '8px',
+                                    fontWeight: 700
+                                  }}>
+                                    ⏱️ {r.hours}h de serviço
+                                  </span>
+                                  <strong style={{ color: '#10b981', fontSize: '1.1rem' }}>
+                                    Ganho Líquido: {formatCurrency(r.driverNet)}
+                                  </strong>
+                                </div>
+
+                                <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', marginBottom: '4px' }}>
+                                  <strong>Passageiro:</strong> {r.clientName || 'Cliente'}
+                                </div>
+                                <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', marginBottom: '4px' }}>
+                                  <strong>Partida:</strong> {r.origin}
+                                </div>
+                                <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', marginBottom: '12px' }}>
+                                  <strong>Destino:</strong> {r.destination}
+                                </div>
+
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '10px', borderTop: '1px solid var(--border-subtle)' }}>
+                                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                    Total Cliente: {formatCurrency(r.total)}
+                                  </span>
+                                  <button
+                                    onClick={() => handleAcceptRide(r.id)}
+                                    className="btn-success"
+                                    style={{ padding: '8px 16px', fontSize: '0.85rem' }}
+                                  >
+                                    Aceitar Corrida
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Corridas Aceitas / Em Andamento pelo Motorista */}
+                        {myDriverRides.length > 0 && (
+                          <div style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid var(--border-subtle)' }}>
+                            <h4 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '12px', color: '#f59e0b' }}>
+                              🚗 Minhas Corridas em Atendimento
+                            </h4>
+                            {myDriverRides.map(r => (
+                              <div
+                                key={r.id}
+                                style={{
+                                  background: 'rgba(245, 158, 11, 0.08)',
+                                  border: '1px solid rgba(245, 158, 11, 0.3)',
+                                  borderRadius: '12px',
+                                  padding: '14px',
+                                  marginBottom: '10px'
+                                }}
+                              >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                  <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>{r.origin} ➔ {r.destination}</span>
+                                  <span style={{ fontSize: '0.75rem', color: '#f59e0b', fontWeight: 700, textTransform: 'uppercase' }}>{r.status}</span>
+                                </div>
+                                <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                                  {r.status === 'accepted' && (
+                                    <button
+                                      onClick={() => handleStartRide(r.id)}
+                                      className="btn-primary"
+                                      style={{ flex: 1, padding: '8px', fontSize: '0.8rem' }}
+                                    >
+                                      <PlayCircle size={14} /> Iniciar Trajeto
+                                    </button>
+                                  )}
+                                  {r.status === 'in_progress' && (
+                                    <button
+                                      onClick={() => handleFinishRide(r.id)}
+                                      className="btn-success"
+                                      style={{ flex: 1, padding: '8px', fontSize: '0.8rem' }}
+                                    >
+                                      <CheckCircle2 size={14} /> Concluir e Receber {formatCurrency(r.driverNet)}
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    /* SUB-ABA: HISTÓRICO DE CORRIDAS DO MOTORISTA COM FILTROS DE DATA (PADRÃO: ESTA SEMANA) */
+                    (() => {
+                      const now = Date.now();
+                      const startOfToday = new Date();
+                      startOfToday.setHours(0, 0, 0, 0);
+
+                      const myCompletedRides = rides.filter(r => r.driverId === currentUser.id);
+
+                      const filteredDriverRides = myCompletedRides.filter(r => {
+                        const rideTime = r.createdAt || (r as any).created_at ? new Date(r.createdAt || (r as any).created_at).getTime() : now;
+                        if (driverDateFilter === 'today') {
+                          return rideTime >= startOfToday.getTime();
+                        }
+                        if (driverDateFilter === 'week') {
+                          const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+                          return rideTime >= sevenDaysAgo;
+                        }
+                        if (driverDateFilter === '15days') {
+                          const fifteenDaysAgo = now - 15 * 24 * 60 * 60 * 1000;
+                          return rideTime >= fifteenDaysAgo;
+                        }
+                        if (driverDateFilter === '30days') {
+                          const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
+                          return rideTime >= thirtyDaysAgo;
+                        }
+                        if (driverDateFilter === 'custom') {
+                          if (!driverCustomDate) return true;
+                          const targetDateStr = new Date(rideTime).toISOString().slice(0, 10);
+                          return targetDateStr === driverCustomDate;
+                        }
+                        return true;
+                      });
+
+                      const totalNetEarned = filteredDriverRides.reduce((acc, curr) => acc + (curr.driverNet || 0), 0);
+
+                      return (
+                        <div className="glass-panel" style={{ padding: '24px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px', marginBottom: '20px' }}>
+                            <div>
+                              <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Clock size={22} color="#10b981" />
+                                Meu Histórico de Corridas Atendidas ({filteredDriverRides.length})
+                              </h3>
+                              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                                Acompanhe todas as corridas realizadas e seus repasses líquidos de 85%.
+                              </p>
+                            </div>
+
+                            <div style={{
+                              background: 'rgba(16, 185, 129, 0.12)',
+                              border: '1px solid rgba(16, 185, 129, 0.3)',
+                              padding: '10px 18px',
+                              borderRadius: '12px',
+                              textAlign: 'right'
+                            }}>
+                              <div style={{ fontSize: '0.7rem', color: '#a7f3d0' }}>Ganho Líquido no Período</div>
+                              <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#10b981' }}>{formatCurrency(totalNetEarned)}</div>
+                            </div>
+                          </div>
+
+                          {/* Barra de Filtros de Período Fixos e Personalizado (Padrão: Esta semana) */}
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            flexWrap: 'wrap',
+                            gap: '8px',
+                            padding: '12px 16px',
+                            background: 'rgba(255, 255, 255, 0.03)',
+                            borderRadius: '12px',
+                            border: '1px solid var(--border-subtle)',
+                            marginBottom: '20px'
+                          }}>
+                            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginRight: '4px' }}>
+                              <Filter size={15} color="#10b981" />
+                              Filtrar por:
+                            </span>
+
+                            <button
+                              type="button"
+                              onClick={() => setDriverDateFilter('all')}
+                              style={{
+                                padding: '6px 14px',
+                                borderRadius: '20px',
+                                fontSize: '0.8rem',
+                                fontWeight: 600,
+                                border: '1px solid var(--border-subtle)',
+                                background: driverDateFilter === 'all' ? 'linear-gradient(135deg, #10b981, #059669)' : 'rgba(15, 23, 42, 0.6)',
+                                color: driverDateFilter === 'all' ? '#fff' : 'var(--text-secondary)',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              Todas
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setDriverDateFilter('today')}
+                              style={{
+                                padding: '6px 14px',
+                                borderRadius: '20px',
+                                fontSize: '0.8rem',
+                                fontWeight: 600,
+                                border: '1px solid var(--border-subtle)',
+                                background: driverDateFilter === 'today' ? 'linear-gradient(135deg, #10b981, #059669)' : 'rgba(15, 23, 42, 0.6)',
+                                color: driverDateFilter === 'today' ? '#fff' : 'var(--text-secondary)',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              Hoje
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setDriverDateFilter('week')}
+                              style={{
+                                padding: '6px 14px',
+                                borderRadius: '20px',
+                                fontSize: '0.8rem',
+                                fontWeight: 600,
+                                border: '1px solid var(--border-subtle)',
+                                background: driverDateFilter === 'week' ? 'linear-gradient(135deg, #10b981, #059669)' : 'rgba(15, 23, 42, 0.6)',
+                                color: driverDateFilter === 'week' ? '#fff' : 'var(--text-secondary)',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              Esta semana (7 dias)
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setDriverDateFilter('15days')}
+                              style={{
+                                padding: '6px 14px',
+                                borderRadius: '20px',
+                                fontSize: '0.8rem',
+                                fontWeight: 600,
+                                border: '1px solid var(--border-subtle)',
+                                background: driverDateFilter === '15days' ? 'linear-gradient(135deg, #10b981, #059669)' : 'rgba(15, 23, 42, 0.6)',
+                                color: driverDateFilter === '15days' ? '#fff' : 'var(--text-secondary)',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              15 dias
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setDriverDateFilter('30days')}
+                              style={{
+                                padding: '6px 14px',
+                                borderRadius: '20px',
+                                fontSize: '0.8rem',
+                                fontWeight: 600,
+                                border: '1px solid var(--border-subtle)',
+                                background: driverDateFilter === '30days' ? 'linear-gradient(135deg, #10b981, #059669)' : 'rgba(15, 23, 42, 0.6)',
+                                color: driverDateFilter === '30days' ? '#fff' : 'var(--text-secondary)',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              30 dias
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setDriverDateFilter('custom')}
+                              style={{
+                                padding: '6px 14px',
+                                borderRadius: '20px',
+                                fontSize: '0.8rem',
+                                fontWeight: 600,
+                                border: '1px solid var(--border-subtle)',
+                                background: driverDateFilter === 'custom' ? 'linear-gradient(135deg, #10b981, #059669)' : 'rgba(15, 23, 42, 0.6)',
+                                color: driverDateFilter === 'custom' ? '#fff' : 'var(--text-secondary)',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              Data Específica
+                            </button>
+
+                            {driverDateFilter === 'custom' && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>
+                                <input
+                                  type="date"
+                                  value={driverCustomDate}
+                                  onChange={(e) => setDriverCustomDate(e.target.value)}
+                                  className="input-field"
+                                  style={{
+                                    padding: '5px 10px',
+                                    fontSize: '0.8rem',
+                                    background: 'rgba(15, 23, 42, 0.9)',
+                                    color: '#fff',
+                                    border: '1px solid #10b981',
+                                    borderRadius: '8px'
+                                  }}
+                                />
+                                {driverCustomDate && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setDriverCustomDate('')}
+                                    style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.75rem' }}
+                                    title="Limpar data"
+                                  >
+                                    ✕
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          {filteredDriverRides.length === 0 ? (
+                            <div style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)' }}>
+                              <Car size={36} style={{ margin: '0 auto 8px', opacity: 0.5 }} />
+                              <p style={{ fontWeight: 600 }}>Nenhuma corrida atendida neste período.</p>
+                              <p style={{ fontSize: '0.8rem', marginTop: '4px' }}>Alterne os filtros acima para visualizar outras datas.</p>
+                            </div>
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                              {filteredDriverRides.map(r => {
+                                const rideTime = r.createdAt || (r as any).created_at ? new Date(r.createdAt || (r as any).created_at) : null;
+                                return (
+                                  <div key={r.id} style={{
+                                    background: 'rgba(15, 23, 42, 0.85)',
+                                    border: '1px solid var(--border-subtle)',
+                                    borderRadius: '14px',
+                                    padding: '16px',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    flexWrap: 'wrap',
+                                    gap: '10px'
+                                  }}>
+                                    <div>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                                        <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>{r.origin} ➔ {r.destination}</span>
+                                        <span style={{
+                                          fontSize: '0.7rem',
+                                          fontWeight: 700,
+                                          padding: '2px 8px',
+                                          borderRadius: '10px',
+                                          background: r.status === 'finished' ? 'rgba(16, 185, 129, 0.15)' : r.status === 'in_progress' ? 'rgba(59, 130, 246, 0.15)' : r.status === 'accepted' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                                          color: r.status === 'finished' ? '#10b981' : r.status === 'in_progress' ? '#3b82f6' : r.status === 'accepted' ? '#f59e0b' : '#ef4444'
+                                        }}>
+                                          {r.status === 'finished' ? 'CONCLUÍDA' : r.status === 'in_progress' ? 'EM ANDAMENTO' : r.status === 'accepted' ? 'ACEITA' : r.status === 'searching' ? 'BUSCANDO' : 'CANCELADA'}
+                                        </span>
+                                      </div>
+                                      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                        Passageiro: <strong>{r.clientName || 'Cliente'}</strong> • Horas: <strong>{r.hours}h</strong> ({formatCurrency(r.hourlyRate)}/h)
+                                      </div>
+                                      {rideTime && (
+                                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '3px' }}>
+                                          Data: {rideTime.toLocaleDateString('pt-BR')} às {rideTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    <div style={{ textAlign: 'right' }}>
+                                      <div style={{ fontWeight: 800, color: '#10b981', fontSize: '1.05rem' }}>
+                                        Ganho: {formatCurrency(r.driverNet)}
+                                      </div>
+                                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Total Cliente: {formatCurrency(r.total)}</div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()
                   )}
+                  </div>
                 </div>
               </div>
-            </div>
             )}
           </div>
         )}

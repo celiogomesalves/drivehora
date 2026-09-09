@@ -47,8 +47,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [driverToDelete, setDriverToDelete] = useState<DriverProfile | null>(null);
   const [isDeletingDriver, setIsDeletingDriver] = useState(false);
 
-  // Filtros de Data para Auditoria de Corridas
-  const [rideDateFilter, setRideDateFilter] = useState<'all' | 'today' | 'week' | '15days' | '30days' | 'custom'>('all');
+  // Filtros de Data para Auditoria de Corridas (Padrão: Esta semana)
+  const [rideDateFilter, setRideDateFilter] = useState<'all' | 'today' | 'week' | '15days' | '30days' | 'custom'>('week');
   const [rideCustomDate, setRideCustomDate] = useState<string>('');
 
   // Configurações Globais do Sistema
