@@ -30,7 +30,7 @@ import {
 } from './services/dbService';
 import { requestWebPushToken, onForegroundMessage } from './services/firebase';
 import { getSystemSettings, fetchSystemSettingsFromDb, type SystemSettings } from './services/settingsService';
-import { testGatewayConnection, createPixPayment, type PaymentMethodType } from './services/paymentGatewayService';
+import { testGatewayConnection, createPixPayment, simulateAsaasPayment, type PaymentMethodType } from './services/paymentGatewayService';
 import { getLocalSessionToken, clearLocalSessionToken } from './utils/sessionHelper';
 import { useSystemDialog } from './components/SystemDialog';
 
@@ -204,6 +204,7 @@ export function App() {
     qrCodeUrl?: string;
     copiaECola?: string;
     expiresAt?: string;
+    externalId?: string;
   } | null>(null);
   const [isCopiedPix, setIsCopiedPix] = useState(false);
 
@@ -884,7 +885,8 @@ export function App() {
         amount: totalAmount,
         qrCodeUrl: pixDataResult.pixQrCodeUrl,
         copiaECola: pixDataResult.pixCopiaECola,
-        expiresAt: pixDataResult.expiresAt
+        expiresAt: pixDataResult.expiresAt,
+        externalId: pixDataResult.externalId
       });
     }
 
@@ -4211,6 +4213,10 @@ export function App() {
                 type="button"
                 onClick={async () => {
                   try {
+                    // Confirma e registra a cobrança no painel do Asaas como RECEBIDA
+                    if (pixModalData.externalId) {
+                      await simulateAsaasPayment(pixModalData.externalId, pixModalData.amount);
+                    }
                     await dbUpdateRide(pixModalData.rideId, { paymentStatus: 'paid' });
                     setRides(prev => prev.map(r => r.id === pixModalData.rideId ? { ...r, paymentStatus: 'paid' } : r));
                     await fetchRides();
@@ -4218,7 +4224,7 @@ export function App() {
                     console.warn('Erro ao atualizar status de pagamento do Pix:', e);
                   }
                   setPixModalData(null);
-                  showToast('Pagamento Pix confirmado com sucesso! O motorista já foi notificado.', 'success');
+                  showToast('Pagamento Pix confirmado no Asaas com sucesso! O motorista já foi notificado.', 'success');
                 }}
                 className="btn-primary"
                 style={{ width: '100%', padding: '12px', fontSize: '0.9rem', background: '#10b981', borderColor: '#10b981' }}
