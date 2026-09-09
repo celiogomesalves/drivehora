@@ -371,6 +371,17 @@ h1, h2, h3, h4, h5, h6 {
     font-size: 16px !important; /* Previne auto-zoom indesejado no iOS Safari */
   }
 
+  .nav-scrollable {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
+    padding-bottom: 6px !important;
+  }
+
+  .nav-scrollable button {
+    scroll-snap-align: start;
+  }
+
   .hide-on-mobile {
     display: none !important;
   }

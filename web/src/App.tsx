@@ -2459,7 +2459,7 @@ export function App() {
                           cursor: 'pointer'
                         }}
                       >
-                        Esta semana (7 dias)
+                        7 dias
                       </button>
 
                       <button
@@ -3142,7 +3142,7 @@ export function App() {
                                 cursor: 'pointer'
                               }}
                             >
-                              Esta semana (7 dias)
+                              7 dias
                             </button>
 
                             <button

@@ -252,15 +252,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       </div>
 
-      {/* Navegação de Sub-Abas do Admin */}
-      <div style={{
-        display: 'flex',
-        gap: '8px',
-        background: 'rgba(15, 23, 42, 0.8)',
+      {/* Navegação de Sub-Abas do Admin (Mobile Friendly com Scroll Lateral Suave) */}
+      <div className="nav-scrollable" style={{
+        background: 'rgba(15, 23, 42, 0.95)',
         padding: '6px',
         borderRadius: '14px',
         border: '1px solid var(--border-subtle)',
-        width: 'fit-content'
+        width: '100%',
+        maxWidth: '100%',
+        boxSizing: 'border-box'
       }}>
         <button
           onClick={() => setActiveSubTab('overview')}
@@ -1013,7 +1013,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   transition: 'all 0.2s ease'
                 }}
               >
-                Esta semana (7 dias)
+                7 dias
               </button>
 
               <button
