@@ -125,20 +125,25 @@ export function App() {
   const [now, setNow] = useState(Date.now());
   const [dismissedCancellationId, setDismissedCancellationId] = useState<string | null>(null);
 
-  // Verificação Constante de Sessão Única Concorrente (Supabase Realtime + Polling a cada 4s)
+  // Verificação de Sessão Única Concorrente (Supabase Realtime + Polling a cada 5s com Grace Period)
   useEffect(() => {
     if (!currentUser?.id) return;
 
     let isChecking = false;
+    let isMounted = true;
+    const loginTime = Date.now();
+
     const verifySession = async () => {
-      if (isChecking) return;
+      // Ignora nos primeiros 4 segundos após o login para evitar conflito com gravação assíncrona
+      if (Date.now() - loginTime < 4000) return;
+      if (isChecking || !isMounted) return;
       isChecking = true;
       try {
         const localToken = getLocalSessionToken();
         if (!localToken) return;
 
         const sessionCheck = await dbCheckUserSession(currentUser.id, localToken);
-        if (!sessionCheck.valid) {
+        if (isMounted && !sessionCheck.valid) {
           console.warn('Sessão desconectada por novo login em outro aparelho:', sessionCheck.activeDevice);
           // Limpa sessão local
           clearLocalSessionToken();
@@ -158,11 +163,8 @@ export function App() {
       }
     };
 
-    // Verificação imediata
-    verifySession();
-
     // Verificação periódica contínua
-    const pollInterval = setInterval(verifySession, 4000);
+    const pollInterval = setInterval(verifySession, 5000);
 
     // Verificação Realtime Supabase
     const sb = getSupabase();
@@ -186,6 +188,7 @@ export function App() {
     }
 
     return () => {
+      isMounted = false;
       clearInterval(pollInterval);
       if (sessionChannel && sb) {
         sb.removeChannel(sessionChannel);
