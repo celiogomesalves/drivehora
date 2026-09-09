@@ -762,6 +762,72 @@ export function App() {
   }, [isDriverOnline, currentUser?.id]);
 
   // ========================================================
+  // CÁLCULOS E EFEITOS DO SISTEMA (DECLARADOS ANTES DO RENDER CONDICIONAL PARA RESPEITAR AS REGRAS DOS HOOKS DO REACT)
+  // ========================================================
+  const activeClientRide = 
+    (currentRideId ? rides.find(r => r.id === currentRideId && !hiddenRideIds.includes(r.id) && r.status !== 'cancelled') : null) || 
+    rides.find(r => currentUser && r.clientId === currentUser.id && !hiddenRideIds.includes(r.id) && r.status !== 'finished' && r.status !== 'cancelled') ||
+    rides.find(r => currentUser && r.clientId === currentUser.id && !hiddenRideIds.includes(r.id) && r.status === 'finished') ||
+    null;
+  const pendingRides = rides.filter(r => r.status === 'searching');
+  const myDriverRides = rides.filter(r => (r.status === 'accepted' || r.status === 'in_progress') && (r.driverId === currentUser?.id || !r.driverId));
+
+  // Corrida cancelada recente para alertar o motorista
+  const cancelledRideForDriver = rides.find(
+    r => r.status === 'cancelled' && r.driverId === currentUser?.id
+  );
+
+  // Identificar se a solicitação do cliente está em busca de motorista
+  const isClientRideSearching = activeClientRide?.status === 'searching';
+  
+  // Limite máximo de busca: 10 minutos (600 segundos)
+  const MAX_SEARCH_DURATION_SECS = 600;
+  const searchElapsedSeconds = isClientRideSearching 
+    ? Math.max(0, Math.floor((now - (activeClientRide.createdAt || now)) / 1000))
+    : 0;
+  const searchSecondsRemaining = Math.max(0, MAX_SEARCH_DURATION_SECS - searchElapsedSeconds);
+  const searchRemainingMinutes = Math.floor(searchSecondsRemaining / 60);
+  const searchRemainingSecs = searchSecondsRemaining % 60;
+  const formattedSearchCountdown = `${String(searchRemainingMinutes).padStart(2, '0')}:${String(searchRemainingSecs).padStart(2, '0')}`;
+
+  // Efeito de auto-cancelamento quando: 1) Passar de 10 min OU 2) Não houver nenhum motorista online
+  useEffect(() => {
+    if (!currentUser) return;
+    if (activeClientRide && activeClientRide.status === 'searching') {
+      // Caso 1: Passou de 10 minutos de busca
+      if (searchElapsedSeconds >= MAX_SEARCH_DURATION_SECS) {
+        dbCancelRide(activeClientRide.id);
+        setSearchCancellationReason({
+          rideId: activeClientRide.id,
+          reason: 'timeout_10min'
+        });
+        fetchRides();
+        return;
+      }
+
+      // Caso 2: Nenhum motorista online e já buscou por pelo menos 15 segundos
+      if (allDriversList.length > 0 && onlineDriversCount === 0 && searchElapsedSeconds >= 15) {
+        dbCancelRide(activeClientRide.id);
+        setSearchCancellationReason({
+          rideId: activeClientRide.id,
+          reason: 'no_drivers_online'
+        });
+        fetchRides();
+        return;
+      }
+    }
+  }, [currentUser?.id, activeClientRide?.id, activeClientRide?.status, searchElapsedSeconds, onlineDriversCount, allDriversList.length]);
+
+  // Contador de 5 minutos para cancelamento gratuito pelo cliente após o aceite
+  const acceptedTimestamp = activeClientRide?.acceptedAt || activeClientRide?.createdAt || Date.now();
+  const secondsSinceAccepted = Math.floor((now - acceptedTimestamp) / 1000);
+  const cancelSecondsRemaining = Math.max(0, 300 - secondsSinceAccepted);
+  const cancelMinutes = Math.floor(cancelSecondsRemaining / 60);
+  const cancelSecs = cancelSecondsRemaining % 60;
+  const formattedCountdown = `${String(cancelMinutes).padStart(2, '0')}:${String(cancelSecs).padStart(2, '0')}`;
+  const canCancelAccepted = cancelSecondsRemaining > 0;
+
+  // ========================================================
   // 1. TELA INICIAL: PÁGINA DE LOGIN OBRIGATÓRIA (SE NÃO LOGADO)
   // ========================================================
   if (!currentUser) {
@@ -857,67 +923,6 @@ export function App() {
   // ========================================================
   // 2. TELA DO SISTEMA LOGADO
   // ========================================================
-  const activeClientRide = 
-    (currentRideId ? rides.find(r => r.id === currentRideId && !hiddenRideIds.includes(r.id) && r.status !== 'cancelled') : null) || 
-    rides.find(r => currentUser && r.clientId === currentUser.id && !hiddenRideIds.includes(r.id) && r.status !== 'finished' && r.status !== 'cancelled') ||
-    rides.find(r => currentUser && r.clientId === currentUser.id && !hiddenRideIds.includes(r.id) && r.status === 'finished') ||
-    null;
-  const pendingRides = rides.filter(r => r.status === 'searching');
-  const myDriverRides = rides.filter(r => (r.status === 'accepted' || r.status === 'in_progress') && (r.driverId === currentUser?.id || !r.driverId));
-
-  // Corrida cancelada recente para alertar o motorista
-  const cancelledRideForDriver = rides.find(
-    r => r.status === 'cancelled' && r.driverId === currentUser?.id
-  );
-
-  // Identificar se a solicitação do cliente está em busca de motorista
-  const isClientRideSearching = activeClientRide?.status === 'searching';
-  
-  // Limite máximo de busca: 10 minutos (600 segundos)
-  const MAX_SEARCH_DURATION_SECS = 600;
-  const searchElapsedSeconds = isClientRideSearching 
-    ? Math.max(0, Math.floor((now - (activeClientRide.createdAt || now)) / 1000))
-    : 0;
-  const searchSecondsRemaining = Math.max(0, MAX_SEARCH_DURATION_SECS - searchElapsedSeconds);
-  const searchRemainingMinutes = Math.floor(searchSecondsRemaining / 60);
-  const searchRemainingSecs = searchSecondsRemaining % 60;
-  const formattedSearchCountdown = `${String(searchRemainingMinutes).padStart(2, '0')}:${String(searchRemainingSecs).padStart(2, '0')}`;
-
-  // Efeito de auto-cancelamento quando: 1) Passar de 10 min OU 2) Não houver nenhum motorista online
-  useEffect(() => {
-    if (activeClientRide && activeClientRide.status === 'searching') {
-      // Caso 1: Passou de 10 minutos de busca
-      if (searchElapsedSeconds >= MAX_SEARCH_DURATION_SECS) {
-        dbCancelRide(activeClientRide.id);
-        setSearchCancellationReason({
-          rideId: activeClientRide.id,
-          reason: 'timeout_10min'
-        });
-        fetchRides();
-        return;
-      }
-
-      // Caso 2: Nenhum motorista online e já buscou por pelo menos 15 segundos
-      if (allDriversList.length > 0 && onlineDriversCount === 0 && searchElapsedSeconds >= 15) {
-        dbCancelRide(activeClientRide.id);
-        setSearchCancellationReason({
-          rideId: activeClientRide.id,
-          reason: 'no_drivers_online'
-        });
-        fetchRides();
-        return;
-      }
-    }
-  }, [activeClientRide?.id, activeClientRide?.status, searchElapsedSeconds, onlineDriversCount, allDriversList.length]);
-
-  // Contador de 5 minutos para cancelamento gratuito pelo cliente após o aceite
-  const acceptedTimestamp = activeClientRide?.acceptedAt || activeClientRide?.createdAt || Date.now();
-  const secondsSinceAccepted = Math.floor((now - acceptedTimestamp) / 1000);
-  const cancelSecondsRemaining = Math.max(0, 300 - secondsSinceAccepted);
-  const cancelMinutes = Math.floor(cancelSecondsRemaining / 60);
-  const cancelSecs = cancelSecondsRemaining % 60;
-  const formattedCountdown = `${String(cancelMinutes).padStart(2, '0')}:${String(cancelSecs).padStart(2, '0')}`;
-  const canCancelAccepted = cancelSecondsRemaining > 0;
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
