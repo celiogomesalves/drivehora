@@ -223,8 +223,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 <DollarSign size={18} />
               </div>
               <div>
-                <strong style={{ fontSize: '0.95rem' }}>Repasse justo ao motorista (85%)</strong>
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Apenas 15% de taxa da plataforma, garantindo motoristas mais qualificados.</p>
+                <strong style={{ fontSize: '0.95rem' }}>Preço transparente e sem surpresas</strong>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Tarifa combinada por hora com paradas ilimitadas, sem tarifas dinâmicas abusivas.</p>
               </div>
             </div>
 

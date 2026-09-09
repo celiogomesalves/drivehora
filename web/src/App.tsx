@@ -1970,7 +1970,7 @@ export function App() {
                       </div>
                     </div>
 
-                    {/* Card de Simulação Financeira */}
+                    {/* Card de Resumo da Contratação */}
                     <div style={{
                       background: 'rgba(15, 23, 42, 0.85)',
                       border: '1px solid rgba(99, 102, 241, 0.25)',
@@ -1978,18 +1978,13 @@ export function App() {
                       padding: '16px',
                       marginTop: '6px'
                     }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                        <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Valor Total Contratado:</span>
-                        <strong style={{ fontSize: '1.25rem', color: '#fff' }}>{formatCurrency(totalAmount)}</strong>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Total da Contratação:</span>
+                        <strong style={{ fontSize: '1.35rem', color: '#10b981', fontWeight: 800 }}>{formatCurrency(totalAmount)}</strong>
                       </div>
-                      <div style={{ height: '1px', background: 'var(--border-subtle)', margin: '8px 0' }}></div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                        <span>Taxa da Plataforma (15%):</span>
-                        <span>{formatCurrency(platformFee)}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#10b981', marginTop: '4px', fontWeight: 600 }}>
-                        <span>Repasse Líquido ao Motorista (85%):</span>
-                        <span>{formatCurrency(driverNet)}</span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '6px' }}>
+                        <span>Período: {hours} {hours === 1 ? 'hora' : 'horas'} contratadas</span>
+                        <span>Valor: {formatCurrency(hourlyRate)}/h</span>
                       </div>
                     </div>
 
@@ -2390,7 +2385,7 @@ export function App() {
                     <ul style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                       <li>Motorista exclusivo aguardando em reuniões, compras ou compromissos.</li>
                       <li>Sem surpresas com tarifas dinâmicas de trânsito ou chuva.</li>
-                      <li>Preço transparente e repasse justo ao motorista parceiro (85%).</li>
+                      <li>Preço fixo combinado previamente, sem taxas extras de trajeto.</li>
                     </ul>
                   </div>
                 </div>
@@ -3659,10 +3654,12 @@ export function App() {
       }}>
         <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
           <span>© 2026 DriveHora — Todos os direitos reservados</span>
-          <div style={{ display: 'flex', gap: '16px' }}>
-            <span>Regra: 15% Plataforma / 85% Motorista</span>
-            <span>Banco: <strong>{supabaseConnected ? 'Supabase Realtime' : 'Memória / Local'}</strong></span>
-          </div>
+          {isUserAdmin && (
+            <div style={{ display: 'flex', gap: '16px' }}>
+              <span>Regra: 15% Plataforma / 85% Motorista</span>
+              <span>Banco: <strong>{supabaseConnected ? 'Supabase Realtime' : 'Memória / Local'}</strong></span>
+            </div>
+          )}
         </div>
       </footer>
 
