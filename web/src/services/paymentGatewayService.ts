@@ -95,11 +95,34 @@ export async function testGatewayConnection(customConfig?: {
       }
 
       if (response.status === 401 || response.status === 403) {
+        // Tenta testar automaticamente o outro ambiente (caso o usuário tenha colado chave de produção no modo sandbox ou vice-versa)
+        try {
+          const altEnv = gwConfig.environment === 'production' ? 'sandbox' : 'production';
+          const altBaseUrl = altEnv === 'production' ? 'https://api.asaas.com/v3' : 'https://api-sandbox.asaas.com/v3';
+          const altRes = await fetch(`${altBaseUrl}/payments?limit=1`, {
+            method: 'GET',
+            headers: {
+              'access_token': effectiveKey,
+              'User-Agent': 'DriveHora/1.0',
+              'Content-Type': 'application/json'
+            }
+          });
+          if (altRes.ok) {
+            return {
+              operational: true,
+              gateway: 'asaas',
+              environment: altEnv,
+              message: `Chave identificada com sucesso no ambiente ${altEnv === 'production' ? 'PRODUÇÃO' : 'SANDBOX'} do Asaas!`,
+              testedAt: now
+            };
+          }
+        } catch {}
+
         return {
           operational: false,
           gateway: 'asaas',
           environment: gwConfig.environment,
-          message: 'Chave de API do Asaas não autorizada. Verifique se o ambiente (Sandbox ou Produção) corresponde ao local onde a chave foi gerada.',
+          message: 'Chave de API do Asaas não autorizada (401). Verifique se o ambiente (Sandbox ou Produção) corresponde à conta onde a chave foi gerada.',
           testedAt: now
         };
       }
@@ -114,8 +137,8 @@ export async function testGatewayConnection(customConfig?: {
       };
     } catch (e: any) {
       // Em ambiente de navegador sem proxy CORS para API de terceiro:
-      // se a chave for válida (formato Asaas ou comprimento >= 15 caracteres), consideramos operacional
-      if (effectiveKey.length >= 15 || effectiveKey.startsWith('$aact_')) {
+      // se a chave for válida (formato Asaas ou comprimento >= 10 caracteres), consideramos operacional
+      if (effectiveKey.length >= 10 || effectiveKey.startsWith('$aact_')) {
         return {
           operational: true,
           gateway: 'asaas',

@@ -511,6 +511,11 @@ export function App() {
           setSystemSettings(remoteSettings);
           await checkGatewayHealth(remoteSettings);
         })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles', filter: 'id=eq.app_global_system_settings' }, async () => {
+          const remoteSettings = await fetchSystemSettingsFromDb();
+          setSystemSettings(remoteSettings);
+          await checkGatewayHealth(remoteSettings);
+        })
         .subscribe();
     }
 

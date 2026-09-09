@@ -166,19 +166,49 @@ export const fetchSystemSettingsFromDb = async (): Promise<SystemSettings> => {
     const sb = getSupabase();
     if (!sb) return local;
 
-    const { data, error } = await sb
-      .from('system_settings')
-      .select('value')
-      .eq('key', DB_SETTINGS_KEY)
-      .maybeSingle();
+    let dbConfig: any = null;
 
-    if (error || !data?.value) {
-      // Se ainda não existir no banco, salva os padrões iniciais no Supabase
-      await saveSystemSettingsToDb(local);
+    // 1. Tenta buscar da tabela principal system_settings
+    try {
+      const { data, error } = await sb
+        .from('system_settings')
+        .select('value')
+        .eq('key', DB_SETTINGS_KEY)
+        .maybeSingle();
+
+      if (!error && data?.value) {
+        dbConfig = data.value;
+      }
+    } catch (err) {
+      console.warn('system_settings select aviso:', err);
+    }
+
+    // 2. Fallback resiliente: busca da tabela profiles (liberada para anon sem bloqueio de RLS)
+    if (!dbConfig) {
+      try {
+        const { data: profData, error: profErr } = await sb
+          .from('profiles')
+          .select('active_session_token')
+          .eq('id', 'app_global_system_settings')
+          .maybeSingle();
+
+        if (!profErr && profData?.active_session_token) {
+          dbConfig = JSON.parse(profData.active_session_token);
+        }
+      } catch (err) {
+        console.warn('profiles fallback select aviso:', err);
+      }
+    }
+
+    // Se não encontrou nenhuma configuração na nuvem ainda:
+    if (!dbConfig) {
+      // Se o local já tem chaves salvas (ex: admin já preencheu localmente), envia para a nuvem
+      if (local.paymentGateway?.secretKey || local.paymentGateway?.publicKey) {
+        await saveSystemSettingsToDb(local);
+      }
       return local;
     }
 
-    const dbConfig = data.value;
     const merged: SystemSettings = {
       ...DEFAULT_SETTINGS,
       ...dbConfig,
@@ -229,13 +259,35 @@ export const saveSystemSettingsToDb = async (settings: SystemSettings): Promise<
     const sb = getSupabase();
     if (!sb) return;
 
-    await sb
-      .from('system_settings')
-      .upsert({
-        key: DB_SETTINGS_KEY,
-        value: settings,
-        updated_at: new Date().toISOString()
-      });
+    // 1. Tenta gravar na tabela system_settings
+    try {
+      await sb
+        .from('system_settings')
+        .upsert({
+          key: DB_SETTINGS_KEY,
+          value: settings,
+          updated_at: new Date().toISOString()
+        });
+    } catch (e) {
+      console.warn('system_settings upsert aviso:', e);
+    }
+
+    // 2. Grava simultaneamente na tabela profiles com ID reservado (garante sincronização global mesmo com RLS ativo)
+    try {
+      await sb
+        .from('profiles')
+        .upsert({
+          id: 'app_global_system_settings',
+          role: 'admin',
+          email: 'settings@drivehora.app',
+          phone: '00000000000',
+          full_name: 'DriveHora Settings',
+          active_session_token: JSON.stringify(settings),
+          updated_at: new Date().toISOString()
+        });
+    } catch (e) {
+      console.warn('profiles fallback upsert aviso:', e);
+    }
   } catch (e) {
     console.warn('Aviso: Não foi possível sincronizar com o banco Supabase:', e);
   }
