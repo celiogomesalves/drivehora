@@ -24,7 +24,7 @@ import { getCurrentPosition, reverseGeocode, searchAddressPlaces } from './servi
 import { formatCurrency, formatCurrencyInput, parseCurrencyInput } from './utils/formatters';
 import { 
   dbGetClientProfile, dbGetDriverProfile, dbGetAllDrivers,
-  dbCreateRide, dbUpdateRide, dbCancelRide, dbDeleteRide, dbUpdateDriverOnlineStatus, dbUpdateDriverLocation,
+  dbCreateRide, dbUpdateRide, dbCancelRide, dbUpdateDriverOnlineStatus, dbUpdateDriverLocation,
   dbGetFavoriteDriverIds, dbToggleFavoriteDriver, dbSaveUserDeviceToken, dbCheckUserSession, type DbRide 
 } from './services/dbService';
 import { requestWebPushToken, onForegroundMessage } from './services/firebase';
@@ -77,6 +77,16 @@ export function App() {
     }
   });
 
+  // Lista de IDs de corridas excluídas visualmente pelo passageiro (preservadas no banco para relatórios do Admin)
+  const [deletedRideIdsForClient, setDeletedRideIdsForClient] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('drivehora_deleted_rides');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
   // Aba ativa na tela de Histórico: 'active' (principais) ou 'archived' (arquivadas)
   const [historyViewTab, setHistoryViewTab] = useState<'active' | 'archived'>('active');
 
@@ -103,31 +113,43 @@ export function App() {
     showToast('Corrida restaurada para o Histórico principal!', 'success');
   };
 
-  // Excluir definitivamente com confirmação obrigatória
+  // Exclusão visual definitiva para o passageiro (registro preservado para controle e relatórios do Admin)
   const handleDeleteArchivedRide = (rideId: string) => {
     showConfirm(
-      'Tem certeza que deseja excluir esta corrida do histórico? Uma vez excluída permanentemente, não haverá como acessá-la novamente.',
+      'Tem certeza que deseja remover esta corrida do seu histórico? Ela não será mais exibida para você.',
       async () => {
-        try {
-          await dbDeleteRide(rideId);
-          setRides(prev => prev.filter(r => r.id !== rideId));
-          setArchivedRideIds(prev => {
-            const next = prev.filter(id => id !== rideId);
-            localStorage.setItem('drivehora_archived_rides', JSON.stringify(next));
-            return next;
-          });
-          if (currentRideId === rideId) {
-            setCurrentRideId(null);
-          }
-          showToast('Corrida excluída definitivamente do sistema.', 'info');
-        } catch {
-          showAlert('Não foi possível excluir a corrida. Tente novamente.', 'error', 'Erro na Exclusão');
+        // 1. Marca como excluída para o passageiro (efeito visual na conta do cliente)
+        setDeletedRideIdsForClient(prev => {
+          const next = [...new Set([...prev, rideId])];
+          localStorage.setItem('drivehora_deleted_rides', JSON.stringify(next));
+          return next;
+        });
+
+        // 2. Remove da lista de arquivadas
+        setArchivedRideIds(prev => {
+          const next = prev.filter(id => id !== rideId);
+          localStorage.setItem('drivehora_archived_rides', JSON.stringify(next));
+          return next;
+        });
+
+        if (currentRideId === rideId) {
+          setCurrentRideId(null);
         }
+
+        // 3. Registra flag opcional no Supabase se suportado, sem deletar a linha de registro financeiro
+        const sb = getSupabase();
+        if (sb) {
+          try {
+            await sb.from('rides').update({ hidden_for_client: true }).eq('id', rideId);
+          } catch {}
+        }
+
+        showToast('Corrida removida do seu histórico com sucesso.', 'info');
       },
       undefined,
       {
-        title: 'Excluir Corrida Definitivamente?',
-        confirmLabel: 'Sim, Excluir',
+        title: 'Remover Corrida do Histórico?',
+        confirmLabel: 'Sim, Remover',
         cancelLabel: 'Cancelar',
         type: 'warning'
       }
@@ -2382,7 +2404,8 @@ export function App() {
                 const startOfToday = new Date();
                 startOfToday.setHours(0, 0, 0, 0);
 
-                const myRides = rides.filter(r => r.clientId === currentUser.id);
+                // Corridas visíveis para o passageiro (exclui apenas da visão do cliente; admin continua visualizando tudo)
+                const myRides = rides.filter(r => r.clientId === currentUser.id && !deletedRideIdsForClient.includes(r.id));
 
                 // Separar corridas ativas no histórico das arquivadas
                 const activeHistoryRides = myRides.filter(r => !archivedRideIds.includes(r.id));
