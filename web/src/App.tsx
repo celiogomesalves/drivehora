@@ -223,6 +223,21 @@ export function App() {
   // Identificar solicitação de corrida pendente em busca de motorista
   const incomingRide = rides.find(r => r.status === 'searching');
 
+  // Tempo limite para o motorista aceitar a corrida (30 segundos)
+  const DRIVER_ACCEPT_TIMEOUT_SECS = 30;
+  const driverSecondsRemaining = incomingRide 
+    ? Math.max(0, DRIVER_ACCEPT_TIMEOUT_SECS - Math.floor((now - (incomingRide.createdAt || now)) / 1000))
+    : 0;
+
+  // Auto-dispensar chamada caso o tempo de resposta do motorista expire
+  useEffect(() => {
+    if (isDriverOnline && incomingRide && incomingRide.id !== dismissedRideId) {
+      if (driverSecondsRemaining <= 0) {
+        setDismissedRideId(incomingRide.id);
+      }
+    }
+  }, [isDriverOnline, incomingRide?.id, dismissedRideId, driverSecondsRemaining]);
+
   // Sintetizador Web Audio API de Alerta Sonoro de Chamado
   const playRideAlertSound = () => {
     if (isMuted) return;
@@ -254,14 +269,14 @@ export function App() {
 
   // Tocar som em loop enquanto houver corrida em busca e o motorista estiver online
   useEffect(() => {
-    if (isDriverOnline && incomingRide && incomingRide.id !== dismissedRideId) {
+    if (isDriverOnline && incomingRide && incomingRide.id !== dismissedRideId && driverSecondsRemaining > 0) {
       playRideAlertSound();
       const interval = setInterval(() => {
         playRideAlertSound();
       }, 3500);
       return () => clearInterval(interval);
     }
-  }, [isDriverOnline, incomingRide?.id, dismissedRideId, isMuted]);
+  }, [isDriverOnline, incomingRide?.id, dismissedRideId, isMuted, driverSecondsRemaining > 0]);
 
   // Informações de rede local
   const localNetworkUrl = `http://192.168.18.71:5173`;
@@ -1107,65 +1122,124 @@ export function App() {
       {/* ======================================================== */}
       {/* MODAL DE ALERTA VISUAL E SONORO DE NOVA CORRIDA (MOTORISTA ONLINE) */}
       {/* ======================================================== */}
-      {isDriverOnline && incomingRide && incomingRide.id !== dismissedRideId && (
+      {isDriverOnline && incomingRide && incomingRide.id !== dismissedRideId && driverSecondsRemaining > 0 && (
         <div style={{
           position: 'fixed',
           top: 0,
           left: 0,
           right: 0,
           bottom: 0,
-          background: 'rgba(0, 0, 0, 0.82)',
-          backdropFilter: 'blur(8px)',
+          background: 'rgba(0, 0, 0, 0.85)',
+          backdropFilter: 'blur(10px)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           zIndex: 999,
           padding: '16px'
         }}>
-          <div style={{
+          <div className="animate-modal-alert" style={{
             maxWidth: '540px',
             width: '100%',
-            background: 'linear-gradient(145deg, #0f172a, #1e1b4b)',
+            background: 'linear-gradient(145deg, #0b1120, #1e1b4b)',
             border: '2px solid #6366f1',
             borderRadius: '24px',
-            padding: '28px',
-            boxShadow: '0 0 50px rgba(99, 102, 241, 0.5), 0 20px 40px rgba(0,0,0,0.8)',
-            position: 'relative'
+            padding: '26px',
+            boxShadow: '0 0 50px rgba(99, 102, 241, 0.6), 0 20px 40px rgba(0,0,0,0.8)',
+            position: 'relative',
+            overflow: 'hidden'
           }}>
-            {/* Cabeçalho do Alerta com Som */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{
-                  background: 'rgba(239, 68, 68, 0.2)',
-                  color: '#ef4444',
-                  padding: '10px',
-                  borderRadius: '14px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  <BellRing size={24} className="animate-bounce" />
+            {/* Barra superior de contagem regressiva animada */}
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: '5px',
+              background: 'rgba(255, 255, 255, 0.1)'
+            }}>
+              <div style={{
+                height: '100%',
+                width: `${(driverSecondsRemaining / DRIVER_ACCEPT_TIMEOUT_SECS) * 100}%`,
+                background: driverSecondsRemaining <= 10 
+                  ? 'linear-gradient(90deg, #ef4444, #f97316)' 
+                  : 'linear-gradient(90deg, #10b981, #6366f1)',
+                transition: 'width 1s linear'
+              }} />
+            </div>
+
+            {/* Cabeçalho do Alerta com Som e Temporizador Circular */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                {/* Indicador Circular de Radar com Sino */}
+                <div style={{ position: 'relative', width: '48px', height: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div className="animate-sonar-ring-1" style={{
+                    position: 'absolute',
+                    width: '100%',
+                    height: '100%',
+                    borderRadius: '50%',
+                    border: '2px solid rgba(239, 68, 68, 0.7)'
+                  }}></div>
+                  <div className="animate-sonar-ring-2" style={{
+                    position: 'absolute',
+                    width: '100%',
+                    height: '100%',
+                    borderRadius: '50%',
+                    border: '2px solid rgba(99, 102, 241, 0.6)'
+                  }}></div>
+                  <div style={{
+                    width: '42px',
+                    height: '42px',
+                    borderRadius: '50%',
+                    background: 'radial-gradient(circle, rgba(239, 68, 68, 0.3) 0%, rgba(99, 102, 241, 0.4) 100%)',
+                    border: '1.5px solid rgba(239, 68, 68, 0.6)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#ef4444'
+                  }}>
+                    <BellRing size={22} className="animate-bounce" />
+                  </div>
                 </div>
+
                 <div>
-                  <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#fff', margin: 0 }}>
-                    NOVA SOLICITAÇÃO DISPONÍVEL!
+                  <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#fff', margin: 0, letterSpacing: '-0.02em' }}>
+                    NOVA SOLICITAÇÃO!
                   </h3>
-                  <span style={{ fontSize: '0.8rem', color: '#818cf8', fontWeight: 600 }}>
-                    ⏱️ Toque para aceitar antes que outro motorista pegue
+                  <span style={{ fontSize: '0.8rem', color: '#a5b4fc', fontWeight: 600 }}>
+                    Aceite antes do tempo esgotar
                   </span>
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setIsMuted(!isMuted)}
-                className="btn-outline"
-                style={{ padding: '6px 10px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
-                title={isMuted ? 'Desmutar alerta sonoro' : 'Mutar alerta sonoro'}
-              >
-                {isMuted ? <VolumeX size={16} color="#ef4444" /> : <Volume2 size={16} color="#10b981" />}
-                <span>{isMuted ? 'Mudo' : 'Som Ativo'}</span>
-              </button>
+              {/* Badges de Contagem Regressiva e Controle de Som */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {/* Contador Circular de Segundos */}
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 12px',
+                  borderRadius: '16px',
+                  background: driverSecondsRemaining <= 10 ? 'rgba(239, 68, 68, 0.25)' : 'rgba(99, 102, 241, 0.25)',
+                  border: `1.5px solid ${driverSecondsRemaining <= 10 ? '#ef4444' : '#6366f1'}`,
+                  color: driverSecondsRemaining <= 10 ? '#fca5a5' : '#c7d2fe',
+                  fontWeight: 800,
+                  fontSize: '0.9rem'
+                }}>
+                  <Clock size={16} className={driverSecondsRemaining <= 10 ? 'animate-spin' : ''} />
+                  <span>{driverSecondsRemaining}s</span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsMuted(!isMuted)}
+                  className="btn-outline"
+                  style={{ padding: '6px 10px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                  title={isMuted ? 'Desmutar alerta sonoro' : 'Mutar alerta sonoro'}
+                >
+                  {isMuted ? <VolumeX size={16} color="#ef4444" /> : <Volume2 size={16} color="#10b981" />}
+                </button>
+              </div>
             </div>
 
             {/* Itinerário */}
@@ -1238,7 +1312,7 @@ export function App() {
                 style={{
                   flex: 2,
                   padding: '16px',
-                  fontSize: '1.1rem',
+                  fontSize: '1.05rem',
                   fontWeight: 800,
                   display: 'flex',
                   alignItems: 'center',
@@ -1248,7 +1322,7 @@ export function App() {
                 }}
               >
                 <CheckCircle2 size={22} />
-                <span>ACEITAR AGORA ({formatCurrency(incomingRide.driverNet)})</span>
+                <span>ACEITAR ({formatCurrency(incomingRide.driverNet)}) • {driverSecondsRemaining}s</span>
               </button>
 
               <button
@@ -1705,7 +1779,15 @@ export function App() {
                 {/* Status em Tempo Real da Corrida do Cliente */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                   {activeClientRide ? (
-                    <div className="glass-panel" style={{ padding: '28px', position: 'relative', overflow: 'hidden' }}>
+                    <div 
+                      className={`glass-panel ${activeClientRide.status === 'searching' ? 'animate-searching-glow' : ''}`} 
+                      style={{ 
+                        padding: '28px', 
+                        position: 'relative', 
+                        overflow: 'hidden',
+                        transition: 'all 0.3s ease'
+                      }}
+                    >
                       <div style={{
                         position: 'absolute',
                         top: 0,
@@ -1720,6 +1802,91 @@ export function App() {
                           ? '#f59e0b'
                           : 'var(--primary-gradient)'
                       }} />
+
+                      {/* Animação Circular de Radar e Busca (Visível quando procurando motorista) */}
+                      {activeClientRide.status === 'searching' && (
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '16px',
+                          background: 'radial-gradient(ellipse at center, rgba(99, 102, 241, 0.22) 0%, rgba(15, 23, 42, 0.4) 100%)',
+                          border: '1px solid rgba(99, 102, 241, 0.35)',
+                          borderRadius: '18px',
+                          padding: '16px 20px',
+                          marginBottom: '20px',
+                          position: 'relative',
+                          overflow: 'hidden'
+                        }}>
+                          {/* Ondas de Sonar Concêntricas */}
+                          <div style={{
+                            position: 'relative',
+                            width: '56px',
+                            height: '56px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0
+                          }}>
+                            <div className="animate-sonar-ring-1" style={{
+                              position: 'absolute',
+                              width: '100%',
+                              height: '100%',
+                              borderRadius: '50%',
+                              border: '2px solid rgba(99, 102, 241, 0.8)'
+                            }} />
+                            <div className="animate-sonar-ring-2" style={{
+                              position: 'absolute',
+                              width: '100%',
+                              height: '100%',
+                              borderRadius: '50%',
+                              border: '2px solid rgba(129, 140, 248, 0.6)'
+                            }} />
+                            <div className="animate-sonar-ring-3" style={{
+                              position: 'absolute',
+                              width: '100%',
+                              height: '100%',
+                              borderRadius: '50%',
+                              border: '2px solid rgba(165, 180, 252, 0.4)'
+                            }} />
+                            
+                            {/* Núcleo Central do Radar */}
+                            <div style={{
+                              width: '42px',
+                              height: '42px',
+                              borderRadius: '50%',
+                              background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
+                              boxShadow: '0 0 20px rgba(99, 102, 241, 0.8)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: '#fff',
+                              zIndex: 2
+                            }}>
+                              <Radio size={22} className="animate-radar-sweep" />
+                            </div>
+                          </div>
+
+                          {/* Mensagem e Alerta de Busca Ativa */}
+                          <div style={{ flex: 1 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{
+                                display: 'inline-block',
+                                width: '8px',
+                                height: '8px',
+                                borderRadius: '50%',
+                                background: '#10b981',
+                                boxShadow: '0 0 8px #10b981'
+                              }} className="animate-pulse" />
+                              <strong style={{ fontSize: '0.95rem', color: '#fff', letterSpacing: '-0.01em' }}>
+                                Radar Ativo • Notificando Motoristas Próximos
+                              </strong>
+                            </div>
+                            <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: '#c7d2fe', lineHeight: 1.4 }}>
+                              Aguarde um instante. Assim que um motorista online aceitar, seus dados e veículo aparecerão aqui em tempo real.
+                            </p>
+                          </div>
+                        </div>
+                      )}
 
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
                         <div>
