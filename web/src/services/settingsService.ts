@@ -44,6 +44,8 @@ export interface SystemSettings {
     minRideRate: number; // ex: 30
     freeCancellationMinutes: number; // ex: 5
   };
+  // Domínio / URL do Aplicativo (para QR Code e links de acesso)
+  appUrl: string;
   // Categorias de Veículos
   vehicleCategories: VehicleCategoryConfig[];
 }
@@ -113,6 +115,7 @@ const DEFAULT_SETTINGS: SystemSettings = {
     minRideRate: 30,
     freeCancellationMinutes: 5
   },
+  appUrl: 'https://drivehora.agenc-ia.net',
   vehicleCategories: DEFAULT_VEHICLE_CATEGORIES
 };
 
@@ -144,6 +147,7 @@ export const getSystemSettings = (): SystemSettings => {
       notificationRules: { ...DEFAULT_SETTINGS.notificationRules, ...(parsed.notificationRules || {}) },
       paymentGateway: { ...DEFAULT_SETTINGS.paymentGateway, ...(parsed.paymentGateway || {}) },
       rates: { ...DEFAULT_SETTINGS.rates, ...(parsed.rates || {}) },
+      appUrl: parsed.appUrl?.trim() || DEFAULT_SETTINGS.appUrl,
       vehicleCategories: (parsed.vehicleCategories && parsed.vehicleCategories.length > 0) 
         ? parsed.vehicleCategories 
         : DEFAULT_VEHICLE_CATEGORIES
@@ -191,6 +195,7 @@ export const fetchSystemSettingsFromDb = async (): Promise<SystemSettings> => {
       notificationRules: { ...DEFAULT_SETTINGS.notificationRules, ...(dbConfig.notificationRules || {}) },
       paymentGateway: { ...DEFAULT_SETTINGS.paymentGateway, ...(dbConfig.paymentGateway || {}) },
       rates: { ...DEFAULT_SETTINGS.rates, ...(dbConfig.rates || {}) },
+      appUrl: dbConfig.appUrl?.trim() || DEFAULT_SETTINGS.appUrl,
       vehicleCategories: (dbConfig.vehicleCategories && dbConfig.vehicleCategories.length > 0) 
         ? dbConfig.vehicleCategories 
         : DEFAULT_VEHICLE_CATEGORIES

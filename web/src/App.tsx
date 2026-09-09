@@ -27,12 +27,13 @@ import {
   dbGetFavoriteDriverIds, dbToggleFavoriteDriver, dbSaveUserDeviceToken, dbCheckUserSession, type DbRide 
 } from './services/dbService';
 import { requestWebPushToken, onForegroundMessage } from './services/firebase';
-import { getSystemSettings } from './services/settingsService';
+import { getSystemSettings, fetchSystemSettingsFromDb, type SystemSettings } from './services/settingsService';
 import { getLocalSessionToken, clearLocalSessionToken } from './utils/sessionHelper';
 import { useSystemDialog } from './components/SystemDialog';
 
 export function App() {
   const { showAlert, showConfirm, showToast } = useSystemDialog();
+  const [systemSettings, setSystemSettings] = useState<SystemSettings>(getSystemSettings);
   const [activeTab, setActiveTab] = useState<'client' | 'driver' | 'admin' | 'mobile'>('client');
   const [rides, setRides] = useState<DbRide[]>([]);
   const [currentRideId, setCurrentRideId] = useState<string | null>(null);
@@ -326,10 +327,32 @@ export function App() {
     }
   }, [isDriverOnline, incomingRide?.id, dismissedRideId, isMuted, driverSecondsRemaining > 0]);
 
-  // Informações da URL de acesso (produção ou endereço dinâmico da janela)
-  const appAccessUrl = typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'
-    ? window.location.origin
-    : 'https://drivehora.vercel.app';
+  // Carregar configurações atualizadas do sistema (Supabase + LocalStorage)
+  useEffect(() => {
+    fetchSystemSettingsFromDb().then(settings => {
+      setSystemSettings(settings);
+    });
+
+    const sb = getSupabase();
+    if (sb) {
+      const channel = sb
+        .channel('public:system_settings_app')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'system_settings' }, () => {
+          fetchSystemSettingsFromDb().then(settings => setSystemSettings(settings));
+        })
+        .subscribe();
+
+      return () => {
+        sb.removeChannel(channel);
+      };
+    }
+  }, [supabaseConnected]);
+
+  // Informações da URL de acesso configurável pelo Administrador (Padrão: https://drivehora.agenc-ia.net)
+  const appAccessUrl = (systemSettings.appUrl && systemSettings.appUrl.trim()) 
+    || (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1' 
+        ? window.location.origin 
+        : 'https://drivehora.agenc-ia.net');
 
   const isUserAdmin = Boolean(currentUser?.isAdmin || currentUser?.role === 'admin' || isSuperAdminEmail(currentUser?.email));
 

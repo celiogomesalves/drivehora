@@ -5,7 +5,7 @@ import {
   XCircle, Clock, RefreshCw, 
   TrendingUp, Database, Image, AlertTriangle, Eye, X, Check,
   Settings, Bell, CreditCard, Sliders, Send, Save, Trash2,
-  Calendar, Filter
+  Calendar, Filter, Globe
 } from 'lucide-react';
 import { formatCurrency, formatCurrencyInput, parseCurrencyInput, formatPhone, formatCpf, formatPlate } from '../utils/formatters';
 import { dbGetAllDrivers, dbGetAllClients, dbAdminUpdateDriverStatus, dbAdminDeleteDriver, type DbRide } from '../services/dbService';
@@ -1756,6 +1756,44 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       style={{ width: '100%', fontSize: '0.85rem' }}
                     />
                   </div>
+                </div>
+              </div>
+
+              {/* Domínio & URL do Aplicativo (QR Code & Acessos) */}
+              <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{
+                    background: 'rgba(99, 102, 241, 0.15)',
+                    padding: '8px',
+                    borderRadius: '10px',
+                    color: '#818cf8'
+                  }}>
+                    <Globe size={20} />
+                  </div>
+                  <div>
+                    <h4 style={{ fontSize: '1rem', fontWeight: 700 }}>Domínio & URL do Aplicativo (QR Code)</h4>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Configuração da URL pública oficial utilizada para gerar o QR Code de acesso mobile</p>
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                    URL Principal da Aplicação
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://drivehora.agenc-ia.net"
+                    value={systemSettings.appUrl || 'https://drivehora.agenc-ia.net'}
+                    onChange={(e) => setSystemSettings(prev => ({
+                      ...prev,
+                      appUrl: e.target.value
+                    }))}
+                    className="input-field"
+                    style={{ width: '100%', fontSize: '0.85rem' }}
+                  />
+                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
+                    Padrão: <code>https://drivehora.agenc-ia.net</code> (ou qualquer outro domínio/subdomínio customizado).
+                  </span>
                 </div>
               </div>
 
