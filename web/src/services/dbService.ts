@@ -606,6 +606,29 @@ export const dbCancelRide = async (rideId: string): Promise<void> => {
   } catch (e) {}
 };
 
+// 7.2 Excluir Definitivamente Corrida pelo Passageiro / Admin
+export const dbDeleteRide = async (rideId: string): Promise<{ success: boolean; error?: string }> => {
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      const res: any = await sb.from('rides').delete().eq('id', rideId);
+      if (res?.error) {
+        console.warn('Erro ao excluir corrida no Supabase:', res.error);
+        return { success: false, error: res.error.message };
+      }
+      return { success: true };
+    } catch (e: any) {
+      console.warn('Erro ao excluir corrida no Supabase:', e);
+      return { success: false, error: e.message };
+    }
+  }
+
+  try {
+    await fetch(`/api/rides/${rideId}`, { method: 'DELETE' });
+  } catch (e) {}
+  return { success: true };
+};
+
 // 8. Buscar todos os motoristas cadastrados (unindo profiles e drivers)
 export const dbGetAllDrivers = async (): Promise<DriverProfile[]> => {
   const sb = getSupabase();

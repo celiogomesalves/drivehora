@@ -5,7 +5,7 @@ import {
   Radio, Award, PlayCircle, Compass, Database, 
   X, Check, LogOut, MapPin, Crown, AlertTriangle, UserCheck,
   BellRing, Volume2, VolumeX, Ban, AlertOctagon, Heart, ShieldAlert, RotateCcw,
-  Filter
+  Filter, Archive, ArchiveRestore, Trash2
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import confetti from 'canvas-confetti';
@@ -24,7 +24,7 @@ import { getCurrentPosition, reverseGeocode, searchAddressPlaces } from './servi
 import { formatCurrency, formatCurrencyInput, parseCurrencyInput } from './utils/formatters';
 import { 
   dbGetClientProfile, dbGetDriverProfile, dbGetAllDrivers,
-  dbCreateRide, dbUpdateRide, dbCancelRide, dbUpdateDriverOnlineStatus, dbUpdateDriverLocation,
+  dbCreateRide, dbUpdateRide, dbCancelRide, dbDeleteRide, dbUpdateDriverOnlineStatus, dbUpdateDriverLocation,
   dbGetFavoriteDriverIds, dbToggleFavoriteDriver, dbSaveUserDeviceToken, dbCheckUserSession, type DbRide 
 } from './services/dbService';
 import { requestWebPushToken, onForegroundMessage } from './services/firebase';
@@ -65,27 +65,73 @@ export function App() {
   const [rides, setRides] = useState<DbRide[]>([]);
   const [currentRideId, setCurrentRideId] = useState<string | null>(null);
   
-  // Lista de IDs de corridas ocultadas localmente pelo cliente (Limpar histórico)
-  const [hiddenRideIds, setHiddenRideIds] = useState<string[]>(() => {
+  // Lista de IDs de corridas arquivadas pelo cliente
+  const [archivedRideIds, setArchivedRideIds] = useState<string[]>(() => {
     try {
-      const saved = localStorage.getItem('drivehora_hidden_rides');
-      return saved ? JSON.parse(saved) : [];
+      const saved = localStorage.getItem('drivehora_archived_rides');
+      if (saved) return JSON.parse(saved);
+      const legacy = localStorage.getItem('drivehora_hidden_rides');
+      return legacy ? JSON.parse(legacy) : [];
     } catch {
       return [];
     }
   });
 
-  // Salvar lista de corridas ocultadas no localStorage
-  const hideRideForClient = (rideId: string) => {
-    setHiddenRideIds(prev => {
+  // Aba ativa na tela de Histórico: 'active' (principais) ou 'archived' (arquivadas)
+  const [historyViewTab, setHistoryViewTab] = useState<'active' | 'archived'>('active');
+
+  // Mover corrida para arquivadas
+  const handleArchiveRide = (rideId: string) => {
+    setArchivedRideIds(prev => {
       const next = [...new Set([...prev, rideId])];
-      localStorage.setItem('drivehora_hidden_rides', JSON.stringify(next));
+      localStorage.setItem('drivehora_archived_rides', JSON.stringify(next));
       return next;
     });
     if (currentRideId === rideId) {
       setCurrentRideId(null);
     }
-    showToast('Histórico da solicitação limpo com sucesso!', 'info');
+    showToast('Corrida arquivada com sucesso! Você pode acessá-la na aba Arquivadas.', 'info');
+  };
+
+  // Restaurar corrida arquivada para a lista principal
+  const handleUnarchiveRide = (rideId: string) => {
+    setArchivedRideIds(prev => {
+      const next = prev.filter(id => id !== rideId);
+      localStorage.setItem('drivehora_archived_rides', JSON.stringify(next));
+      return next;
+    });
+    showToast('Corrida restaurada para o Histórico principal!', 'success');
+  };
+
+  // Excluir definitivamente com confirmação obrigatória
+  const handleDeleteArchivedRide = (rideId: string) => {
+    showConfirm(
+      'Tem certeza que deseja excluir esta corrida do histórico? Uma vez excluída permanentemente, não haverá como acessá-la novamente.',
+      async () => {
+        try {
+          await dbDeleteRide(rideId);
+          setRides(prev => prev.filter(r => r.id !== rideId));
+          setArchivedRideIds(prev => {
+            const next = prev.filter(id => id !== rideId);
+            localStorage.setItem('drivehora_archived_rides', JSON.stringify(next));
+            return next;
+          });
+          if (currentRideId === rideId) {
+            setCurrentRideId(null);
+          }
+          showToast('Corrida excluída definitivamente do sistema.', 'info');
+        } catch {
+          showAlert('Não foi possível excluir a corrida. Tente novamente.', 'error', 'Erro na Exclusão');
+        }
+      },
+      undefined,
+      {
+        title: 'Excluir Corrida Definitivamente?',
+        confirmLabel: 'Sim, Excluir',
+        cancelLabel: 'Cancelar',
+        type: 'warning'
+      }
+    );
   };
 
   // Alerta de Sessão Concorrente / Desconexão Forçada
@@ -765,10 +811,11 @@ export function App() {
   // ========================================================
   // CÁLCULOS E EFEITOS DO SISTEMA (DECLARADOS ANTES DO RENDER CONDICIONAL PARA RESPEITAR AS REGRAS DOS HOOKS DO REACT)
   // ========================================================
+  const isRideActive = (status?: string) => status === 'searching' || status === 'accepted' || status === 'in_progress';
+
   const activeClientRide = 
-    (currentRideId ? rides.find(r => r.id === currentRideId && !hiddenRideIds.includes(r.id) && r.status !== 'cancelled') : null) || 
-    rides.find(r => currentUser && r.clientId === currentUser.id && !hiddenRideIds.includes(r.id) && r.status !== 'finished' && r.status !== 'cancelled') ||
-    rides.find(r => currentUser && r.clientId === currentUser.id && !hiddenRideIds.includes(r.id) && r.status === 'finished') ||
+    (currentRideId ? rides.find(r => r.id === currentRideId && isRideActive(r.status)) : null) || 
+    rides.find(r => currentUser && r.clientId === currentUser.id && isRideActive(r.status)) ||
     null;
   const pendingRides = rides.filter(r => r.status === 'searching');
   const myDriverRides = rides.filter(r => (r.status === 'accepted' || r.status === 'in_progress') && (r.driverId === currentUser?.id || !r.driverId));
@@ -2252,45 +2299,6 @@ export function App() {
                           </div>
                         </div>
                       )}
-
-                      {activeClientRide.status === 'finished' && (
-                        <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                          <div style={{
-                            background: 'rgba(16, 185, 129, 0.12)',
-                            border: '1px solid rgba(16, 185, 129, 0.35)',
-                            borderRadius: '12px',
-                            padding: '14px',
-                            textAlign: 'center',
-                            color: '#10b981'
-                          }}>
-                            <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>✨ Serviço Concluído com Sucesso!</div>
-                            <div style={{ fontSize: '0.8rem', color: '#a7f3d0', marginTop: '4px' }}>
-                              Esperamos que sua viagem tenha sido excelente.
-                            </div>
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() => {
-                              hideRideForClient(activeClientRide.id);
-                              setCurrentRideId(null);
-                            }}
-                            className="btn-primary"
-                            style={{
-                              width: '100%',
-                              padding: '12px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              gap: '8px',
-                              fontWeight: 700
-                            }}
-                          >
-                            <RotateCcw size={16} />
-                            <span>Limpar do Histórico e Fazer Nova Solicitação</span>
-                          </button>
-                        </div>
-                      )}
                     </div>
                   ) : searchCancellationReason ? (
                     <div className="glass-panel" style={{
@@ -2368,7 +2376,7 @@ export function App() {
             )}
 
             {clientSubTab === 'history' && (
-              /* SUB-ABA: HISTÓRICO DE CORRIDAS DO CLIENTE COM FILTROS DE DATA (PADRÃO: ESTA SEMANA) */
+              /* SUB-ABA: HISTÓRICO DE CORRIDAS DO CLIENTE COM ABAS (PRINCIPAL E ARQUIVADAS) E FILTROS */
               (() => {
                 const now = Date.now();
                 const startOfToday = new Date();
@@ -2376,7 +2384,12 @@ export function App() {
 
                 const myRides = rides.filter(r => r.clientId === currentUser.id);
 
-                const filteredClientRides = myRides.filter(r => {
+                // Separar corridas ativas no histórico das arquivadas
+                const activeHistoryRides = myRides.filter(r => !archivedRideIds.includes(r.id));
+                const archivedHistoryRides = myRides.filter(r => archivedRideIds.includes(r.id));
+
+                // Filtrar corridas principais por período
+                const filteredClientRides = activeHistoryRides.filter(r => {
                   const rideTime = r.createdAt || (r as any).created_at ? new Date(r.createdAt || (r as any).created_at).getTime() : now;
                   if (clientDateFilter === 'today') {
                     return rideTime >= startOfToday.getTime();
@@ -2405,231 +2418,433 @@ export function App() {
 
                 return (
                   <div className="glass-panel" style={{ padding: '24px' }}>
+                    {/* Cabeçalho do Histórico com Totalizador */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px', marginBottom: '20px' }}>
                       <div>
                         <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <Clock size={22} color="#6366f1" />
-                          Meu Histórico de Corridas ({filteredClientRides.length})
+                          Histórico de Corridas
                         </h3>
                         <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                          Visualize todas as suas viagens solicitadas e acompanhe seus gastos.
+                          Gerencie seus registros de viagens, arquive para manter a tela limpa e consulte gastos.
                         </p>
                       </div>
 
-                      <div style={{
-                        background: 'rgba(99, 102, 241, 0.12)',
-                        border: '1px solid rgba(99, 102, 241, 0.3)',
-                        padding: '10px 18px',
-                        borderRadius: '12px',
-                        textAlign: 'right'
-                      }}>
-                        <div style={{ fontSize: '0.7rem', color: '#a5b4fc' }}>Total Investido no Período</div>
-                        <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#818cf8' }}>{formatCurrency(totalSpent)}</div>
-                      </div>
-                    </div>
-
-                    {/* Barra de Filtros de Período Fixos e Personalizado (Padrão: Esta semana) */}
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      flexWrap: 'wrap',
-                      gap: '8px',
-                      padding: '12px 16px',
-                      background: 'rgba(255, 255, 255, 0.03)',
-                      borderRadius: '12px',
-                      border: '1px solid var(--border-subtle)',
-                      marginBottom: '20px'
-                    }}>
-                      <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginRight: '4px' }}>
-                        <Filter size={15} color="#818cf8" />
-                        Filtrar por:
-                      </span>
-
-                      <button
-                        type="button"
-                        onClick={() => setClientDateFilter('all')}
-                        style={{
-                          padding: '6px 14px',
-                          borderRadius: '20px',
-                          fontSize: '0.8rem',
-                          fontWeight: 600,
-                          border: '1px solid var(--border-subtle)',
-                          background: clientDateFilter === 'all' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
-                          color: clientDateFilter === 'all' ? '#fff' : 'var(--text-secondary)',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        Todas
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setClientDateFilter('today')}
-                        style={{
-                          padding: '6px 14px',
-                          borderRadius: '20px',
-                          fontSize: '0.8rem',
-                          fontWeight: 600,
-                          border: '1px solid var(--border-subtle)',
-                          background: clientDateFilter === 'today' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
-                          color: clientDateFilter === 'today' ? '#fff' : 'var(--text-secondary)',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        Hoje
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setClientDateFilter('week')}
-                        style={{
-                          padding: '6px 14px',
-                          borderRadius: '20px',
-                          fontSize: '0.8rem',
-                          fontWeight: 600,
-                          border: '1px solid var(--border-subtle)',
-                          background: clientDateFilter === 'week' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
-                          color: clientDateFilter === 'week' ? '#fff' : 'var(--text-secondary)',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        7 dias
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setClientDateFilter('15days')}
-                        style={{
-                          padding: '6px 14px',
-                          borderRadius: '20px',
-                          fontSize: '0.8rem',
-                          fontWeight: 600,
-                          border: '1px solid var(--border-subtle)',
-                          background: clientDateFilter === '15days' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
-                          color: clientDateFilter === '15days' ? '#fff' : 'var(--text-secondary)',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        15 dias
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setClientDateFilter('30days')}
-                        style={{
-                          padding: '6px 14px',
-                          borderRadius: '20px',
-                          fontSize: '0.8rem',
-                          fontWeight: 600,
-                          border: '1px solid var(--border-subtle)',
-                          background: clientDateFilter === '30days' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
-                          color: clientDateFilter === '30days' ? '#fff' : 'var(--text-secondary)',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        30 dias
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setClientDateFilter('custom')}
-                        style={{
-                          padding: '6px 14px',
-                          borderRadius: '20px',
-                          fontSize: '0.8rem',
-                          fontWeight: 600,
-                          border: '1px solid var(--border-subtle)',
-                          background: clientDateFilter === 'custom' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
-                          color: clientDateFilter === 'custom' ? '#fff' : 'var(--text-secondary)',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        Data Específica
-                      </button>
-
-                      {clientDateFilter === 'custom' && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>
-                          <input
-                            type="date"
-                            value={clientCustomDate}
-                            onChange={(e) => setClientCustomDate(e.target.value)}
-                            className="input-field"
-                            style={{
-                              padding: '5px 10px',
-                              fontSize: '0.8rem',
-                              background: 'rgba(15, 23, 42, 0.9)',
-                              color: '#fff',
-                              border: '1px solid #6366f1',
-                              borderRadius: '8px'
-                            }}
-                          />
-                          {clientCustomDate && (
-                            <button
-                              type="button"
-                              onClick={() => setClientCustomDate('')}
-                              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.75rem' }}
-                              title="Limpar data"
-                            >
-                              ✕
-                            </button>
-                          )}
+                      {historyViewTab === 'active' && (
+                        <div style={{
+                          background: 'rgba(99, 102, 241, 0.12)',
+                          border: '1px solid rgba(99, 102, 241, 0.3)',
+                          padding: '10px 18px',
+                          borderRadius: '12px',
+                          textAlign: 'right'
+                        }}>
+                          <div style={{ fontSize: '0.7rem', color: '#a5b4fc' }}>Total no Período Selecionado</div>
+                          <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#818cf8' }}>{formatCurrency(totalSpent)}</div>
                         </div>
                       )}
                     </div>
 
-                    {filteredClientRides.length === 0 ? (
-                      <div style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)' }}>
-                        <Car size={36} style={{ margin: '0 auto 8px', opacity: 0.5 }} />
-                        <p style={{ fontWeight: 600 }}>Nenhuma corrida encontrada neste período.</p>
-                        <p style={{ fontSize: '0.8rem', marginTop: '4px' }}>Alterne os filtros acima para visualizar outras datas.</p>
-                      </div>
-                    ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                        {filteredClientRides.map(r => {
-                          const rideTime = r.createdAt || (r as any).created_at ? new Date(r.createdAt || (r as any).created_at) : null;
-                          return (
-                            <div key={r.id} style={{
-                              background: 'rgba(15, 23, 42, 0.85)',
-                              border: '1px solid var(--border-subtle)',
-                              borderRadius: '14px',
-                              padding: '16px',
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center',
-                              flexWrap: 'wrap',
-                              gap: '10px'
-                            }}>
-                              <div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                                  <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>{r.origin} ➔ {r.destination}</span>
-                                  <span style={{
-                                    fontSize: '0.7rem',
-                                    fontWeight: 700,
-                                    padding: '2px 8px',
-                                    borderRadius: '10px',
-                                    background: r.status === 'finished' ? 'rgba(16, 185, 129, 0.15)' : r.status === 'in_progress' ? 'rgba(59, 130, 246, 0.15)' : r.status === 'accepted' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                                    color: r.status === 'finished' ? '#10b981' : r.status === 'in_progress' ? '#3b82f6' : r.status === 'accepted' ? '#f59e0b' : '#ef4444'
-                                  }}>
-                                    {r.status === 'finished' ? 'CONCLUÍDA' : r.status === 'in_progress' ? 'EM ANDAMENTO' : r.status === 'accepted' ? 'ACEITA' : r.status === 'searching' ? 'BUSCANDO' : 'CANCELADA'}
-                                  </span>
-                                </div>
-                                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                                  Motorista: <strong>{r.driverName || 'Aguardando'}</strong> • Horas: <strong>{r.hours}h</strong> ({formatCurrency(r.hourlyRate)}/h)
-                                </div>
-                                {rideTime && (
-                                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '3px' }}>
-                                    Data: {rideTime.toLocaleDateString('pt-BR')} às {rideTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                                  </div>
-                                )}
-                              </div>
+                    {/* Alternador de Abas: Histórico Principal vs Corridas Arquivadas */}
+                    <div style={{
+                      display: 'flex',
+                      gap: '8px',
+                      marginBottom: '20px',
+                      background: 'rgba(15, 23, 42, 0.8)',
+                      padding: '4px',
+                      borderRadius: '14px',
+                      border: '1px solid var(--border-subtle)',
+                      width: 'fit-content'
+                    }}>
+                      <button
+                        type="button"
+                        onClick={() => setHistoryViewTab('active')}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '8px 16px',
+                          borderRadius: '10px',
+                          border: 'none',
+                          cursor: 'pointer',
+                          fontSize: '0.85rem',
+                          fontWeight: 700,
+                          background: historyViewTab === 'active' ? 'var(--primary-gradient)' : 'transparent',
+                          color: historyViewTab === 'active' ? '#fff' : 'var(--text-secondary)',
+                          transition: 'all 0.2s ease'
+                        }}
+                      >
+                        <Clock size={15} />
+                        <span>Histórico Principal ({activeHistoryRides.length})</span>
+                      </button>
 
-                              <div style={{ textAlign: 'right' }}>
-                                <div style={{ fontWeight: 800, color: '#fff', fontSize: '1.05rem' }}>{formatCurrency(r.total)}</div>
-                                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>ID: #{r.id.slice(-6)}</span>
-                              </div>
+                      <button
+                        type="button"
+                        onClick={() => setHistoryViewTab('archived')}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '8px 16px',
+                          borderRadius: '10px',
+                          border: 'none',
+                          cursor: 'pointer',
+                          fontSize: '0.85rem',
+                          fontWeight: 700,
+                          background: historyViewTab === 'archived' ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'transparent',
+                          color: historyViewTab === 'archived' ? '#000' : '#f59e0b',
+                          transition: 'all 0.2s ease'
+                        }}
+                      >
+                        <Archive size={15} />
+                        <span>Arquivadas ({archivedHistoryRides.length})</span>
+                      </button>
+                    </div>
+
+                    {/* VISÃO 1: HISTÓRICO PRINCIPAL (COM FILTROS DE DATA) */}
+                    {historyViewTab === 'active' && (
+                      <>
+                        {/* Barra de Filtros de Período Fixos e Personalizado (Padrão: 7 dias) */}
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          flexWrap: 'wrap',
+                          gap: '8px',
+                          padding: '12px 16px',
+                          background: 'rgba(255, 255, 255, 0.03)',
+                          borderRadius: '12px',
+                          border: '1px solid var(--border-subtle)',
+                          marginBottom: '20px'
+                        }}>
+                          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginRight: '4px' }}>
+                            <Filter size={15} color="#818cf8" />
+                            Filtrar por:
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={() => setClientDateFilter('all')}
+                            style={{
+                              padding: '6px 14px',
+                              borderRadius: '20px',
+                              fontSize: '0.8rem',
+                              fontWeight: 600,
+                              border: '1px solid var(--border-subtle)',
+                              background: clientDateFilter === 'all' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
+                              color: clientDateFilter === 'all' ? '#fff' : 'var(--text-secondary)',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            Todas
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setClientDateFilter('today')}
+                            style={{
+                              padding: '6px 14px',
+                              borderRadius: '20px',
+                              fontSize: '0.8rem',
+                              fontWeight: 600,
+                              border: '1px solid var(--border-subtle)',
+                              background: clientDateFilter === 'today' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
+                              color: clientDateFilter === 'today' ? '#fff' : 'var(--text-secondary)',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            Hoje
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setClientDateFilter('week')}
+                            style={{
+                              padding: '6px 14px',
+                              borderRadius: '20px',
+                              fontSize: '0.8rem',
+                              fontWeight: 600,
+                              border: '1px solid var(--border-subtle)',
+                              background: clientDateFilter === 'week' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
+                              color: clientDateFilter === 'week' ? '#fff' : 'var(--text-secondary)',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            7 dias
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setClientDateFilter('15days')}
+                            style={{
+                              padding: '6px 14px',
+                              borderRadius: '20px',
+                              fontSize: '0.8rem',
+                              fontWeight: 600,
+                              border: '1px solid var(--border-subtle)',
+                              background: clientDateFilter === '15days' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
+                              color: clientDateFilter === '15days' ? '#fff' : 'var(--text-secondary)',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            15 dias
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setClientDateFilter('30days')}
+                            style={{
+                              padding: '6px 14px',
+                              borderRadius: '20px',
+                              fontSize: '0.8rem',
+                              fontWeight: 600,
+                              border: '1px solid var(--border-subtle)',
+                              background: clientDateFilter === '30days' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
+                              color: clientDateFilter === '30days' ? '#fff' : 'var(--text-secondary)',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            30 dias
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setClientDateFilter('custom')}
+                            style={{
+                              padding: '6px 14px',
+                              borderRadius: '20px',
+                              fontSize: '0.8rem',
+                              fontWeight: 600,
+                              border: '1px solid var(--border-subtle)',
+                              background: clientDateFilter === 'custom' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
+                              color: clientDateFilter === 'custom' ? '#fff' : 'var(--text-secondary)',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            Data Específica
+                          </button>
+
+                          {clientDateFilter === 'custom' && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>
+                              <input
+                                type="date"
+                                value={clientCustomDate}
+                                onChange={(e) => setClientCustomDate(e.target.value)}
+                                className="input-field"
+                                style={{
+                                  padding: '5px 10px',
+                                  fontSize: '0.8rem',
+                                  background: 'rgba(15, 23, 42, 0.9)',
+                                  color: '#fff',
+                                  border: '1px solid #6366f1',
+                                  borderRadius: '8px'
+                                }}
+                              />
+                              {clientCustomDate && (
+                                <button
+                                  type="button"
+                                  onClick={() => setClientCustomDate('')}
+                                  style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.75rem' }}
+                                  title="Limpar data"
+                                >
+                                  ✕
+                                </button>
+                              )}
                             </div>
-                          );
-                        })}
+                          )}
+                        </div>
+
+                        {filteredClientRides.length === 0 ? (
+                          <div style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)' }}>
+                            <Car size={36} style={{ margin: '0 auto 8px', opacity: 0.5 }} />
+                            <p style={{ fontWeight: 600 }}>Nenhuma corrida encontrada neste período.</p>
+                            <p style={{ fontSize: '0.8rem', marginTop: '4px' }}>Alterne os filtros acima para visualizar outras datas.</p>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            {filteredClientRides.map(r => {
+                              const rideTime = r.createdAt || (r as any).created_at ? new Date(r.createdAt || (r as any).created_at) : null;
+                              return (
+                                <div key={r.id} style={{
+                                  background: 'rgba(15, 23, 42, 0.85)',
+                                  border: '1px solid var(--border-subtle)',
+                                  borderRadius: '14px',
+                                  padding: '16px',
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  alignItems: 'center',
+                                  flexWrap: 'wrap',
+                                  gap: '12px'
+                                }}>
+                                  <div style={{ flex: 1, minWidth: '220px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                                      <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>{r.origin} ➔ {r.destination}</span>
+                                      <span style={{
+                                        fontSize: '0.7rem',
+                                        fontWeight: 700,
+                                        padding: '2px 8px',
+                                        borderRadius: '10px',
+                                        background: r.status === 'finished' ? 'rgba(16, 185, 129, 0.15)' : r.status === 'in_progress' ? 'rgba(59, 130, 246, 0.15)' : r.status === 'accepted' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                                        color: r.status === 'finished' ? '#10b981' : r.status === 'in_progress' ? '#3b82f6' : r.status === 'accepted' ? '#f59e0b' : '#ef4444'
+                                      }}>
+                                        {r.status === 'finished' ? 'CONCLUÍDA' : r.status === 'in_progress' ? 'EM ANDAMENTO' : r.status === 'accepted' ? 'ACEITA' : r.status === 'searching' ? 'BUSCANDO' : 'CANCELADA'}
+                                      </span>
+                                    </div>
+                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                      Motorista: <strong>{r.driverName || 'Aguardando'}</strong> • Horas: <strong>{r.hours}h</strong> ({formatCurrency(r.hourlyRate)}/h)
+                                    </div>
+                                    {rideTime && (
+                                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '3px' }}>
+                                        Data: {rideTime.toLocaleDateString('pt-BR')} às {rideTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                                    <div style={{ textAlign: 'right' }}>
+                                      <div style={{ fontWeight: 800, color: '#fff', fontSize: '1.05rem' }}>{formatCurrency(r.total)}</div>
+                                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>ID: #{r.id.slice(-6)}</span>
+                                    </div>
+
+                                    {/* Botão de Arquivar para manter a tela limpa */}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleArchiveRide(r.id)}
+                                      className="btn-outline"
+                                      style={{
+                                        padding: '7px 12px',
+                                        fontSize: '0.78rem',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        borderRadius: '10px',
+                                        color: '#cbd5e1',
+                                        background: 'rgba(255, 255, 255, 0.05)'
+                                      }}
+                                      title="Arquivar corrida para limpar a visualização"
+                                    >
+                                      <Archive size={14} color="#a5b4fc" />
+                                      <span>Arquivar</span>
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {/* VISÃO 2: CORRIDAS ARQUIVADAS (COM OPÇÃO DE RESTAURAR OU EXCLUIR DEFINITIVAMENTE) */}
+                    {historyViewTab === 'archived' && (
+                      <div>
+                        {archivedHistoryRides.length === 0 ? (
+                          <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
+                            <Archive size={42} style={{ margin: '0 auto 10px', opacity: 0.4 }} />
+                            <p style={{ fontWeight: 700, color: '#fff', fontSize: '1rem' }}>Nenhuma corrida arquivada</p>
+                            <p style={{ fontSize: '0.82rem', marginTop: '6px', maxWidth: '380px', margin: '6px auto 0', lineHeight: 1.4 }}>
+                              Quando você arquiva viagens no Histórico Principal, elas vêm para cá. Você pode restaurá-las ou excluí-las permanentemente a qualquer momento.
+                            </p>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span>💡 Viagens arquivadas não aparecem na visualização principal. Você pode restaurar ou excluir permanentemente abaixo:</span>
+                            </div>
+
+                            {archivedHistoryRides.map(r => {
+                              const rideTime = r.createdAt || (r as any).created_at ? new Date(r.createdAt || (r as any).created_at) : null;
+                              return (
+                                <div key={r.id} style={{
+                                  background: 'rgba(15, 23, 42, 0.85)',
+                                  border: '1px solid rgba(245, 158, 11, 0.25)',
+                                  borderRadius: '14px',
+                                  padding: '16px',
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  alignItems: 'center',
+                                  flexWrap: 'wrap',
+                                  gap: '12px'
+                                }}>
+                                  <div style={{ flex: 1, minWidth: '220px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                                      <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>{r.origin} ➔ {r.destination}</span>
+                                      <span style={{
+                                        fontSize: '0.68rem',
+                                        fontWeight: 800,
+                                        padding: '2px 8px',
+                                        borderRadius: '8px',
+                                        background: 'rgba(245, 158, 11, 0.2)',
+                                        color: '#f59e0b',
+                                        border: '1px solid rgba(245, 158, 11, 0.35)',
+                                        letterSpacing: '0.04em'
+                                      }}>
+                                        ARQUIVADA
+                                      </span>
+                                    </div>
+                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                      Motorista: <strong>{r.driverName || 'Sem motorista'}</strong> • Horas: <strong>{r.hours}h</strong> ({formatCurrency(r.hourlyRate)}/h)
+                                    </div>
+                                    {rideTime && (
+                                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '3px' }}>
+                                        Data: {rideTime.toLocaleDateString('pt-BR')} às {rideTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                                    <div style={{ textAlign: 'right', marginRight: '6px' }}>
+                                      <div style={{ fontWeight: 800, color: '#fff', fontSize: '1.05rem' }}>{formatCurrency(r.total)}</div>
+                                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>ID: #{r.id.slice(-6)}</span>
+                                    </div>
+
+                                    {/* Botão de Restaurar */}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleUnarchiveRide(r.id)}
+                                      className="btn-outline"
+                                      style={{
+                                        padding: '7px 12px',
+                                        fontSize: '0.78rem',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        borderRadius: '10px',
+                                        color: '#10b981',
+                                        borderColor: 'rgba(16, 185, 129, 0.4)'
+                                      }}
+                                      title="Restaurar para a lista de histórico principal"
+                                    >
+                                      <ArchiveRestore size={14} />
+                                      <span>Restaurar</span>
+                                    </button>
+
+                                    {/* Botão de Excluir Definitivamente com Confirmação */}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteArchivedRide(r.id)}
+                                      style={{
+                                        padding: '7px 12px',
+                                        fontSize: '0.78rem',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        borderRadius: '10px',
+                                        background: 'rgba(239, 68, 68, 0.15)',
+                                        border: '1px solid rgba(239, 68, 68, 0.4)',
+                                        color: '#ef4444',
+                                        cursor: 'pointer',
+                                        fontWeight: 700
+                                      }}
+                                      title="Excluir permanentemente do sistema (não poderá ser desfeito)"
+                                    >
+                                      <Trash2 size={14} />
+                                      <span>Excluir</span>
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
