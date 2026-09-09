@@ -833,9 +833,20 @@ export function App() {
   // ========================================================
   if (!currentUser) {
     return (
-      <>
+      <div style={{ minHeight: '100vh', background: 'var(--bg-primary)' }}>
         <LoginPage
-          onLoginSuccess={(user) => setCurrentUser(user)}
+          onLoginSuccess={(user) => {
+            const isAdmin = isSuperAdminEmail(user.email) || user.role === 'admin' || user.isAdmin;
+            if (isAdmin) {
+              user.isAdmin = true;
+              setActiveTab('admin');
+            } else if (user.role === 'driver') {
+              setActiveTab('driver');
+            } else {
+              setActiveTab('client');
+            }
+            setCurrentUser(user);
+          }}
         />
         {forcedLogoutNotice && (
           <div style={{
@@ -917,7 +928,7 @@ export function App() {
             </div>
           </div>
         )}
-      </>
+      </div>
     );
   }
 
