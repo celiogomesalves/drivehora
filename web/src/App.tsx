@@ -211,6 +211,24 @@ export function App() {
   const [gatewayOperational, setGatewayOperational] = useState<boolean>(true);
   const [gatewayHealthMsg, setGatewayHealthMsg] = useState<string>('');
 
+  // Checagem Contínua da Saúde do Gateway de Pagamentos (Asaas / MP / Stripe)
+  const checkGatewayHealth = async (customSettings?: SystemSettings) => {
+    try {
+      const activeConf = customSettings?.paymentGateway || systemSettings.paymentGateway;
+      const res = await testGatewayConnection({
+        activeGateway: activeConf.activeGateway,
+        environment: activeConf.environment,
+        secretKey: activeConf.secretKey,
+        publicKey: activeConf.publicKey
+      });
+      setGatewayOperational(res.operational);
+      setGatewayHealthMsg(res.message);
+    } catch {
+      setGatewayOperational(false);
+      setGatewayHealthMsg('Erro de comunicação com o gateway de pagamentos.');
+    }
+  };
+
   // Preferências de Pagamento do Motorista
   const [driverAcceptsCash, setDriverAcceptsCash] = useState<boolean>(() => {
     try {
@@ -462,25 +480,45 @@ export function App() {
     }
   }, [isDriverOnline, incomingRide?.id, dismissedRideId, isMuted, driverSecondsRemaining > 0]);
 
-  // Carregar configurações atualizadas do sistema (Supabase + LocalStorage)
+  // Carregar configurações atualizadas do sistema (Supabase + LocalStorage) com sincronização em tempo real
   useEffect(() => {
-    fetchSystemSettingsFromDb().then(settings => {
+    // 1. Busca inicial imediata do Supabase
+    fetchSystemSettingsFromDb().then(async (settings) => {
       setSystemSettings(settings);
+      await checkGatewayHealth(settings);
     });
 
+    // 2. Ouvir atualizações locais (mesma janela ou abas diferentes)
+    const handleSettingsUpdated = async (e: any) => {
+      const updated = e?.detail || getSystemSettings();
+      setSystemSettings(updated);
+      await checkGatewayHealth(updated);
+    };
+
+    window.addEventListener('drivehora_settings_updated', handleSettingsUpdated);
+    window.addEventListener('storage', handleSettingsUpdated);
+
+    // 3. Ouvir atualizações remotas em tempo real via Supabase (quando Admin salva de qualquer dispositivo)
     const sb = getSupabase();
+    let channel: any = null;
     if (sb) {
-      const channel = sb
+      channel = sb
         .channel('public:system_settings_app')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'system_settings' }, () => {
-          fetchSystemSettingsFromDb().then(settings => setSystemSettings(settings));
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'system_settings' }, async () => {
+          const remoteSettings = await fetchSystemSettingsFromDb();
+          setSystemSettings(remoteSettings);
+          await checkGatewayHealth(remoteSettings);
         })
         .subscribe();
-
-      return () => {
-        sb.removeChannel(channel);
-      };
     }
+
+    return () => {
+      window.removeEventListener('drivehora_settings_updated', handleSettingsUpdated);
+      window.removeEventListener('storage', handleSettingsUpdated);
+      if (channel && sb) {
+        sb.removeChannel(channel);
+      }
+    };
   }, [supabaseConnected]);
 
   // Informações da URL de acesso configurável pelo Administrador (Padrão: https://drivehora.agenc-ia.net)
@@ -539,21 +577,10 @@ export function App() {
     }
   }, [activeTab]);
 
-  // Checagem Contínua da Saúde do Gateway de Pagamentos (Asaas / MP / Stripe)
-  const checkGatewayHealth = async () => {
-    try {
-      const res = await testGatewayConnection();
-      setGatewayOperational(res.operational);
-      setGatewayHealthMsg(res.message);
-    } catch {
-      setGatewayOperational(false);
-      setGatewayHealthMsg('Erro de comunicação com o gateway de pagamentos.');
-    }
-  };
-
+  // Re-validação periódica a cada 45s em background
   useEffect(() => {
     checkGatewayHealth();
-    const interval = setInterval(checkGatewayHealth, 45000); // Re-valida a cada 45 segundos
+    const interval = setInterval(() => checkGatewayHealth(), 45000);
     return () => clearInterval(interval);
   }, []);
 
@@ -862,9 +889,9 @@ export function App() {
       // 1. O Gateway precisa estar operacional para o motorista poder ficar online
       if (!gatewayOperational) {
         showAlert(
-          'O sistema não pode liberar novas corridas porque o gateway de pagamentos está em validação técnica. Entre em contato com a administração para validar o gateway.',
+          'O recebimento de novos chamados está momentaneamente em manutenção preventiva no sistema de pagamentos. O serviço será normalizado em instantes para que você possa ficar online.',
           'warning',
-          'Pagamentos em Manutenção'
+          'Serviço em Manutenção Preventiva'
         );
         return;
       }

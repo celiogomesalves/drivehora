@@ -5,7 +5,7 @@ import {
   XCircle, Clock, RefreshCw, 
   TrendingUp, Database, Image, AlertTriangle, Eye, X, Check,
   Settings, Bell, CreditCard, Sliders, Send, Save, Trash2,
-  Calendar, Filter, Globe
+  Calendar, Filter, Globe, Key
 } from 'lucide-react';
 import { formatCurrency, formatCurrencyInput, parseCurrencyInput, formatPhone, formatCpf, formatPlate } from '../utils/formatters';
 import { dbGetAllDrivers, dbGetAllClients, dbAdminUpdateDriverStatus, dbAdminDeleteDriver, type DbRide } from '../services/dbService';
@@ -1635,40 +1635,81 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
 
               {/* Chaves de API */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <div>
-                  <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
-                    Chave Pública / API Key
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Chave pública ou identificador"
-                    value={systemSettings.paymentGateway.publicKey}
-                    onChange={(e) => setSystemSettings(prev => ({
-                      ...prev,
-                      paymentGateway: { ...prev.paymentGateway, publicKey: e.target.value }
-                    }))}
-                    className="input-field"
-                    style={{ width: '100%', fontSize: '0.85rem' }}
-                  />
-                </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {systemSettings.paymentGateway.activeGateway === 'asaas' ? (
+                  <div>
+                    <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#e2e8f0', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                      <Key size={15} color="#38bdf8" />
+                      <span>Chave de API do Asaas (API Key / Access Token)</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ex: $aact_YTU5YTE0M2M6N2Zm... (Cole sua chave de API aqui)"
+                      value={systemSettings.paymentGateway.secretKey || systemSettings.paymentGateway.publicKey || ''}
+                      onChange={(e) => {
+                        const val = e.target.value.trim();
+                        setSystemSettings(prev => ({
+                          ...prev,
+                          paymentGateway: {
+                            ...prev.paymentGateway,
+                            secretKey: val,
+                            publicKey: val // Sincroniza ambos para compatibilidade total
+                          }
+                        }));
+                      }}
+                      className="input-field"
+                      style={{ width: '100%', fontSize: '0.85rem' }}
+                    />
+                    <div style={{
+                      marginTop: '6px',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      background: 'rgba(56, 189, 248, 0.08)',
+                      border: '1px solid rgba(56, 189, 248, 0.2)',
+                      fontSize: '0.74rem',
+                      color: '#94a3b8',
+                      lineHeight: 1.4
+                    }}>
+                      💡 <strong>Como obter:</strong> No Asaas, existe <strong>apenas uma chave única</strong> (inicia com <code>$aact_</code>). Acesse sua conta Asaas (Sandbox ou Real), vá em <strong>Minha Conta &gt; Integração &gt; Gerar chave de API</strong> e cole-a acima. Não são necessárias duas chaves para o Asaas.
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div>
+                      <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                        {systemSettings.paymentGateway.activeGateway === 'stripe' ? 'Publishable Key (pk_...)' : 'Public Key do Mercado Pago'}
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Chave pública ou identificador"
+                        value={systemSettings.paymentGateway.publicKey}
+                        onChange={(e) => setSystemSettings(prev => ({
+                          ...prev,
+                          paymentGateway: { ...prev.paymentGateway, publicKey: e.target.value.trim() }
+                        }))}
+                        className="input-field"
+                        style={{ width: '100%', fontSize: '0.85rem' }}
+                      />
+                    </div>
 
-                <div>
-                  <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
-                    Chave de API / Access Token (Asaas v3)
-                  </label>
-                  <input
-                    type="password"
-                    placeholder="$aact_... (Chave da API Asaas)"
-                    value={systemSettings.paymentGateway.secretKey}
-                    onChange={(e) => setSystemSettings(prev => ({
-                      ...prev,
-                      paymentGateway: { ...prev.paymentGateway, secretKey: e.target.value }
-                    }))}
-                    className="input-field"
-                    style={{ width: '100%', fontSize: '0.85rem' }}
-                  />
-                </div>
+                    <div>
+                      <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                        {systemSettings.paymentGateway.activeGateway === 'stripe' ? 'Secret Key (sk_...)' : 'Access Token do Mercado Pago'}
+                      </label>
+                      <input
+                        type="password"
+                        placeholder="Chave secreta ou access token"
+                        value={systemSettings.paymentGateway.secretKey}
+                        onChange={(e) => setSystemSettings(prev => ({
+                          ...prev,
+                          paymentGateway: { ...prev.paymentGateway, secretKey: e.target.value.trim() }
+                        }))}
+                        className="input-field"
+                        style={{ width: '100%', fontSize: '0.85rem' }}
+                      />
+                    </div>
+                  </>
+                )}
 
                 {/* Botão de Testar Conexão com Gateway */}
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '4px' }}>

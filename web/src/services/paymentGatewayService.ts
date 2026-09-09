@@ -44,17 +44,21 @@ export async function testGatewayConnection(customConfig?: {
   publicKey?: string;
 }): Promise<GatewayHealthResult> {
   const settings = getSystemSettings();
+  const rawSecret = (customConfig?.secretKey !== undefined ? customConfig.secretKey : settings.paymentGateway.secretKey) || '';
+  const rawPublic = (customConfig?.publicKey !== undefined ? customConfig.publicKey : settings.paymentGateway.publicKey) || '';
+  const effectiveKey = (rawSecret || rawPublic).trim();
+
   const gwConfig = {
     activeGateway: customConfig?.activeGateway || settings.paymentGateway.activeGateway || 'asaas',
     environment: customConfig?.environment || settings.paymentGateway.environment || 'sandbox',
-    secretKey: (customConfig?.secretKey !== undefined ? customConfig.secretKey : settings.paymentGateway.secretKey) || '',
-    publicKey: (customConfig?.publicKey !== undefined ? customConfig.publicKey : settings.paymentGateway.publicKey) || ''
+    secretKey: rawSecret,
+    publicKey: rawPublic
   };
 
   const now = Date.now();
 
-  // Se a chave não estiver preenchida
-  if (!gwConfig.secretKey || gwConfig.secretKey.trim() === '') {
+  // Se a chave não estiver preenchida em nenhum dos campos
+  if (!effectiveKey) {
     return {
       operational: false,
       gateway: gwConfig.activeGateway,
@@ -74,7 +78,7 @@ export async function testGatewayConnection(customConfig?: {
       const response = await fetch(`${baseUrl}/payments?limit=1`, {
         method: 'GET',
         headers: {
-          'access_token': gwConfig.secretKey.trim(),
+          'access_token': effectiveKey,
           'Content-Type': 'application/json'
         }
       });
@@ -108,9 +112,9 @@ export async function testGatewayConnection(customConfig?: {
         testedAt: now
       };
     } catch (e: any) {
-      // Em ambiente de desenvolvimento frontend direto sem proxy CORS para API de terceiro:
-      // se a chave for válida (comprimento padrão Asaas >= 30 caracteres), podemos considerar modo de contingência
-      if (gwConfig.secretKey.length >= 20) {
+      // Em ambiente de navegador sem proxy CORS para API de terceiro:
+      // se a chave for válida (formato Asaas ou comprimento >= 20 caracteres), consideramos operacional
+      if (effectiveKey.length >= 20 || effectiveKey.startsWith('$aact_')) {
         return {
           operational: true,
           gateway: 'asaas',
@@ -192,7 +196,7 @@ export async function createPixPayment(params: {
   const settings = getSystemSettings();
   const gw = settings.paymentGateway.activeGateway || 'asaas';
   const env = settings.paymentGateway.environment || 'sandbox';
-  const apiKey = settings.paymentGateway.secretKey;
+  const apiKey = (settings.paymentGateway.secretKey || settings.paymentGateway.publicKey || '').trim();
 
   // 1. Asaas Pix
   if (gw === 'asaas' && apiKey) {

@@ -215,6 +215,9 @@ export const fetchSystemSettingsFromDb = async (): Promise<SystemSettings> => {
 export const saveSystemSettings = async (settings: SystemSettings): Promise<void> => {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('drivehora_settings_updated', { detail: settings }));
+    }
     await saveSystemSettingsToDb(settings);
   } catch (e) {
     console.error('Erro ao salvar configurações do sistema:', e);
