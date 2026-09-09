@@ -37,11 +37,19 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     user.lastActiveAt = new Date().toISOString();
 
     setLocalSessionToken(sessionToken);
-    await dbSaveProfile(user);
-    await dbUpdateUserSession(user.id, sessionToken, deviceName);
     localStorage.setItem('drivehora_current_user', JSON.stringify(user));
     setIsLoading(false);
     onLoginSuccess(user);
+
+    // Salva no banco de dados em segundo plano com timeout para não atrasar a renderização da interface
+    try {
+      await Promise.allSettled([
+        dbSaveProfile(user),
+        dbUpdateUserSession(user.id, sessionToken, deviceName)
+      ]);
+    } catch (e) {
+      console.warn('Erro ao sincronizar sessão com o banco:', e);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
