@@ -35,7 +35,33 @@ import { useSystemDialog } from './components/SystemDialog';
 export function App() {
   const { showAlert, showConfirm, showToast } = useSystemDialog();
   const [systemSettings, setSystemSettings] = useState<SystemSettings>(getSystemSettings);
-  const [activeTab, setActiveTab] = useState<'client' | 'driver' | 'admin' | 'mobile'>('client');
+  
+  // Autenticação & Sessão (Inicialização imediata síncrona para evitar tela em branco na primeira chamada)
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
+    try {
+      const saved = localStorage.getItem('drivehora_current_user');
+      if (!saved) return null;
+      const parsed = JSON.parse(saved);
+      if (isSuperAdminEmail(parsed.email)) parsed.isAdmin = true;
+      return parsed;
+    } catch {
+      return null;
+    }
+  });
+
+  const [activeTab, setActiveTab] = useState<'client' | 'driver' | 'admin' | 'mobile'>(() => {
+    try {
+      const saved = localStorage.getItem('drivehora_current_user');
+      if (!saved) return 'client';
+      const parsed = JSON.parse(saved);
+      if (isSuperAdminEmail(parsed.email) || parsed.role === 'admin' || parsed.isAdmin) return 'admin';
+      if (parsed.role === 'driver') return 'driver';
+      return 'client';
+    } catch {
+      return 'client';
+    }
+  });
+
   const [rides, setRides] = useState<DbRide[]>([]);
   const [currentRideId, setCurrentRideId] = useState<string | null>(null);
   
@@ -61,15 +87,6 @@ export function App() {
     }
     showToast('Histórico da solicitação limpo com sucesso!', 'info');
   };
-
-  // Autenticação & Sessão
-  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
-    const saved = localStorage.getItem('drivehora_current_user');
-    if (!saved) return null;
-    const parsed = JSON.parse(saved);
-    if (isSuperAdminEmail(parsed.email)) parsed.isAdmin = true;
-    return parsed;
-  });
 
   // Alerta de Sessão Concorrente / Desconexão Forçada
   const [forcedLogoutNotice, setForcedLogoutNotice] = useState<{ activeDevice: string } | null>(null);
