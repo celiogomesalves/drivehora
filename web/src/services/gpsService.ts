@@ -78,17 +78,18 @@ export const searchAddressPlaces = async (query: string): Promise<string[]> => {
 
   const results: string[] = [];
 
-  // Provedor 1: Photon OpenStreetMap (Rápido e especializado em digitação em tempo real)
+  // Provedor 1: Photon OpenStreetMap (Excelente para busca por similaridade e nomes parciais de POIs, aeroportos, shoppings, etc.)
   try {
     const encoded = encodeURIComponent(clean);
-    const photonUrl = `https://photon.komoot.io/api/?q=${encoded}&lang=pt&limit=6`;
+    // Photon API usa bbox/limit, não passar parâmetro lang=pt que causa erro 400
+    const photonUrl = `https://photon.komoot.io/api/?q=${encoded}&limit=10`;
     const res = await fetch(photonUrl);
     if (res.ok) {
       const data = await res.json();
       if (data && data.features && data.features.length > 0) {
         data.features.forEach((feat: any) => {
           const p = feat.properties || {};
-          const name = p.name || p.street || '';
+          const name = p.name || '';
           const street = p.street || '';
           const housenumber = p.housenumber ? `, ${p.housenumber}` : '';
           const district = p.district || p.suburb || p.locality || '';
@@ -96,10 +97,12 @@ export const searchAddressPlaces = async (query: string): Promise<string[]> => {
           const state = p.state || '';
 
           let formatted = '';
-          if (name && street && name !== street) {
+          if (name && street && name.toLowerCase() !== street.toLowerCase()) {
             formatted = `${name} (${street}${housenumber})${district ? ` - ${district}` : ''}${city ? `, ${city}` : ''}${state ? ` - ${state}` : ''}`;
           } else if (name) {
             formatted = `${name}${housenumber}${district ? ` - ${district}` : ''}${city ? `, ${city}` : ''}${state ? ` - ${state}` : ''}`;
+          } else if (street) {
+            formatted = `${street}${housenumber}${district ? ` - ${district}` : ''}${city ? `, ${city}` : ''}${state ? ` - ${state}` : ''}`;
           }
 
           if (formatted && !results.includes(formatted)) {
@@ -112,40 +115,52 @@ export const searchAddressPlaces = async (query: string): Promise<string[]> => {
     console.warn('Busca Photon fallback:', e);
   }
 
-  // Provedor 2: Nominatim OpenStreetMap (Garante cobertura de ruas específicas no Brasil)
-  if (results.length < 4) {
+  // Provedor 2: Nominatim OpenStreetMap (Garante cobertura de ruas específicas, cidades e pontos no Brasil)
+  if (results.length < 8) {
     try {
       const encoded = encodeURIComponent(clean);
-      const nominatimUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encoded}&countrycodes=br&limit=6&addressdetails=1`;
-      const res = await fetch(nominatimUrl);
+      const nominatimUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encoded}&countrycodes=br&limit=8&addressdetails=1`;
+      const res = await fetch(nominatimUrl, {
+        headers: {
+          'User-Agent': 'DriveHoraApp/1.0 (contact@drivehora.com)',
+          'Accept-Language': 'pt-BR,pt;q=0.9'
+        }
+      });
       if (res.ok) {
         const data = await res.json();
-        data.forEach((item: any) => {
-          const addr = item.address || {};
-          const road = addr.road || addr.pedestrian || addr.street || item.name || '';
-          const houseNumber = addr.house_number ? `, ${addr.house_number}` : '';
-          const suburb = addr.suburb || addr.neighbourhood || '';
-          const city = addr.city || addr.town || addr.municipality || '';
-          const state = addr.state || '';
+        if (Array.isArray(data)) {
+          data.forEach((item: any) => {
+            const addr = item.address || {};
+            const name = item.name || '';
+            const road = addr.road || addr.pedestrian || addr.street || '';
+            const houseNumber = addr.house_number ? `, ${addr.house_number}` : '';
+            const suburb = addr.suburb || addr.neighbourhood || addr.city_district || '';
+            const city = addr.city || addr.town || addr.municipality || addr.village || '';
+            const state = addr.state || '';
 
-          let formatted = '';
-          if (road && (suburb || city)) {
-            formatted = `${road}${houseNumber}${suburb ? ` - ${suburb}` : ''}${city ? `, ${city}` : ''}${state ? ` - ${state}` : ''}`;
-          } else if (item.display_name) {
-            formatted = item.display_name.split(',').slice(0, 3).join(', ');
-          }
+            let formatted = '';
+            if (name && road && name.toLowerCase() !== road.toLowerCase()) {
+              formatted = `${name} - ${road}${houseNumber}${suburb ? `, ${suburb}` : ''}${city ? ` - ${city}` : ''}${state ? `/${state}` : ''}`;
+            } else if (name && (suburb || city)) {
+              formatted = `${name}${houseNumber}${suburb ? ` - ${suburb}` : ''}${city ? `, ${city}` : ''}${state ? `/${state}` : ''}`;
+            } else if (road && (suburb || city)) {
+              formatted = `${road}${houseNumber}${suburb ? ` - ${suburb}` : ''}${city ? `, ${city}` : ''}${state ? `/${state}` : ''}`;
+            } else if (item.display_name) {
+              formatted = item.display_name.split(',').slice(0, 3).join(', ');
+            }
 
-          if (formatted && !results.includes(formatted)) {
-            results.push(formatted);
-          }
-        });
+            if (formatted && !results.includes(formatted)) {
+              results.push(formatted);
+            }
+          });
+        }
       }
     } catch (e) {
       console.warn('Busca Nominatim fallback:', e);
     }
   }
 
-  return results.slice(0, 6);
+  return results.slice(0, 8);
 };
 
 // 4. Cálculo de distância em Km (Fórmula de Haversine)

@@ -1468,7 +1468,8 @@ export function App() {
                           boxShadow: '0 10px 25px rgba(0,0,0,0.6)',
                           zIndex: 30,
                           marginTop: '4px',
-                          overflow: 'hidden'
+                          maxHeight: '240px',
+                          overflowY: 'auto'
                         }}>
                           {originSuggestions.map((sug, idx) => (
                             <div
@@ -1547,7 +1548,8 @@ export function App() {
                           boxShadow: '0 10px 25px rgba(0,0,0,0.6)',
                           zIndex: 30,
                           marginTop: '4px',
-                          overflow: 'hidden'
+                          maxHeight: '240px',
+                          overflowY: 'auto'
                         }}>
                           {destSuggestions.map((sug, idx) => (
                             <div
