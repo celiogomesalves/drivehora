@@ -4206,17 +4206,35 @@ export function App() {
               </div>
             )}
 
-            <button
-              type="button"
-              onClick={() => {
-                setPixModalData(null);
-                showToast('Pagamento registrado! O motorista parceiro já foi notificado.', 'success');
-              }}
-              className="btn-outline"
-              style={{ width: '100%', padding: '10px', fontSize: '0.85rem' }}
-            >
-              Já fiz o pagamento / Concluir
-            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await dbUpdateRide(pixModalData.rideId, { paymentStatus: 'paid' });
+                    setRides(prev => prev.map(r => r.id === pixModalData.rideId ? { ...r, paymentStatus: 'paid' } : r));
+                    await fetchRides();
+                  } catch (e) {
+                    console.warn('Erro ao atualizar status de pagamento do Pix:', e);
+                  }
+                  setPixModalData(null);
+                  showToast('Pagamento Pix confirmado com sucesso! O motorista já foi notificado.', 'success');
+                }}
+                className="btn-primary"
+                style={{ width: '100%', padding: '12px', fontSize: '0.9rem', background: '#10b981', borderColor: '#10b981' }}
+              >
+                {systemSettings.paymentGateway.environment === 'sandbox' ? '🧪 Simular Pagamento Pix (Sandbox / Teste)' : 'Já fiz o pagamento / Concluir'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPixModalData(null)}
+                className="btn-outline"
+                style={{ width: '100%', padding: '8px', fontSize: '0.8rem', opacity: 0.75 }}
+              >
+                Fechar janela
+              </button>
+            </div>
           </div>
         </div>
       )}
