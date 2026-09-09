@@ -558,6 +558,68 @@ export function App() {
     loadUserProfiles();
   }, [currentUser, isUserAdmin, supabaseConnected]);
 
+  // Escuta alterações remotas de status do motorista (ex: Desconexão remota pelo Admin/Suporte)
+  useEffect(() => {
+    if (!currentUser || currentUser.role !== 'driver') return;
+
+    const sb = getSupabase();
+    let channel: any = null;
+    if (sb) {
+      channel = sb
+        .channel(`driver_remote_status_${currentUser.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'drivers'
+          },
+          (payload: any) => {
+            if (payload.new && (payload.new.user_id === currentUser.id || payload.new.id === currentUser.id)) {
+              if (payload.new.is_online !== undefined) {
+                const remoteOnline = Boolean(payload.new.is_online);
+                setIsDriverOnline(prev => {
+                  if (prev && !remoteOnline) {
+                    showAlert(
+                      'Seu aplicativo foi desconectado (modo OFFLINE) pela Central de Atendimento / Administração.\n\nCaso necessite de suporte ou queira reconectar, entre em contato com a administração.',
+                      'warning',
+                      'Desconectado pelo Suporte'
+                    );
+                  } else if (!prev && remoteOnline) {
+                    showToast('Seu status foi ativado para ONLINE pela Administração.', 'info');
+                  }
+                  return remoteOnline;
+                });
+              }
+            }
+          }
+        )
+        .subscribe();
+    }
+
+    const handleRemoteOnlineEvent = (e: any) => {
+      if (e.detail && e.detail.userId === currentUser.id) {
+        const nextStatus = Boolean(e.detail.isOnline);
+        setIsDriverOnline(prev => {
+          if (prev && !nextStatus) {
+            showAlert(
+              'Seu aplicativo foi desconectado (modo OFFLINE) pela Central de Atendimento / Administração.',
+              'warning',
+              'Desconectado pelo Suporte'
+            );
+          }
+          return nextStatus;
+        });
+      }
+    };
+    window.addEventListener('drivehora_driver_status_changed', handleRemoteOnlineEvent);
+
+    return () => {
+      if (channel && sb) sb.removeChannel(channel);
+      window.removeEventListener('drivehora_driver_status_changed', handleRemoteOnlineEvent);
+    };
+  }, [currentUser?.id, currentUser?.role]);
+
   // Carregar automaticamente a localização do ponto de partida via GPS ao iniciar a solicitação
   useEffect(() => {
     if (activeTab === 'client') {

@@ -5,10 +5,10 @@ import {
   XCircle, Clock, RefreshCw, 
   TrendingUp, Database, Image, AlertTriangle, Eye, X, Check,
   Settings, Bell, CreditCard, Sliders, Send, Save, Trash2,
-  Calendar, Filter, Globe, Key
+  Calendar, Filter, Globe, Key, Radio, Power
 } from 'lucide-react';
 import { formatCurrency, formatCurrencyInput, parseCurrencyInput, formatPhone, formatCpf, formatPlate } from '../utils/formatters';
-import { dbGetAllDrivers, dbGetAllClients, dbAdminUpdateDriverStatus, dbAdminDeleteDriver, type DbRide } from '../services/dbService';
+import { dbGetAllDrivers, dbGetAllClients, dbAdminUpdateDriverStatus, dbAdminDeleteDriver, dbAdminToggleDriverOnline, type DbRide } from '../services/dbService';
 import { getSupabase } from '../supabase';
 import { getSystemSettings, saveSystemSettings, fetchSystemSettingsFromDb, type SystemSettings } from '../services/settingsService';
 import { testGatewayConnection, type GatewayHealthResult } from '../services/paymentGatewayService';
@@ -38,12 +38,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onOpenSupabaseConfig, 
   supabaseConnected 
 }) => {
-  const { showAlert, showToast } = useSystemDialog();
+  const { showAlert, showConfirm, showToast } = useSystemDialog();
   const [activeSubTab, setActiveSubTab] = useState<'overview' | 'drivers' | 'clients' | 'rides' | 'settings'>('overview');
   const [drivers, setDrivers] = useState<DriverProfile[]>([]);
   const [clients, setClients] = useState<ClientProfile[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [driverFilter, setDriverFilter] = useState<'all' | 'under_review' | 'approved' | 'rejected' | 'pending_docs'>('all');
+  const [driverFilter, setDriverFilter] = useState<'all' | 'online' | 'offline' | 'under_review' | 'approved' | 'rejected' | 'pending_docs'>('all');
   const [previewDoc, setPreviewDoc] = useState<{ title: string; url: string } | null>(null);
   const [driverToDelete, setDriverToDelete] = useState<DriverProfile | null>(null);
   const [isDeletingDriver, setIsDeletingDriver] = useState(false);
@@ -195,16 +195,72 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
+  // Alternar modo Online/Offline do Motorista pelo Administrador (Controle Emergencial Remoto)
+  const handleAdminToggleDriverOnline = async (driver: DriverProfile, newOnlineStatus: boolean) => {
+    const driverTargetId = driver.userId || driver.id;
+    const driverName = driver.driverName || driver.fullName || 'Motorista';
+
+    if (newOnlineStatus && driver.verificationStatus !== 'approved') {
+      showAlert(
+        `O motorista "${driverName}" não pode ser colocado em modo ONLINE porque o cadastro dele ainda não foi aprovado pela administração.`,
+        'warning',
+        'Cadastro Pendente de Aprovação'
+      );
+      return;
+    }
+
+    const actionText = newOnlineStatus ? 'Conectar (ONLINE)' : 'Desconectar (OFFLINE)';
+    const reasonPrompt = newOnlineStatus
+      ? `Deseja colocar o motorista "${driverName}" em modo ONLINE remotamente?\n\nEle passará a aparecer disponível no mapa de passageiros para receber solicitações de corridas.`
+      : `Deseja DESCONECTAR o motorista "${driverName}" do modo online remotamente?\n\nO aplicativo do motorista será colocado em modo OFFLINE imediatamente (útil em caso de perda/furto de celular, suporte emergencial ou segurança).`;
+
+    showConfirm(
+      reasonPrompt,
+      async () => {
+        // Atualização otimista na interface do admin
+        setDrivers(prev => prev.map(d => {
+          if ((d.userId && d.userId === driverTargetId) || d.id === driverTargetId) {
+            return { ...d, isOnline: newOnlineStatus };
+          }
+          return d;
+        }));
+
+        const res = await dbAdminToggleDriverOnline(driverTargetId, newOnlineStatus);
+        if (res.success) {
+          showToast(
+            `Motorista "${driverName}" foi colocado em modo ${newOnlineStatus ? 'ONLINE 🟢' : 'OFFLINE ⚪'} com sucesso.`,
+            newOnlineStatus ? 'success' : 'info'
+          );
+          loadAdminData();
+        } else {
+          showAlert(`Erro ao alterar status do motorista: ${res.error || 'Falha de comunicação'}`, 'error', 'Erro');
+          loadAdminData();
+        }
+      },
+      undefined,
+      {
+        title: `${actionText} Motorista Remotamente`,
+        confirmLabel: newOnlineStatus ? 'Sim, Conectar' : 'Sim, Desconectar',
+        cancelLabel: 'Cancelar',
+        type: newOnlineStatus ? 'info' : 'warning'
+      }
+    );
+  };
+
   // Cálculos de métricas
   const finishedRides = rides.filter(r => r.status === 'finished');
   const totalVolume = finishedRides.reduce((acc, r) => acc + (r.total || 0), 0);
   const totalPlatformRevenue = finishedRides.reduce((acc, r) => acc + (r.commission || 0), 0);
   const totalDriverPayout = finishedRides.reduce((acc, r) => acc + (r.driverNet || 0), 0);
+  const onlineDrivers = drivers.filter(d => d.isOnline);
+  const offlineDrivers = drivers.filter(d => !d.isOnline);
   const pendingDrivers = drivers.filter(d => d.verificationStatus === 'under_review' || d.verificationStatus === 'pending_docs');
   const approvedDrivers = drivers.filter(d => d.verificationStatus === 'approved');
 
   const filteredDrivers = drivers.filter(d => {
     if (driverFilter === 'all') return true;
+    if (driverFilter === 'online') return d.isOnline;
+    if (driverFilter === 'offline') return !d.isOnline;
     return d.verificationStatus === driverFilter;
   });
 
@@ -431,8 +487,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#fff', marginTop: '10px' }}>
                 {drivers.length}
               </div>
-              <div style={{ fontSize: '0.75rem', color: '#10b981', marginTop: '4px' }}>
-                {approvedDrivers.length} verificados e aptos
+              <div style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', flexWrap: 'wrap' }}>
+                <span style={{ color: '#10b981' }}>{approvedDrivers.length} aptos</span>
+                <span style={{ color: 'var(--text-muted)' }}>•</span>
+                <span style={{
+                  color: onlineDrivers.length > 0 ? '#10b981' : '#94a3b8',
+                  fontWeight: 700,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px'
+                }}>
+                  <span style={{
+                    width: '6px',
+                    height: '6px',
+                    borderRadius: '50%',
+                    background: onlineDrivers.length > 0 ? '#10b981' : '#64748b',
+                    boxShadow: onlineDrivers.length > 0 ? '0 0 6px #10b981' : undefined
+                  }} className={onlineDrivers.length > 0 ? 'animate-pulse' : ''} />
+                  {onlineDrivers.length} online agora
+                </span>
               </div>
             </div>
 
@@ -508,9 +581,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             {/* Filtros */}
             <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
               {[
-                { key: 'all', label: 'Todos' },
-                { key: 'under_review', label: 'Em Análise ⏳' },
-                { key: 'approved', label: 'Aprovados ✅' },
+                { key: 'all', label: `Todos (${drivers.length})` },
+                { key: 'online', label: `🟢 Online Agora (${onlineDrivers.length})` },
+                { key: 'offline', label: `⚪ Offline (${offlineDrivers.length})` },
+                { key: 'under_review', label: `Em Análise ⏳ (${pendingDrivers.length})` },
+                { key: 'approved', label: `Aprovados ✅ (${approvedDrivers.length})` },
                 { key: 'rejected', label: 'Reprovados ❌' },
                 { key: 'pending_docs', label: 'Sem Documentos' }
               ].map(f => (
@@ -610,6 +685,52 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               ? 'Reprovado ❌'
                               : 'Pendente Docs ⚠️'}
                           </span>
+
+                          {/* Badge de Status Online em Tempo Real */}
+                          {d.isOnline ? (
+                            <span style={{
+                              fontSize: '0.72rem',
+                              padding: '3px 10px',
+                              borderRadius: '8px',
+                              fontWeight: 700,
+                              background: 'rgba(16, 185, 129, 0.18)',
+                              color: '#10b981',
+                              border: '1px solid rgba(16, 185, 129, 0.4)',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px'
+                            }}>
+                              <span style={{
+                                width: '7px',
+                                height: '7px',
+                                borderRadius: '50%',
+                                background: '#10b981',
+                                boxShadow: '0 0 6px #10b981'
+                              }} className="animate-pulse" />
+                              ONLINE AGORA
+                            </span>
+                          ) : (
+                            <span style={{
+                              fontSize: '0.72rem',
+                              padding: '3px 10px',
+                              borderRadius: '8px',
+                              fontWeight: 700,
+                              background: 'rgba(148, 163, 184, 0.12)',
+                              color: '#94a3b8',
+                              border: '1px solid rgba(148, 163, 184, 0.25)',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px'
+                            }}>
+                              <span style={{
+                                width: '7px',
+                                height: '7px',
+                                borderRadius: '50%',
+                                background: '#64748b'
+                              }} />
+                              OFFLINE
+                            </span>
+                          )}
                         </div>
 
                         <div style={{ fontSize: '0.85rem', color: '#cbd5e1', marginTop: '6px', display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
@@ -624,8 +745,48 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </div>
                       </div>
 
-                      {/* Ações de Moderação */}
+                      {/* Ações de Moderação & Controle Online Remoto */}
                       <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        {/* Botão de Controle Remoto Online/Offline pelo Administrador */}
+                        {d.isOnline ? (
+                          <button
+                            onClick={() => handleAdminToggleDriverOnline(d, false)}
+                            className="btn-outline"
+                            title="Desconectar motorista do modo online remotamente (furto, perda de celular, suporte emergencial)"
+                            style={{
+                              padding: '8px 14px',
+                              fontSize: '0.8rem',
+                              color: '#ef4444',
+                              borderColor: 'rgba(239, 68, 68, 0.4)',
+                              background: 'rgba(239, 68, 68, 0.08)',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px'
+                            }}
+                          >
+                            <Power size={14} />
+                            <span>Desconectar (Offline)</span>
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleAdminToggleDriverOnline(d, true)}
+                            className="btn-outline"
+                            title="Conectar motorista em modo online remotamente"
+                            style={{
+                              padding: '8px 14px',
+                              fontSize: '0.8rem',
+                              color: '#10b981',
+                              borderColor: 'rgba(16, 185, 129, 0.4)',
+                              background: 'rgba(16, 185, 129, 0.08)',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px'
+                            }}
+                          >
+                            <Radio size={14} />
+                            <span>Conectar (Online)</span>
+                          </button>
+                        )}
                         {d.verificationStatus !== 'approved' && (
                           <button
                             onClick={() => handleUpdateStatus(d, 'approved')}

@@ -842,13 +842,20 @@ export const dbUpdateDriverOnlineStatus = async (
 ): Promise<{ success: boolean; error?: string }> => {
   try {
     localStorage.setItem(`drivehora_driver_online_${userId}`, String(isOnline));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('drivehora_driver_status_changed', {
+          detail: { userId, isOnline }
+        })
+      );
+    }
   } catch (e) {}
 
   const sb = getSupabase();
   if (sb) {
     try {
       const res: any = await withTimeout(
-        sb.from('drivers').update({ is_online: isOnline }).eq('user_id', userId),
+        sb.from('drivers').update({ is_online: isOnline, updated_at: new Date().toISOString() }).or(`user_id.eq.${userId},id.eq.${userId}`),
         8000
       );
       if (res?.error) {
@@ -862,6 +869,14 @@ export const dbUpdateDriverOnlineStatus = async (
     }
   }
   return { success: true };
+};
+
+// 11.0.1 Alternar Status do Motorista pelo Administrador (Controle Emergencial Remoto)
+export const dbAdminToggleDriverOnline = async (
+  userId: string,
+  isOnline: boolean
+): Promise<{ success: boolean; error?: string }> => {
+  return dbUpdateDriverOnlineStatus(userId, isOnline);
 };
 
 // 11.1 Atualizar Preferências de Pagamento do Motorista (Dinheiro, Maquininha, Chave Pix)
