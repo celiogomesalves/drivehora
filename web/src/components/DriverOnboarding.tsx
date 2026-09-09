@@ -9,6 +9,7 @@ import confetti from 'canvas-confetti';
 import { formatPhone, formatCpf, formatPlate, validateCpf, validateCnh, validatePlate, validatePhone } from '../utils/formatters';
 import { dbSaveDriverProfile, dbCheckSupabaseStatus } from '../services/dbService';
 import { getSystemSettings, type VehicleCategoryConfig } from '../services/settingsService';
+import { useSystemDialog } from './SystemDialog';
 
 interface DriverOnboardingProps {
   user: UserProfile;
@@ -83,6 +84,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
   onComplete,
   onOpenSupabaseConfig 
 }) => {
+  const { showAlert } = useSystemDialog();
   const getSavedDraft = () => {
     try {
       const raw = localStorage.getItem(`drivehora_driver_draft_${user.id}`);
@@ -417,7 +419,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
       };
       onComplete(profile);
     } else {
-      alert(`Falha ao aprovar: ${res.error}`);
+      showAlert(`Falha ao aprovar: ${res.error || 'Erro desconhecido'}`, 'error', 'Erro');
     }
   };
 

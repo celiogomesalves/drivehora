@@ -29,8 +29,10 @@ import {
 import { requestWebPushToken, onForegroundMessage } from './services/firebase';
 import { getSystemSettings } from './services/settingsService';
 import { getLocalSessionToken, clearLocalSessionToken } from './utils/sessionHelper';
+import { useSystemDialog } from './components/SystemDialog';
 
 export function App() {
+  const { showAlert, showConfirm, showToast } = useSystemDialog();
   const [activeTab, setActiveTab] = useState<'client' | 'driver' | 'admin' | 'dual' | 'mobile'>('client');
   const [rides, setRides] = useState<DbRide[]>([]);
   const [currentRideId, setCurrentRideId] = useState<string | null>(null);
@@ -441,7 +443,7 @@ export function App() {
       setOrigin(address);
     } catch (error) {
       console.warn('Erro ao obter GPS:', error);
-      alert('Não foi possível obter sua localização GPS. Verifique a permissão do navegador.');
+      showAlert('Não foi possível obter sua localização GPS. Verifique a permissão de localização do seu aparelho ou navegador.', 'warning', 'Acesso ao GPS');
     } finally {
       setIsLocatingGPS(false);
     }
@@ -490,6 +492,7 @@ export function App() {
     setShowConfigModal(false);
     await checkSupabaseConnection();
     fetchRides();
+    showToast('Credenciais do Supabase configuradas com sucesso!', 'success');
   };
 
   // Logout do Usuário -> Volta imediatamente para a Página de Login
@@ -514,7 +517,7 @@ export function App() {
   const handleRequestRide = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!origin.trim() || !destination.trim()) {
-      alert('Por favor, informe o ponto de partida e o destino.');
+      showAlert('Por favor, informe o ponto de partida e o destino da corrida.', 'warning', 'Dados Incompletos');
       return;
     }
 
@@ -553,13 +556,23 @@ export function App() {
   };
 
   // Cancelar corrida pelo passageiro (com validação de até 5 minutos após aceite)
-  const handleCancelRideByClient = async (rideId: string) => {
-    const confirmed = window.confirm('Deseja realmente cancelar esta solicitação de corrida?');
-    if (!confirmed) return;
-
-    await dbCancelRide(rideId);
-    setCurrentRideId(null);
-    fetchRides();
+  const handleCancelRideByClient = (rideId: string) => {
+    showConfirm(
+      'Deseja realmente cancelar esta solicitação de corrida?',
+      async () => {
+        await dbCancelRide(rideId);
+        setCurrentRideId(null);
+        fetchRides();
+        showToast('Solicitação cancelada com sucesso.', 'info');
+      },
+      undefined,
+      {
+        title: 'Cancelar Corrida',
+        confirmLabel: 'Sim, Cancelar Corrida',
+        cancelLabel: 'Manter Corrida',
+        type: 'confirm'
+      }
+    );
   };
 
   // Ações do Motorista
@@ -574,6 +587,7 @@ export function App() {
       acceptedAt: Date.now()
     });
     fetchRides();
+    showToast('Corrida aceita com sucesso! Inicie o deslocamento.', 'success');
   };
 
   const handleStartRide = async (rideId: string) => {
@@ -582,6 +596,7 @@ export function App() {
       startedAt: Date.now()
     });
     fetchRides();
+    showToast('Corrida iniciada! Bom trabalho.', 'success');
   };
 
   const handleFinishRide = async (rideId: string) => {
@@ -591,6 +606,7 @@ export function App() {
     });
     confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
     fetchRides();
+    showToast('Corrida finalizada com sucesso! Ganhos creditados.', 'success');
   };
 
   // Alternar modo online do motorista aguardando validação e gravação no Supabase
@@ -601,7 +617,11 @@ export function App() {
       // Para ficar ONLINE e receber chamados, o cadastro deve estar validado ou ser admin
       const isApproved = driverProfile?.verificationStatus === 'approved' || isUserAdmin;
       if (!isApproved) {
-        alert('Atenção: Para ativar o modo ONLINE e receber solicitações de corridas, é necessário que seus dados de CNH, Veículo e Documentos estejam cadastrados e aprovados.');
+        showAlert(
+          'Para ativar o modo ONLINE e receber solicitações de corridas, é necessário que seus dados de CNH, Veículo e Documentos estejam cadastrados e aprovados pela administração.',
+          'warning',
+          'Aprovação Pendente'
+        );
         setShowDriverProfileEdit(true);
         return;
       }
@@ -613,7 +633,7 @@ export function App() {
       if (currentUser) {
         const res = await dbUpdateDriverOnlineStatus(currentUser.id, nextStatus);
         if (!res.success) {
-          alert(`Não foi possível atualizar o status no banco: ${res.error || 'Falha de comunicação'}`);
+          showAlert(`Não foi possível atualizar o status no banco: ${res.error || 'Falha de comunicação'}`, 'error', 'Erro');
           return;
         }
 
@@ -627,8 +647,9 @@ export function App() {
       }
       // SÓ efetiva a mudança na interface após confirmação de sucesso do banco!
       setIsDriverOnline(nextStatus);
+      showToast(nextStatus ? 'Você está ONLINE e visível no radar!' : 'Você está OFFLINE.', nextStatus ? 'success' : 'info');
     } catch (e: any) {
-      alert('Erro ao atualizar status online no banco de dados.');
+      showAlert('Erro ao atualizar status online no banco de dados.', 'error', 'Erro');
     } finally {
       setIsTogglingOnline(false);
     }

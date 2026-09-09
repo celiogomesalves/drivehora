@@ -10,6 +10,7 @@ import { formatCurrency, formatCurrencyInput, parseCurrencyInput, formatPhone, f
 import { dbGetAllDrivers, dbGetAllClients, dbAdminUpdateDriverStatus, dbAdminDeleteDriver, type DbRide } from '../services/dbService';
 import { getSupabase } from '../supabase';
 import { getSystemSettings, saveSystemSettings, fetchSystemSettingsFromDb, type SystemSettings } from '../services/settingsService';
+import { useSystemDialog } from './SystemDialog';
 
 // Utilitário para verificar pendências documentais obrigatórias
 export const getMissingDriverDocs = (d: DriverProfile): string[] => {
@@ -35,6 +36,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onOpenSupabaseConfig, 
   supabaseConnected 
 }) => {
+  const { showAlert, showToast } = useSystemDialog();
   const [activeSubTab, setActiveSubTab] = useState<'overview' | 'drivers' | 'clients' | 'rides' | 'settings'>('overview');
   const [drivers, setDrivers] = useState<DriverProfile[]>([]);
   const [clients, setClients] = useState<ClientProfile[]>([]);
@@ -124,8 +126,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (status === 'approved') {
       const missing = getMissingDriverDocs(driver);
       if (missing.length > 0) {
-        alert(
-          `⚠️ APROVAÇÃO BLOQUEADA!\n\nNão é possível aprovar este motorista pois existem documentos/dados obrigatórios pendentes:\n\n• ${missing.join('\n• ')}\n\nO motorista precisa enviar todas as fotos e dados antes da liberação.`
+        showAlert(
+          `Não é possível aprovar este motorista pois existem documentos/dados obrigatórios pendentes:\n\n• ${missing.join('\n• ')}\n\nO motorista precisa enviar todas as fotos e dados antes da liberação.`,
+          'warning',
+          'Aprovação Bloqueada'
         );
         return;
       }
@@ -135,14 +139,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (res.success) {
       setDrivers(prev => prev.map(d => (d.id === driver.id || d.userId === driver.userId) ? { ...d, verificationStatus: status } : d));
       if (status === 'approved') {
-        alert(`✅ Motorista "${driver.driverName || driver.vehicleModel}" aprovado com sucesso!`);
+        showToast(`Motorista "${driver.driverName || driver.vehicleModel}" aprovado com sucesso!`, 'success');
       } else if (status === 'rejected') {
-        alert(`❌ Motorista "${driver.driverName || driver.vehicleModel}" reprovado com sucesso!`);
+        showToast(`Motorista "${driver.driverName || driver.vehicleModel}" reprovado.`, 'warning');
       } else if (status === 'under_review') {
-        alert(`⏳ Motorista "${driver.driverName || driver.vehicleModel}" colocado em análise/reavaliação.`);
+        showToast(`Motorista "${driver.driverName || driver.vehicleModel}" colocado em análise.`, 'info');
       }
     } else {
-      alert(`Erro ao atualizar status: ${res.error || 'Falha de comunicação com o banco'}`);
+      showAlert(`Erro ao atualizar status: ${res.error || 'Falha de comunicação com o banco'}`, 'error', 'Erro');
     }
   };
 
@@ -153,10 +157,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setIsDeletingDriver(false);
     if (res.success) {
       setDrivers(prev => prev.filter(d => d.id !== driverToDelete.id && d.userId !== driverToDelete.userId));
-      alert(`🗑️ Motorista "${driverToDelete.driverName || driverToDelete.fullName || 'Parceiro'}" foi excluído permanentemente do sistema!`);
+      showToast(`Motorista "${driverToDelete.driverName || driverToDelete.fullName || 'Parceiro'}" foi excluído com sucesso!`, 'success');
       setDriverToDelete(null);
     } else {
-      alert(`Erro ao excluir motorista: ${res.error || 'Falha de comunicação com o banco'}`);
+      showAlert(`Erro ao excluir motorista: ${res.error || 'Falha de comunicação com o banco'}`, 'error', 'Erro');
     }
   };
 
