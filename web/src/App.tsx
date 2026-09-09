@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Car, Clock, DollarSign, Navigation, ShieldCheck, 
   Smartphone, Users, RefreshCw, CheckCircle2, 
-  Radio, Award, PlayCircle, Sparkles, Compass, Database, 
+  Radio, Award, PlayCircle, Compass, Database, 
   X, Check, LogOut, MapPin, Crown, AlertTriangle, UserCheck,
   BellRing, Volume2, VolumeX, Ban, AlertOctagon, Heart, ShieldAlert, RotateCcw
 } from 'lucide-react';
@@ -33,9 +33,32 @@ import { useSystemDialog } from './components/SystemDialog';
 
 export function App() {
   const { showAlert, showConfirm, showToast } = useSystemDialog();
-  const [activeTab, setActiveTab] = useState<'client' | 'driver' | 'admin' | 'dual' | 'mobile'>('client');
+  const [activeTab, setActiveTab] = useState<'client' | 'driver' | 'admin' | 'mobile'>('client');
   const [rides, setRides] = useState<DbRide[]>([]);
   const [currentRideId, setCurrentRideId] = useState<string | null>(null);
+  
+  // Lista de IDs de corridas ocultadas localmente pelo cliente (Limpar histórico)
+  const [hiddenRideIds, setHiddenRideIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('drivehora_hidden_rides');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Salvar lista de corridas ocultadas no localStorage
+  const hideRideForClient = (rideId: string) => {
+    setHiddenRideIds(prev => {
+      const next = [...new Set([...prev, rideId])];
+      localStorage.setItem('drivehora_hidden_rides', JSON.stringify(next));
+      return next;
+    });
+    if (currentRideId === rideId) {
+      setCurrentRideId(null);
+    }
+    showToast('Histórico da solicitação limpo com sucesso!', 'info');
+  };
 
   // Autenticação & Sessão
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
@@ -339,7 +362,7 @@ export function App() {
 
   // Carregar automaticamente a localização do ponto de partida via GPS ao iniciar a solicitação
   useEffect(() => {
-    if (activeTab === 'client' || activeTab === 'dual') {
+    if (activeTab === 'client') {
       const autoDetectClientGPS = async () => {
         try {
           setIsLocatingGPS(true);
@@ -787,10 +810,10 @@ export function App() {
   // 2. TELA DO SISTEMA LOGADO
   // ========================================================
   const activeClientRide = 
-    (currentRideId ? rides.find(r => r.id === currentRideId) : null) || 
-    rides.find(r => currentUser && r.clientId === currentUser.id && r.status !== 'finished' && r.status !== 'cancelled') ||
-    rides.find(r => currentUser && r.clientId === currentUser.id) ||
-    (rides.length > 0 && rides[0].status === 'searching' ? rides[0] : null);
+    (currentRideId ? rides.find(r => r.id === currentRideId && !hiddenRideIds.includes(r.id) && r.status !== 'cancelled') : null) || 
+    rides.find(r => currentUser && r.clientId === currentUser.id && !hiddenRideIds.includes(r.id) && r.status !== 'finished' && r.status !== 'cancelled') ||
+    rides.find(r => currentUser && r.clientId === currentUser.id && !hiddenRideIds.includes(r.id) && r.status === 'finished') ||
+    null;
   const pendingRides = rides.filter(r => r.status === 'searching');
   const myDriverRides = rides.filter(r => (r.status === 'accepted' || r.status === 'in_progress') && (r.driverId === currentUser?.id || !r.driverId));
 
@@ -1025,83 +1048,67 @@ export function App() {
               </button>
             )}
 
-            <button
-              onClick={() => setActiveTab('client')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '7px 12px',
-                borderRadius: '8px',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: '0.8rem',
-                fontWeight: 600,
-                whiteSpace: 'nowrap',
-                flexShrink: 0,
-                background: activeTab === 'client' ? 'var(--primary-gradient)' : 'transparent',
-                color: activeTab === 'client' ? '#fff' : 'var(--text-secondary)'
-              }}
-            >
-              <Users size={14} />
-              <span>Cliente</span>
-            </button>
+            {/* Aba do Passageiro (Exibida para Clientes e SuperAdmin) */}
+            {(currentUser.role === 'client' || isUserAdmin) && (
+              <button
+                onClick={() => setActiveTab('client')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '7px 12px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                  background: activeTab === 'client' ? 'var(--primary-gradient)' : 'transparent',
+                  color: activeTab === 'client' ? '#fff' : 'var(--text-secondary)'
+                }}
+              >
+                <Users size={14} />
+                <span>Passageiro</span>
+              </button>
+            )}
 
-            <button
-              onClick={() => {
-                setActiveTab('driver');
-                setShowDriverProfileEdit(false);
-              }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '7px 12px',
-                borderRadius: '8px',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: '0.8rem',
-                fontWeight: 600,
-                whiteSpace: 'nowrap',
-                flexShrink: 0,
-                background: activeTab === 'driver' ? 'linear-gradient(135deg, #10b981, #059669)' : 'transparent',
-                color: activeTab === 'driver' ? '#fff' : 'var(--text-secondary)'
-              }}
-            >
-              <Car size={14} />
-              <span>Motorista</span>
-              {pendingRides.length > 0 && (
-                <span style={{
-                  background: '#ef4444',
-                  color: '#fff',
-                  fontSize: '0.65rem',
-                  padding: '1px 5px',
-                  borderRadius: '10px'
-                }}>{pendingRides.length}</span>
-              )}
-            </button>
-
-            <button
-              onClick={() => setActiveTab('dual')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '7px 12px',
-                borderRadius: '8px',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: '0.8rem',
-                fontWeight: 600,
-                whiteSpace: 'nowrap',
-                flexShrink: 0,
-                background: activeTab === 'dual' ? 'rgba(255, 255, 255, 0.12)' : 'transparent',
-                color: activeTab === 'dual' ? '#fff' : 'var(--text-secondary)'
-              }}
-            >
-              <Sparkles size={14} />
-              <span>Visão Dupla</span>
-            </button>
+            {/* Aba do Motorista (Exibida para Motoristas e SuperAdmin) */}
+            {(currentUser.role === 'driver' || isUserAdmin) && (
+              <button
+                onClick={() => {
+                  setActiveTab('driver');
+                  setShowDriverProfileEdit(false);
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '7px 12px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                  background: activeTab === 'driver' ? 'linear-gradient(135deg, #10b981, #059669)' : 'transparent',
+                  color: activeTab === 'driver' ? '#fff' : 'var(--text-secondary)'
+                }}
+              >
+                <Car size={14} />
+                <span>Motorista</span>
+                {pendingRides.length > 0 && (
+                  <span style={{
+                    background: '#ef4444',
+                    color: '#fff',
+                    fontSize: '0.65rem',
+                    padding: '1px 5px',
+                    borderRadius: '10px'
+                  }}>{pendingRides.length}</span>
+                )}
+              </button>
+            )}
 
             <button
               onClick={() => setActiveTab('mobile')}
@@ -2167,6 +2174,45 @@ export function App() {
                           </div>
                         </div>
                       )}
+
+                      {activeClientRide.status === 'finished' && (
+                        <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                          <div style={{
+                            background: 'rgba(16, 185, 129, 0.12)',
+                            border: '1px solid rgba(16, 185, 129, 0.35)',
+                            borderRadius: '12px',
+                            padding: '14px',
+                            textAlign: 'center',
+                            color: '#10b981'
+                          }}>
+                            <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>✨ Serviço Concluído com Sucesso!</div>
+                            <div style={{ fontSize: '0.8rem', color: '#a7f3d0', marginTop: '4px' }}>
+                              Esperamos que sua viagem tenha sido excelente.
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              hideRideForClient(activeClientRide.id);
+                              setCurrentRideId(null);
+                            }}
+                            className="btn-primary"
+                            style={{
+                              width: '100%',
+                              padding: '12px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '8px',
+                              fontWeight: 700
+                            }}
+                          >
+                            <RotateCcw size={16} />
+                            <span>Limpar do Histórico e Fazer Nova Solicitação</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ) : searchCancellationReason ? (
                     <div className="glass-panel" style={{
@@ -2610,151 +2656,7 @@ export function App() {
           </div>
         )}
 
-        {/* TAB 3: VISÃO DUPLA */}
-        {activeTab === 'dual' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={{
-              background: 'rgba(99, 102, 241, 0.1)',
-              border: '1px solid rgba(99, 102, 241, 0.25)',
-              padding: '12px 18px',
-              borderRadius: '12px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              flexWrap: 'wrap',
-              gap: '10px'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <Sparkles size={20} color="#818cf8" />
-                <span style={{ fontSize: '0.9rem', color: '#e2e8f0' }}>
-                  <strong>Simulador Dual (Passageiro vs Motorista):</strong> Observe a persistência no banco de dados sincronizando ambos os lados em tempo real!
-                </span>
-              </div>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: '20px' }}>
-              {/* Lado Esquerdo: Cliente */}
-              <div className="glass-panel" style={{ padding: '20px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '10px' }}>
-                  <Users size={20} color="#818cf8" />
-                  <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Tela do Cliente (Passageiro)</h3>
-                </div>
-
-                <form onSubmit={handleRequestRide} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div style={{ position: 'relative' }}>
-                    <input
-                      type="text"
-                      className="custom-input"
-                      value={origin}
-                      onChange={(e) => setOrigin(e.target.value)}
-                      placeholder="Partida"
-                      required
-                    />
-                  </div>
-                  <input
-                    type="text"
-                    className="custom-input"
-                    value={destination}
-                    onChange={(e) => setDestination(e.target.value)}
-                    placeholder="Destino"
-                    required
-                  />
-                  <div style={{ display: 'flex', gap: '10px' }}>
-                    <div style={{ flex: 1 }}>
-                      <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Horas ({hours}h)</label>
-                      <input
-                        type="range"
-                        min={1}
-                        max={12}
-                        value={hours}
-                        onChange={(e) => setHours(Number(e.target.value))}
-                        style={{ width: '100%', accentColor: '#6366f1' }}
-                      />
-                    </div>
-                    <div style={{ width: '130px' }}>
-                      <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Valor/hora</label>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        className="custom-input"
-                        value={formatCurrencyInput(hourlyRate)}
-                        onChange={(e) => setHourlyRate(parseCurrencyInput(e.target.value))}
-                      />
-                    </div>
-                  </div>
-
-                  <div style={{ background: 'rgba(15, 23, 42, 0.7)', padding: '10px', borderRadius: '8px', fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Total: <strong>{formatCurrency(totalAmount)}</strong></span>
-                    <span style={{ color: '#10b981' }}>Motorista: <strong>{formatCurrency(driverNet)}</strong></span>
-                  </div>
-
-                  <button type="submit" className="btn-primary" style={{ padding: '10px' }}>
-                    1. Criar Solicitação de Corrida
-                  </button>
-                </form>
-
-                {activeClientRide && (
-                  <div style={{ marginTop: '16px', padding: '12px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Status no Banco:</div>
-                    <strong style={{ color: '#818cf8', fontSize: '0.95rem' }}>{activeClientRide.status.toUpperCase()}</strong>
-                  </div>
-                )}
-              </div>
-
-              {/* Lado Direito: Motorista */}
-              <div className="glass-panel" style={{ padding: '20px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '10px' }}>
-                  <Car size={20} color="#10b981" />
-                  <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Tela do Motorista Parceiro</h3>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                    Chamados recebidos em tempo real:
-                  </div>
-
-                  {pendingRides.length === 0 ? (
-                    <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem', background: 'rgba(0,0,0,0.2)', borderRadius: '10px' }}>
-                      Nenhum chamado pendente. Clique em "Criar Solicitação" ao lado.
-                    </div>
-                  ) : (
-                    pendingRides.map(r => (
-                      <div key={r.id} style={{ background: 'rgba(15, 23, 42, 0.9)', padding: '14px', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
-                        <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>{r.origin} ➔ {r.destination}</div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
-                          <span style={{ fontSize: '0.8rem', color: '#10b981', fontWeight: 700 }}>{r.hours}h • Ganho {formatCurrency(r.driverNet)}</span>
-                          <button onClick={() => handleAcceptRide(r.id)} className="btn-success" style={{ padding: '6px 12px', fontSize: '0.8rem' }}>
-                            2. Aceitar
-                          </button>
-                        </div>
-                      </div>
-                    ))
-                  )}
-
-                  {myDriverRides.map(r => (
-                    <div key={r.id} style={{ background: 'rgba(245, 158, 11, 0.1)', padding: '14px', borderRadius: '10px', border: '1px solid rgba(245, 158, 11, 0.3)' }}>
-                      <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>Em Atendimento: {r.origin}</div>
-                      <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-                        {r.status === 'accepted' && (
-                          <button onClick={() => handleStartRide(r.id)} className="btn-primary" style={{ flex: 1, padding: '6px', fontSize: '0.8rem' }}>
-                            3. Iniciar Corrida
-                          </button>
-                        )}
-                        {r.status === 'in_progress' && (
-                          <button onClick={() => handleFinishRide(r.id)} className="btn-success" style={{ flex: 1, padding: '6px', fontSize: '0.8rem' }}>
-                            4. Finalizar e Receber
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 4: ABRIR NO CELULAR */}
+        {/* TAB: ABRIR NO CELULAR */}
         {activeTab === 'mobile' && (
           <div style={{ maxWidth: '750px', margin: '0 auto' }}>
             <div className="glass-panel" style={{ padding: '36px', textAlign: 'center' }}>
