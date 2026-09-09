@@ -326,8 +326,10 @@ export function App() {
     }
   }, [isDriverOnline, incomingRide?.id, dismissedRideId, isMuted, driverSecondsRemaining > 0]);
 
-  // Informações de rede local
-  const localNetworkUrl = `http://192.168.18.71:5173`;
+  // Informações da URL de acesso (produção ou endereço dinâmico da janela)
+  const appAccessUrl = typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'
+    ? window.location.origin
+    : 'https://drivehora.vercel.app';
 
   const isUserAdmin = Boolean(currentUser?.isAdmin || currentUser?.role === 'admin' || isSuperAdminEmail(currentUser?.email));
 
@@ -2677,7 +2679,7 @@ export function App() {
                 Acesse o DriveHora pelo seu Celular
               </h2>
               <p style={{ fontSize: '0.95rem', color: 'var(--text-secondary)', marginBottom: '28px' }}>
-                Aponte a câmera do seu smartphone para o QR Code abaixo (conectado ao mesmo Wi-Fi):
+                Aponte a câmera do seu smartphone para o QR Code abaixo para abrir diretamente a versão mobile:
               </p>
 
               {/* QR Code */}
@@ -2690,7 +2692,7 @@ export function App() {
                 marginBottom: '24px'
               }}>
                 <QRCodeSVG
-                  value={localNetworkUrl}
+                  value={appAccessUrl}
                   size={220}
                   level="H"
                   includeMargin={true}
@@ -2708,10 +2710,10 @@ export function App() {
                 justifyContent: 'center',
                 gap: '12px',
                 margin: '0 auto 28px',
-                maxWidth: '450px'
+                maxWidth: '480px'
               }}>
                 <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Ou digite no navegador do celular:</span>
-                <strong style={{ fontSize: '1rem', color: '#818cf8' }}>{localNetworkUrl}</strong>
+                <strong style={{ fontSize: '1rem', color: '#818cf8' }}>{appAccessUrl}</strong>
               </div>
 
               {/* Passo a passo */}
@@ -2726,8 +2728,7 @@ export function App() {
                   📱 Como instalar como aplicativo no smartphone:
                 </h4>
                 <ol style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <li>Certifique-se de que o celular está conectado na mesma rede Wi-Fi do computador.</li>
-                  <li>Abra a câmera do celular ou o navegador e acesse o endereço acima.</li>
+                  <li>Abra a câmera do celular ou o navegador e acesse o endereço acima (<strong>{appAccessUrl}</strong>).</li>
                   <li>No <strong>Android (Chrome)</strong>: Toque no menu de 3 pontinhos e selecione <em>"Adicionar à tela inicial"</em> ou <em>"Instalar aplicativo"</em>.</li>
                   <li>No <strong>iPhone (Safari)</strong>: Toque no botão de compartilhar e selecione <em>"Adicionar à Tela de Início"</em>.</li>
                   <li>O ícone do <strong>DriveHora</strong> ficará na tela inicial como um app nativo!</li>

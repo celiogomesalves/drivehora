@@ -4,7 +4,8 @@ import {
   Users, Car, DollarSign, ShieldCheck, CheckCircle2, 
   XCircle, Clock, RefreshCw, 
   TrendingUp, Database, Image, AlertTriangle, Eye, X, Check,
-  Settings, Bell, CreditCard, Sliders, Send, Save, Trash2
+  Settings, Bell, CreditCard, Sliders, Send, Save, Trash2,
+  Calendar, Filter
 } from 'lucide-react';
 import { formatCurrency, formatCurrencyInput, parseCurrencyInput, formatPhone, formatCpf, formatPlate } from '../utils/formatters';
 import { dbGetAllDrivers, dbGetAllClients, dbAdminUpdateDriverStatus, dbAdminDeleteDriver, type DbRide } from '../services/dbService';
@@ -45,6 +46,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [previewDoc, setPreviewDoc] = useState<{ title: string; url: string } | null>(null);
   const [driverToDelete, setDriverToDelete] = useState<DriverProfile | null>(null);
   const [isDeletingDriver, setIsDeletingDriver] = useState(false);
+
+  // Filtros de Data para Auditoria de Corridas
+  const [rideDateFilter, setRideDateFilter] = useState<'all' | 'today' | 'week' | '15days' | '30days' | 'custom'>('all');
+  const [rideCustomDate, setRideCustomDate] = useState<string>('');
 
   // Configurações Globais do Sistema
   const [systemSettings, setSystemSettings] = useState<SystemSettings>(getSystemSettings);
@@ -867,43 +872,299 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       )}
 
       {/* SUB-ABA 4: AUDITORIA DE CORRIDAS */}
-      {activeSubTab === 'rides' && (
-        <div className="glass-panel" style={{ padding: '24px' }}>
-          <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '16px' }}>Histórico Geral de Corridas</h3>
-          {rides.length === 0 ? (
-            <p style={{ color: 'var(--text-muted)' }}>Nenhuma corrida registrada.</p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {rides.map(r => (
-                <div key={r.id} style={{
-                  background: 'rgba(15, 23, 42, 0.85)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: '14px',
-                  padding: '16px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  flexWrap: 'wrap',
-                  gap: '10px'
-                }}>
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>{r.origin} ➔ {r.destination}</div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                      Passageiro: {r.clientName || r.clientId} • Motorista: {r.driverName || r.driverId || 'Aguardando'}
-                    </div>
-                  </div>
+      {activeSubTab === 'rides' && (() => {
+        const now = Date.now();
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
 
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontWeight: 800, color: '#fff' }}>Total: {formatCurrency(r.total)}</div>
-                    <div style={{ fontSize: '0.75rem', color: '#818cf8' }}>Plataforma (15%): {formatCurrency(r.commission)}</div>
-                    <div style={{ fontSize: '0.75rem', color: '#10b981' }}>Motorista (85%): {formatCurrency(r.driverNet)}</div>
-                  </div>
+        const filteredRides = rides.filter(r => {
+          const rideTime = r.createdAt || (r as any).created_at ? new Date(r.createdAt || (r as any).created_at).getTime() : now;
+          if (rideDateFilter === 'today') {
+            return rideTime >= startOfToday.getTime();
+          }
+          if (rideDateFilter === 'week') {
+            const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+            return rideTime >= sevenDaysAgo;
+          }
+          if (rideDateFilter === '15days') {
+            const fifteenDaysAgo = now - 15 * 24 * 60 * 60 * 1000;
+            return rideTime >= fifteenDaysAgo;
+          }
+          if (rideDateFilter === '30days') {
+            const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
+            return rideTime >= thirtyDaysAgo;
+          }
+          if (rideDateFilter === 'custom') {
+            if (!rideCustomDate) return true;
+            const targetDateStr = new Date(rideTime).toISOString().slice(0, 10);
+            return targetDateStr === rideCustomDate;
+          }
+          return true;
+        });
+
+        const totalFilteredRevenue = filteredRides.reduce((acc, curr) => acc + (curr.total || 0), 0);
+        const totalFilteredCommission = filteredRides.reduce((acc, curr) => acc + (curr.commission || 0), 0);
+        const totalFilteredDriverNet = filteredRides.reduce((acc, curr) => acc + (curr.driverNet || 0), 0);
+
+        return (
+          <div className="glass-panel" style={{ padding: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px', marginBottom: '20px' }}>
+              <div>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Calendar size={22} color="#6366f1" />
+                  Histórico Geral de Corridas ({filteredRides.length})
+                </h3>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                  Audite e filtre todas as corridas registradas na plataforma por período.
+                </p>
+              </div>
+
+              {/* Resumo Financeiro do Período Selecionado */}
+              <div style={{
+                display: 'flex',
+                gap: '12px',
+                background: 'rgba(15, 23, 42, 0.8)',
+                border: '1px solid var(--border-subtle)',
+                padding: '10px 16px',
+                borderRadius: '12px'
+              }}>
+                <div>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Faturamento</div>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#fff' }}>{formatCurrency(totalFilteredRevenue)}</div>
                 </div>
-              ))}
+                <div style={{ width: '1px', background: 'var(--border-subtle)' }} />
+                <div>
+                  <div style={{ fontSize: '0.7rem', color: '#818cf8' }}>Plataforma (15%)</div>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#818cf8' }}>{formatCurrency(totalFilteredCommission)}</div>
+                </div>
+                <div style={{ width: '1px', background: 'var(--border-subtle)' }} />
+                <div>
+                  <div style={{ fontSize: '0.7rem', color: '#10b981' }}>Repasse Motoristas</div>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#10b981' }}>{formatCurrency(totalFilteredDriverNet)}</div>
+                </div>
+              </div>
             </div>
-          )}
-        </div>
-      )}
+
+            {/* Barra de Filtros de Período Fixos e Personalizado */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '8px',
+              padding: '12px 16px',
+              background: 'rgba(255, 255, 255, 0.03)',
+              borderRadius: '12px',
+              border: '1px solid var(--border-subtle)',
+              marginBottom: '20px'
+            }}>
+              <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginRight: '4px' }}>
+                <Filter size={15} color="#818cf8" />
+                Filtrar por:
+              </span>
+
+              <button
+                type="button"
+                onClick={() => setRideDateFilter('all')}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '20px',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  border: '1px solid var(--border-subtle)',
+                  background: rideDateFilter === 'all' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
+                  color: rideDateFilter === 'all' ? '#fff' : 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                Todas
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setRideDateFilter('today')}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '20px',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  border: '1px solid var(--border-subtle)',
+                  background: rideDateFilter === 'today' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
+                  color: rideDateFilter === 'today' ? '#fff' : 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                Hoje
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setRideDateFilter('week')}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '20px',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  border: '1px solid var(--border-subtle)',
+                  background: rideDateFilter === 'week' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
+                  color: rideDateFilter === 'week' ? '#fff' : 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                Esta semana (7 dias)
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setRideDateFilter('15days')}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '20px',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  border: '1px solid var(--border-subtle)',
+                  background: rideDateFilter === '15days' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
+                  color: rideDateFilter === '15days' ? '#fff' : 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                15 dias
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setRideDateFilter('30days')}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '20px',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  border: '1px solid var(--border-subtle)',
+                  background: rideDateFilter === '30days' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
+                  color: rideDateFilter === '30days' ? '#fff' : 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                30 dias
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setRideDateFilter('custom')}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '20px',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  border: '1px solid var(--border-subtle)',
+                  background: rideDateFilter === 'custom' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
+                  color: rideDateFilter === 'custom' ? '#fff' : 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                Data Específica
+              </button>
+
+              {rideDateFilter === 'custom' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>
+                  <input
+                    type="date"
+                    value={rideCustomDate}
+                    onChange={(e) => setRideCustomDate(e.target.value)}
+                    className="input-field"
+                    style={{
+                      padding: '5px 10px',
+                      fontSize: '0.8rem',
+                      background: 'rgba(15, 23, 42, 0.9)',
+                      color: '#fff',
+                      border: '1px solid #6366f1',
+                      borderRadius: '8px'
+                    }}
+                  />
+                  {rideCustomDate && (
+                    <button
+                      type="button"
+                      onClick={() => setRideCustomDate('')}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--text-muted)',
+                        cursor: 'pointer',
+                        fontSize: '0.75rem'
+                      }}
+                      title="Limpar data"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {filteredRides.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)' }}>
+                <Car size={36} style={{ margin: '0 auto 8px', opacity: 0.5 }} />
+                <p style={{ fontWeight: 600 }}>Nenhuma corrida encontrada para o período selecionado.</p>
+                <p style={{ fontSize: '0.8rem', marginTop: '4px' }}>Alterne os filtros acima para visualizar outros períodos.</p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {filteredRides.map(r => {
+                  const rideTime = r.createdAt || (r as any).created_at ? new Date(r.createdAt || (r as any).created_at) : null;
+                  return (
+                    <div key={r.id} style={{
+                      background: 'rgba(15, 23, 42, 0.85)',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: '14px',
+                      padding: '16px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: '10px'
+                    }}>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                          <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>{r.origin} ➔ {r.destination}</span>
+                          <span style={{
+                            fontSize: '0.7rem',
+                            fontWeight: 700,
+                            padding: '2px 8px',
+                            borderRadius: '10px',
+                            background: r.status === 'finished' ? 'rgba(16, 185, 129, 0.15)' : r.status === 'in_progress' ? 'rgba(59, 130, 246, 0.15)' : r.status === 'accepted' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                            color: r.status === 'finished' ? '#10b981' : r.status === 'in_progress' ? '#3b82f6' : r.status === 'accepted' ? '#f59e0b' : '#ef4444'
+                          }}>
+                            {r.status === 'finished' ? 'CONCLUÍDA' : r.status === 'in_progress' ? 'EM ANDAMENTO' : r.status === 'accepted' ? 'ACEITA' : r.status === 'searching' ? 'BUSCANDO' : 'CANCELADA'}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                          Passageiro: <strong>{r.clientName || r.clientId}</strong> • Motorista: <strong>{r.driverName || r.driverId || 'Aguardando'}</strong> • Horas: <strong>{r.hours}h</strong>
+                        </div>
+                        {rideTime && (
+                          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '3px' }}>
+                            Data/Hora: {rideTime.toLocaleDateString('pt-BR')} às {rideTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        )}
+                      </div>
+
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontWeight: 800, color: '#fff' }}>Total: {formatCurrency(r.total)}</div>
+                        <div style={{ fontSize: '0.75rem', color: '#818cf8' }}>Plataforma (15%): {formatCurrency(r.commission)}</div>
+                        <div style={{ fontSize: '0.75rem', color: '#10b981' }}>Motorista (85%): {formatCurrency(r.driverNet)}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* SUB-ABA 5: CONFIGURAÇÕES DO SISTEMA (PUSH, GATEWAY, TARIFAS, REGRAS) */}
       {activeSubTab === 'settings' && (
