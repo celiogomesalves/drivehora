@@ -5,7 +5,7 @@ import {
   Radio, Award, PlayCircle, Compass, Database, 
   X, Check, LogOut, MapPin, Crown, AlertTriangle, UserCheck,
   BellRing, Volume2, VolumeX, Ban, AlertOctagon, Heart, ShieldAlert, RotateCcw,
-  Filter, Archive, ArchiveRestore, Trash2
+  Filter, Archive, ArchiveRestore, Trash2, CreditCard
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import confetti from 'canvas-confetti';
@@ -25,10 +25,12 @@ import { formatCurrency, formatCurrencyInput, parseCurrencyInput } from './utils
 import { 
   dbGetClientProfile, dbGetDriverProfile, dbGetAllDrivers,
   dbCreateRide, dbUpdateRide, dbCancelRide, dbUpdateDriverOnlineStatus, dbUpdateDriverLocation,
-  dbGetFavoriteDriverIds, dbToggleFavoriteDriver, dbSaveUserDeviceToken, dbCheckUserSession, type DbRide 
+  dbGetFavoriteDriverIds, dbToggleFavoriteDriver, dbSaveUserDeviceToken, dbCheckUserSession,
+  dbUpdateDriverPaymentPrefs, type DbRide 
 } from './services/dbService';
 import { requestWebPushToken, onForegroundMessage } from './services/firebase';
 import { getSystemSettings, fetchSystemSettingsFromDb, type SystemSettings } from './services/settingsService';
+import { testGatewayConnection, createPixPayment, type PaymentMethodType } from './services/paymentGatewayService';
 import { getLocalSessionToken, clearLocalSessionToken } from './utils/sessionHelper';
 import { useSystemDialog } from './components/SystemDialog';
 
@@ -192,6 +194,45 @@ export function App() {
   const [selectedDirectDriver, setSelectedDirectDriver] = useState<DriverPublicProfile | null>(null);
   const [now, setNow] = useState(Date.now());
   const [dismissedCancellationId, setDismissedCancellationId] = useState<string | null>(null);
+
+  // Meio de Pagamento Selecionado pelo Passageiro
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethodType>('pix');
+  const [pixModalData, setPixModalData] = useState<{
+    isOpen: boolean;
+    rideId: string;
+    amount: number;
+    qrCodeUrl?: string;
+    copiaECola?: string;
+    expiresAt?: string;
+  } | null>(null);
+  const [isCopiedPix, setIsCopiedPix] = useState(false);
+
+  // Status de Integridade do Gateway (Trava de Segurança Obrigatória para o Sistema Operar)
+  const [gatewayOperational, setGatewayOperational] = useState<boolean>(true);
+  const [gatewayHealthMsg, setGatewayHealthMsg] = useState<string>('');
+
+  // Preferências de Pagamento do Motorista
+  const [driverAcceptsCash, setDriverAcceptsCash] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem(`drivehora_driver_payprefs_${currentUser?.id}`);
+      if (saved) return JSON.parse(saved).acceptsCash ?? true;
+      return true;
+    } catch { return true; }
+  });
+  const [driverHasCardMachine, setDriverHasCardMachine] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem(`drivehora_driver_payprefs_${currentUser?.id}`);
+      if (saved) return JSON.parse(saved).hasCardMachine ?? true;
+      return true;
+    } catch { return true; }
+  });
+  const [driverPixKey, setDriverPixKey] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem(`drivehora_driver_payprefs_${currentUser?.id}`);
+      if (saved) return JSON.parse(saved).pixKey || '';
+      return '';
+    } catch { return ''; }
+  });
 
   // Verificação de Sessão Única Concorrente (Supabase Realtime + Polling a cada 5s com Grace Period)
   useEffect(() => {
@@ -498,6 +539,24 @@ export function App() {
     }
   }, [activeTab]);
 
+  // Checagem Contínua da Saúde do Gateway de Pagamentos (Asaas / MP / Stripe)
+  const checkGatewayHealth = async () => {
+    try {
+      const res = await testGatewayConnection();
+      setGatewayOperational(res.operational);
+      setGatewayHealthMsg(res.message);
+    } catch {
+      setGatewayOperational(false);
+      setGatewayHealthMsg('Erro de comunicação com o gateway de pagamentos.');
+    }
+  };
+
+  useEffect(() => {
+    checkGatewayHealth();
+    const interval = setInterval(checkGatewayHealth, 45000); // Re-valida a cada 45 segundos
+    return () => clearInterval(interval);
+  }, []);
+
   // Verificar conexão Supabase
   const checkSupabaseConnection = async () => {
     const sb = getSupabase();
@@ -661,9 +720,37 @@ export function App() {
       return;
     }
 
+    if (!gatewayOperational) {
+      showAlert(
+        'As solicitações de corrida estão momentaneamente indisponíveis porque o sistema de pagamentos está em validação. Por favor, tente novamente em alguns instantes.',
+        'warning',
+        'Sistema em Manutenção Momentânea'
+      );
+      return;
+    }
+
     setIsRequesting(true);
     const rideId = 'ride_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
     const clientId = currentUser?.id || ('client_' + Math.random().toString(36).substring(2, 6));
+
+    let pixDataResult: any = null;
+    let paymentStatus: any = 'pending';
+
+    if (selectedPaymentMethod === 'cash' || selectedPaymentMethod === 'card_machine') {
+      paymentStatus = 'in_person_pending';
+    } else if (selectedPaymentMethod === 'pix') {
+      try {
+        pixDataResult = await createPixPayment({
+          rideId,
+          amount: totalAmount,
+          clientName: currentUser?.fullName || 'Passageiro',
+          clientEmail: currentUser?.email,
+          description: `Contratação de Motorista por ${hours} horas`
+        });
+      } catch (e) {
+        console.warn('Erro ao gerar cobrança Pix:', e);
+      }
+    }
 
     const newRide: DbRide = {
       id: rideId,
@@ -677,6 +764,12 @@ export function App() {
       commission: platformFee,
       driverNet: driverNet,
       status: 'searching',
+      paymentMethod: selectedPaymentMethod,
+      paymentStatus: paymentStatus,
+      paymentGateway: systemSettings.paymentGateway.activeGateway || 'asaas',
+      paymentExternalId: pixDataResult?.externalId,
+      pixQrCodeUrl: pixDataResult?.pixQrCodeUrl,
+      pixCopiaECola: pixDataResult?.pixCopiaECola,
       createdAt: Date.now()
     };
 
@@ -684,7 +777,19 @@ export function App() {
     setCurrentRideId(rideId);
     setRides(prev => [newRide, ...prev.filter(r => r.id !== rideId)]);
 
-    // 2. Gravação no Supabase
+    // 2. Se for Pix, exibe imediatamente o modal de pagamento Pix
+    if (selectedPaymentMethod === 'pix' && pixDataResult) {
+      setPixModalData({
+        isOpen: true,
+        rideId,
+        amount: totalAmount,
+        qrCodeUrl: pixDataResult.pixQrCodeUrl,
+        copiaECola: pixDataResult.pixCopiaECola,
+        expiresAt: pixDataResult.expiresAt
+      });
+    }
+
+    // 3. Gravação no Supabase
     try {
       await dbCreateRide(newRide);
     } catch (err) {
@@ -754,6 +859,16 @@ export function App() {
     if (isTogglingOnline) return;
 
     if (!isDriverOnline) {
+      // 1. O Gateway precisa estar operacional para o motorista poder ficar online
+      if (!gatewayOperational) {
+        showAlert(
+          'O sistema não pode liberar novas corridas porque o gateway de pagamentos está em validação técnica. Entre em contato com a administração para validar o gateway.',
+          'warning',
+          'Pagamentos em Manutenção'
+        );
+        return;
+      }
+
       // Para ficar ONLINE e receber chamados, o cadastro deve estar validado ou ser admin
       const isApproved = driverProfile?.verificationStatus === 'approved' || isUserAdmin;
       if (!isApproved) {
@@ -1498,6 +1613,33 @@ export function App() {
                 <span>👤 Passageiro: <strong>{incomingRide.clientName || 'Passageiro DriveHora'}</strong></span>
                 <span>⏱️ Tempo: <strong>{incomingRide.hours} Horas</strong> ({formatCurrency(incomingRide.hourlyRate)}/h)</span>
               </div>
+
+              {/* Forma de Pagamento */}
+              <div style={{
+                marginTop: '4px',
+                padding: '8px 12px',
+                borderRadius: '10px',
+                background: incomingRide.paymentMethod === 'cash' || incomingRide.paymentMethod === 'card_machine' 
+                  ? 'rgba(245, 158, 11, 0.15)' 
+                  : 'rgba(16, 185, 129, 0.15)',
+                border: `1px solid ${incomingRide.paymentMethod === 'cash' || incomingRide.paymentMethod === 'card_machine' ? 'rgba(245, 158, 11, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                fontSize: '0.8rem'
+              }}>
+                <span style={{ color: 'var(--text-secondary)' }}>💳 Pagamento:</span>
+                <strong style={{
+                  color: incomingRide.paymentMethod === 'cash' || incomingRide.paymentMethod === 'card_machine' ? '#f59e0b' : '#10b981',
+                  fontWeight: 800
+                }}>
+                  {incomingRide.paymentMethod === 'pix' && '⚡ Pix pelo App (Asaas)'}
+                  {incomingRide.paymentMethod === 'credit_card' && '💳 Cartão pelo App'}
+                  {incomingRide.paymentMethod === 'cash' && `💵 Cobrar em Dinheiro (${formatCurrency(incomingRide.total)})`}
+                  {incomingRide.paymentMethod === 'card_machine' && `📱 Cobrar na sua Maquininha (${formatCurrency(incomingRide.total)})`}
+                  {!incomingRide.paymentMethod && '⚡ Pagamento Digital App'}
+                </strong>
+              </div>
             </div>
 
             {/* Demonstrativo Financeiro Completo com Taxa Abatida */}
@@ -1970,13 +2112,50 @@ export function App() {
                       </div>
                     </div>
 
+                    {/* Seletor de Meios de Pagamento */}
+                    <div className="input-group">
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        💳 Forma de Pagamento
+                      </label>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', marginTop: '6px' }}>
+                        {[
+                          { id: 'pix', label: '⚡ Pix pelo App', desc: 'QR Code instantâneo (Asaas)' },
+                          { id: 'credit_card', label: '💳 Cartão pelo App', desc: 'Crédito ou Débito online' },
+                          { id: 'cash', label: '💵 Dinheiro', desc: 'Pagar ao motorista no veículo' },
+                          { id: 'card_machine', label: '📱 Maquininha', desc: 'Cartão direto com o motorista' }
+                        ].map(m => (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => setSelectedPaymentMethod(m.id as any)}
+                            style={{
+                              padding: '10px 12px',
+                              borderRadius: '12px',
+                              border: selectedPaymentMethod === m.id ? '2px solid #10b981' : '1px solid var(--border-subtle)',
+                              background: selectedPaymentMethod === m.id ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255, 255, 255, 0.03)',
+                              color: selectedPaymentMethod === m.id ? '#10b981' : 'var(--text-secondary)',
+                              textAlign: 'left',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '2px',
+                              transition: 'all 0.2s ease'
+                            }}
+                          >
+                            <strong style={{ fontSize: '0.8rem', color: selectedPaymentMethod === m.id ? '#10b981' : '#fff' }}>{m.label}</strong>
+                            <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{m.desc}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
                     {/* Card de Resumo da Contratação */}
                     <div style={{
                       background: 'rgba(15, 23, 42, 0.85)',
                       border: '1px solid rgba(99, 102, 241, 0.25)',
                       borderRadius: '14px',
                       padding: '16px',
-                      marginTop: '6px'
+                      marginTop: '4px'
                     }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Total da Contratação:</span>
@@ -1988,16 +2167,47 @@ export function App() {
                       </div>
                     </div>
 
+                    {/* Aviso de Indisponibilidade Momentânea caso Gateway não esteja Operacional */}
+                    {!gatewayOperational && (
+                      <div style={{
+                        padding: '12px 14px',
+                        borderRadius: '12px',
+                        background: 'rgba(239, 68, 68, 0.12)',
+                        border: '1px solid rgba(239, 68, 68, 0.35)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px'
+                      }}>
+                        <AlertTriangle size={20} color="#ef4444" style={{ flexShrink: 0 }} />
+                        <div style={{ fontSize: '0.78rem', color: '#fca5a5', lineHeight: 1.4 }}>
+                          <strong>Indisponibilidade Momentânea:</strong> {gatewayHealthMsg || 'Nosso sistema de pagamentos está em validação técnica. As solicitações serão liberadas em instantes.'}
+                        </div>
+                      </div>
+                    )}
+
                     <button
                       type="submit"
-                      disabled={isRequesting}
+                      disabled={isRequesting || !gatewayOperational}
                       className="btn-primary"
-                      style={{ width: '100%', padding: '14px', fontSize: '1rem', marginTop: '8px' }}
+                      style={{
+                        width: '100%',
+                        padding: '14px',
+                        fontSize: '1rem',
+                        marginTop: '8px',
+                        opacity: !gatewayOperational ? 0.6 : 1,
+                        cursor: !gatewayOperational ? 'not-allowed' : 'pointer',
+                        background: !gatewayOperational ? 'rgba(255, 255, 255, 0.1)' : undefined
+                      }}
                     >
                       {isRequesting ? (
                         <>
                           <RefreshCw size={18} className="animate-spin" />
                           <span>Buscando motoristas disponíveis...</span>
+                        </>
+                      ) : !gatewayOperational ? (
+                        <>
+                          <AlertTriangle size={18} color="#fca5a5" />
+                          <span>Solicitações Indisponíveis no Momento</span>
                         </>
                       ) : (
                         <>
@@ -3077,6 +3287,25 @@ export function App() {
                     </div>
                   </div>
 
+                  {/* Alerta de Gateway Inoperante para o Motorista */}
+                  {!gatewayOperational && (
+                    <div style={{
+                      background: 'rgba(239, 68, 68, 0.12)',
+                      border: '1px solid rgba(239, 68, 68, 0.35)',
+                      padding: '14px',
+                      borderRadius: '12px',
+                      marginBottom: '20px',
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '12px'
+                    }}>
+                      <AlertTriangle size={20} color="#ef4444" style={{ flexShrink: 0, marginTop: '2px' }} />
+                      <div style={{ fontSize: '0.8rem', color: '#fca5a5', lineHeight: 1.4 }}>
+                        <strong>Recepção de Corridas Suspensa:</strong> {gatewayHealthMsg || 'O sistema de pagamentos está em validação técnica. Ficar online está temporariamente desabilitado para garantir o recebimento seguro de suas corridas.'}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Alerta de Validação de Documentos para Admin */}
                   {driverProfile?.verificationStatus !== 'approved' && (
                     <div style={{
@@ -3128,6 +3357,87 @@ export function App() {
                         {rides.filter(r => r.status === 'finished').length}
                       </div>
                       <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Completadas hoje</div>
+                    </div>
+                  </div>
+
+                  {/* Card de Preferências de Pagamento do Motorista */}
+                  <div style={{
+                    background: 'rgba(15, 23, 42, 0.75)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: '14px',
+                    padding: '16px',
+                    marginBottom: '20px'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                      <CreditCard size={18} color="#818cf8" />
+                      <strong style={{ fontSize: '0.9rem', color: '#fff' }}>Minhas Formas de Recebimento</strong>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                        <span>💵 Aceito receber corridas em Dinheiro</span>
+                        <input
+                          type="checkbox"
+                          checked={driverAcceptsCash}
+                          onChange={(e) => {
+                            const val = e.target.checked;
+                            setDriverAcceptsCash(val);
+                            if (currentUser?.id) {
+                              dbUpdateDriverPaymentPrefs(currentUser.id, {
+                                acceptsCash: val,
+                                hasCardMachine: driverHasCardMachine,
+                                pixKey: driverPixKey
+                              });
+                            }
+                            showToast(val ? 'Você receberá chamados em dinheiro.' : 'Chamados em dinheiro desativados.', 'info');
+                          }}
+                          style={{ width: '18px', height: '18px', accentColor: '#10b981' }}
+                        />
+                      </label>
+
+                      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                        <span>📱 Possuo maquininha própria de cartão</span>
+                        <input
+                          type="checkbox"
+                          checked={driverHasCardMachine}
+                          onChange={(e) => {
+                            const val = e.target.checked;
+                            setDriverHasCardMachine(val);
+                            if (currentUser?.id) {
+                              dbUpdateDriverPaymentPrefs(currentUser.id, {
+                                acceptsCash: driverAcceptsCash,
+                                hasCardMachine: val,
+                                pixKey: driverPixKey
+                              });
+                            }
+                            showToast(val ? 'Você receberá chamados com maquininha.' : 'Chamados com maquininha desativados.', 'info');
+                          }}
+                          style={{ width: '18px', height: '18px', accentColor: '#10b981' }}
+                        />
+                      </label>
+
+                      <div style={{ paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                        <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                          🔑 Minha Chave Pix (para conferência de repasses):
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="CPF, E-mail, Celular ou Chave Aleatória"
+                          value={driverPixKey}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setDriverPixKey(val);
+                            if (currentUser?.id) {
+                              dbUpdateDriverPaymentPrefs(currentUser.id, {
+                                acceptsCash: driverAcceptsCash,
+                                hasCardMachine: driverHasCardMachine,
+                                pixKey: val
+                              });
+                            }
+                          }}
+                          className="input-field"
+                          style={{ width: '100%', fontSize: '0.8rem', padding: '6px 10px' }}
+                        />
+                      </div>
                     </div>
                   </div>
 
@@ -3671,6 +3981,104 @@ export function App() {
           onToggleFavorite={handleToggleFavorite}
           onRequestDirectRide={handleSelectDriverForBooking}
         />
+      )}
+
+      {/* MODAL DE PAGAMENTO PIX DINÂMICO (ASAAS) */}
+      {pixModalData && pixModalData.isOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.85)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px'
+        }}>
+          <div className="glass-panel" style={{
+            maxWidth: '420px',
+            width: '100%',
+            padding: '26px',
+            borderRadius: '20px',
+            textAlign: 'center',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <strong style={{ fontSize: '1.05rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                ⚡ Pagamento Pix (Asaas)
+              </strong>
+              <button
+                type="button"
+                onClick={() => setPixModalData(null)}
+                style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '14px' }}>
+              Abra o app do seu banco e realize o pagamento via <strong>QR Code Pix</strong> ou copie o código abaixo:
+            </div>
+
+            <div style={{
+              background: '#ffffff',
+              padding: '16px',
+              borderRadius: '16px',
+              display: 'inline-block',
+              margin: '0 auto 16px',
+              boxShadow: '0 10px 25px rgba(0,0,0,0.3)'
+            }}>
+              {pixModalData.qrCodeUrl?.startsWith('http') || pixModalData.qrCodeUrl?.startsWith('data:') ? (
+                <img
+                  src={pixModalData.qrCodeUrl}
+                  alt="QR Code Pix"
+                  style={{ width: '200px', height: '200px', display: 'block', borderRadius: '8px' }}
+                />
+              ) : (
+                <QRCodeSVG value={pixModalData.copiaECola || 'PIX_DRIVEHORA'} size={200} />
+              )}
+            </div>
+
+            <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#10b981', marginBottom: '14px' }}>
+              {formatCurrency(pixModalData.amount)}
+            </div>
+
+            {pixModalData.copiaECola && (
+              <div style={{ marginBottom: '16px' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(pixModalData.copiaECola || '');
+                    setIsCopiedPix(true);
+                    showToast('Código Pix Copia e Cola copiado com sucesso!', 'success');
+                    setTimeout(() => setIsCopiedPix(false), 3000);
+                  }}
+                  className="btn-primary"
+                  style={{ width: '100%', padding: '12px', fontSize: '0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                >
+                  {isCopiedPix ? <Check size={18} /> : <Smartphone size={18} />}
+                  <span>{isCopiedPix ? 'Copiado para a Área de Transferência!' : 'Copiar Código Pix (Copia e Cola)'}</span>
+                </button>
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                setPixModalData(null);
+                showToast('Pagamento registrado! O motorista parceiro já foi notificado.', 'success');
+              }}
+              className="btn-outline"
+              style={{ width: '100%', padding: '10px', fontSize: '0.85rem' }}
+            >
+              Já fiz o pagamento / Concluir
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Barra de Navegação Inferior Mobile (Menu no Rodapé Estilo App Nativo) */}

@@ -20,6 +20,12 @@ export interface DbRide {
   commission: number;
   driverNet: number;
   status: 'searching' | 'accepted' | 'in_progress' | 'finished' | 'cancelled';
+  paymentMethod?: 'pix' | 'credit_card' | 'cash' | 'card_machine';
+  paymentStatus?: 'pending' | 'paid' | 'in_person_pending' | 'in_person_completed' | 'failed';
+  paymentGateway?: 'asaas' | 'mercadopago' | 'stripe';
+  paymentExternalId?: string;
+  pixQrCodeUrl?: string;
+  pixCopiaECola?: string;
   createdAt: number;
   acceptedAt?: number;
   startedAt?: number;
@@ -853,6 +859,30 @@ export const dbUpdateDriverOnlineStatus = async (
     } catch (e: any) {
       console.warn('Erro de comunicação ao atualizar status online:', e);
       return { success: false, error: e.message || 'Tempo limite esgotado' };
+    }
+  }
+  return { success: true };
+};
+
+// 11.1 Atualizar Preferências de Pagamento do Motorista (Dinheiro, Maquininha, Chave Pix)
+export const dbUpdateDriverPaymentPrefs = async (
+  userId: string,
+  prefs: { acceptsCash: boolean; hasCardMachine: boolean; pixKey?: string }
+): Promise<{ success: boolean }> => {
+  try {
+    localStorage.setItem(`drivehora_driver_payprefs_${userId}`, JSON.stringify(prefs));
+  } catch (e) {}
+
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      await sb.from('drivers').update({
+        accepts_cash: prefs.acceptsCash,
+        has_card_machine: prefs.hasCardMachine,
+        pix_key: prefs.pixKey
+      }).eq('user_id', userId);
+    } catch (e) {
+      // Falha silenciosa caso as colunas ainda não existam no Supabase
     }
   }
   return { success: true };

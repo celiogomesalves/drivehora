@@ -102,7 +102,7 @@ const DEFAULT_SETTINGS: SystemSettings = {
     notifyScheduledRideReminder: true
   },
   paymentGateway: {
-    activeGateway: 'mercadopago',
+    activeGateway: 'asaas',
     environment: 'sandbox',
     publicKey: '',
     secretKey: '',

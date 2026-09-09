@@ -74,6 +74,9 @@ export interface DriverProfile {
   languages?: string[];
   amenities?: string[];
   memberSince?: string;
+  acceptsCash?: boolean;
+  hasCardMachine?: boolean;
+  pixKey?: string;
 }
 
 export interface DriverPublicProfile {
@@ -100,6 +103,9 @@ export interface DriverPublicProfile {
   amenities: string[];
   memberSince: string;
   isFavorite?: boolean;
+  acceptsCash?: boolean;
+  hasCardMachine?: boolean;
+  pixKey?: string;
 }
 
 export interface FavoriteDriver {

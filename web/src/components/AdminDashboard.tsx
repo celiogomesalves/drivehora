@@ -11,6 +11,7 @@ import { formatCurrency, formatCurrencyInput, parseCurrencyInput, formatPhone, f
 import { dbGetAllDrivers, dbGetAllClients, dbAdminUpdateDriverStatus, dbAdminDeleteDriver, type DbRide } from '../services/dbService';
 import { getSupabase } from '../supabase';
 import { getSystemSettings, saveSystemSettings, fetchSystemSettingsFromDb, type SystemSettings } from '../services/settingsService';
+import { testGatewayConnection, type GatewayHealthResult } from '../services/paymentGatewayService';
 import { useSystemDialog } from './SystemDialog';
 
 // Utilitário para verificar pendências documentais obrigatórias
@@ -63,6 +64,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setIsSavingSettings(false);
     setSaveSuccessNotice(true);
     setTimeout(() => setSaveSuccessNotice(false), 4000);
+  };
+
+  // Teste de Conexão com o Gateway de Pagamentos
+  const [isTestingGateway, setIsTestingGateway] = useState(false);
+  const [gatewayHealthResult, setGatewayHealthResult] = useState<GatewayHealthResult | null>(null);
+
+  const handleTestGateway = async () => {
+    setIsTestingGateway(true);
+    try {
+      const res = await testGatewayConnection({
+        activeGateway: systemSettings.paymentGateway.activeGateway,
+        environment: systemSettings.paymentGateway.environment,
+        secretKey: systemSettings.paymentGateway.secretKey,
+        publicKey: systemSettings.paymentGateway.publicKey
+      });
+      setGatewayHealthResult(res);
+      if (res.operational) {
+        showToast(res.message, 'success');
+      } else {
+        showToast(res.message, 'error');
+      }
+    } finally {
+      setIsTestingGateway(false);
+    }
   };
 
   const handleTestFirebasePush = () => {
@@ -1537,8 +1562,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </label>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
                   {[
+                    { id: 'asaas', name: 'Asaas 🔵 (Recomendado)' },
                     { id: 'mercadopago', name: 'Mercado Pago 🔷' },
-                    { id: 'asaas', name: 'Asaas 🔵' },
                     { id: 'stripe', name: 'Stripe 🟣' }
                   ].map(gw => (
                     <button
@@ -1613,11 +1638,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 <div>
                   <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
-                    Chave Pública (Public Key)
+                    Chave Pública / API Key
                   </label>
                   <input
                     type="text"
-                    placeholder="APP_USR-... ou pk_test_..."
+                    placeholder="Chave pública ou identificador"
                     value={systemSettings.paymentGateway.publicKey}
                     onChange={(e) => setSystemSettings(prev => ({
                       ...prev,
@@ -1630,11 +1655,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                 <div>
                   <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
-                    Chave Secreta / Access Token
+                    Chave de API / Access Token (Asaas v3)
                   </label>
                   <input
                     type="password"
-                    placeholder="APP_USR-xxxx-... ou sk_live_..."
+                    placeholder="$aact_... (Chave da API Asaas)"
                     value={systemSettings.paymentGateway.secretKey}
                     onChange={(e) => setSystemSettings(prev => ({
                       ...prev,
@@ -1644,6 +1669,55 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     style={{ width: '100%', fontSize: '0.85rem' }}
                   />
                 </div>
+
+                {/* Botão de Testar Conexão com Gateway */}
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '4px' }}>
+                  <button
+                    type="button"
+                    onClick={handleTestGateway}
+                    disabled={isTestingGateway}
+                    className="btn-outline"
+                    style={{
+                      padding: '8px 14px',
+                      fontSize: '0.8rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      color: '#818cf8',
+                      borderColor: 'rgba(99, 102, 241, 0.4)'
+                    }}
+                  >
+                    <RefreshCw size={14} className={isTestingGateway ? 'animate-spin' : ''} />
+                    <span>{isTestingGateway ? 'Testando Conexão...' : 'Testar Conexão com Gateway'}</span>
+                  </button>
+                </div>
+
+                {/* Resultado do Teste de Integridade do Gateway */}
+                {gatewayHealthResult && (
+                  <div style={{
+                    padding: '12px 14px',
+                    borderRadius: '10px',
+                    background: gatewayHealthResult.operational ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                    border: `1px solid ${gatewayHealthResult.operational ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '10px'
+                  }}>
+                    {gatewayHealthResult.operational ? (
+                      <CheckCircle2 size={18} color="#10b981" style={{ flexShrink: 0, marginTop: '2px' }} />
+                    ) : (
+                      <AlertTriangle size={18} color="#ef4444" style={{ flexShrink: 0, marginTop: '2px' }} />
+                    )}
+                    <div>
+                      <strong style={{ fontSize: '0.85rem', color: gatewayHealthResult.operational ? '#10b981' : '#f87171' }}>
+                        {gatewayHealthResult.operational ? 'Gateway Operacional (Sistema Liberado)' : 'Gateway Inoperante (Bloqueio Preventivo Ativo)'}
+                      </strong>
+                      <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                        {gatewayHealthResult.message}
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 <div style={{
                   background: 'rgba(255, 255, 255, 0.03)',
