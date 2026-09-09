@@ -1517,8 +1517,8 @@ export function App() {
               />
             ) : (
               <div>
-                {/* Switcher de Sub-Abas do Passageiro */}
-                <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
+                {/* Switcher de Sub-Abas do Passageiro (Visível apenas em Desktop) */}
+                <div className="client-subnav-desktop" style={{ gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
                   <button
                     onClick={() => setClientSubTab('request')}
                     className={clientSubTab === 'request' ? 'btn-primary' : 'btn-outline'}
@@ -3436,6 +3436,70 @@ export function App() {
           onToggleFavorite={handleToggleFavorite}
           onRequestDirectRide={handleSelectDriverForBooking}
         />
+      )}
+
+      {/* Barra de Navegação Inferior Mobile (Menu no Rodapé Estilo App Nativo) */}
+      {activeTab === 'client' && (
+        <>
+          <div className="mobile-nav-spacer" />
+          <nav className="mobile-bottom-nav" aria-label="Menu Inferior de Navegação">
+            <button
+              onClick={() => {
+                setClientSubTab('request');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className={`mobile-nav-item ${clientSubTab === 'request' ? 'active' : ''}`}
+            >
+              <div className="icon-wrapper">
+                <Car size={19} />
+              </div>
+              <span>Solicitar</span>
+            </button>
+
+            <button
+              onClick={() => {
+                setClientSubTab('nearby_radar');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className={`mobile-nav-item ${clientSubTab === 'nearby_radar' ? 'active' : ''}`}
+            >
+              <div className="icon-wrapper">
+                <Radio size={19} className={clientSubTab === 'nearby_radar' ? 'animate-pulse' : ''} />
+              </div>
+              <span>Radar GPS</span>
+            </button>
+
+            <button
+              onClick={() => {
+                setClientSubTab('favorites');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className={`mobile-nav-item ${clientSubTab === 'favorites' ? 'active' : ''}`}
+            >
+              <div className="icon-wrapper">
+                <Heart 
+                  size={19} 
+                  fill={clientSubTab === 'favorites' ? '#ef4444' : 'none'} 
+                  color={clientSubTab === 'favorites' ? '#ef4444' : 'currentColor'} 
+                />
+              </div>
+              <span>Favoritos</span>
+            </button>
+
+            <button
+              onClick={() => {
+                setClientSubTab('history');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className={`mobile-nav-item ${clientSubTab === 'history' ? 'active' : ''}`}
+            >
+              <div className="icon-wrapper">
+                <Clock size={19} />
+              </div>
+              <span>Histórico</span>
+            </button>
+          </nav>
+        </>
       )}
     </div>
   );
