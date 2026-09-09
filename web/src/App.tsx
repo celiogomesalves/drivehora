@@ -388,7 +388,9 @@ export function App() {
   useEffect(() => {
     const loadUserProfiles = async () => {
       if (!currentUser) return;
-      if (currentUser.role === 'client') {
+      if (isUserAdmin) {
+        setActiveTab('admin');
+      } else if (currentUser.role === 'client') {
         const cp = await dbGetClientProfile(currentUser.id, currentUser.email);
         setClientProfile(cp);
         setActiveTab('client');
@@ -398,15 +400,11 @@ export function App() {
         if (dp?.isOnline !== undefined) {
           setIsDriverOnline(dp.isOnline);
         }
-        if (isUserAdmin) {
-          setActiveTab('admin');
-        } else {
-          setActiveTab('driver');
-        }
+        setActiveTab('driver');
       }
     };
     loadUserProfiles();
-  }, [currentUser, supabaseConnected]);
+  }, [currentUser, isUserAdmin, supabaseConnected]);
 
   // Carregar automaticamente a localização do ponto de partida via GPS ao iniciar a solicitação
   useEffect(() => {
