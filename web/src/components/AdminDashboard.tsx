@@ -4,10 +4,10 @@ import {
   Users, Car, DollarSign, ShieldCheck, CheckCircle2, 
   XCircle, Clock, RefreshCw, 
   TrendingUp, Database, Image, AlertTriangle, Eye, X, Check,
-  Settings, Bell, CreditCard, Sliders, Send, Save
+  Settings, Bell, CreditCard, Sliders, Send, Save, Trash2
 } from 'lucide-react';
 import { formatCurrency, formatCurrencyInput, parseCurrencyInput, formatPhone, formatCpf, formatPlate } from '../utils/formatters';
-import { dbGetAllDrivers, dbGetAllClients, dbAdminUpdateDriverStatus, type DbRide } from '../services/dbService';
+import { dbGetAllDrivers, dbGetAllClients, dbAdminUpdateDriverStatus, dbAdminDeleteDriver, type DbRide } from '../services/dbService';
 import { getSupabase } from '../supabase';
 import { getSystemSettings, saveSystemSettings, fetchSystemSettingsFromDb, type SystemSettings } from '../services/settingsService';
 
@@ -39,8 +39,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [drivers, setDrivers] = useState<DriverProfile[]>([]);
   const [clients, setClients] = useState<ClientProfile[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [driverFilter, setDriverFilter] = useState<'all' | 'under_review' | 'approved' | 'pending_docs'>('all');
+  const [driverFilter, setDriverFilter] = useState<'all' | 'under_review' | 'approved' | 'rejected' | 'pending_docs'>('all');
   const [previewDoc, setPreviewDoc] = useState<{ title: string; url: string } | null>(null);
+  const [driverToDelete, setDriverToDelete] = useState<DriverProfile | null>(null);
+  const [isDeletingDriver, setIsDeletingDriver] = useState(false);
 
   // Configurações Globais do Sistema
   const [systemSettings, setSystemSettings] = useState<SystemSettings>(getSystemSettings);
@@ -133,10 +135,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (res.success) {
       setDrivers(prev => prev.map(d => (d.id === driver.id || d.userId === driver.userId) ? { ...d, verificationStatus: status } : d));
       if (status === 'approved') {
-        alert(`✅ Motorista "${driver.vehicleBrand} ${driver.vehicleModel}" aprovado com sucesso!`);
+        alert(`✅ Motorista "${driver.driverName || driver.vehicleModel}" aprovado com sucesso!`);
+      } else if (status === 'rejected') {
+        alert(`❌ Motorista "${driver.driverName || driver.vehicleModel}" reprovado com sucesso!`);
+      } else if (status === 'under_review') {
+        alert(`⏳ Motorista "${driver.driverName || driver.vehicleModel}" colocado em análise/reavaliação.`);
       }
     } else {
       alert(`Erro ao atualizar status: ${res.error || 'Falha de comunicação com o banco'}`);
+    }
+  };
+
+  const handleDeleteDriverConfirm = async () => {
+    if (!driverToDelete) return;
+    setIsDeletingDriver(true);
+    const res = await dbAdminDeleteDriver(driverToDelete.id, driverToDelete.userId);
+    setIsDeletingDriver(false);
+    if (res.success) {
+      setDrivers(prev => prev.filter(d => d.id !== driverToDelete.id && d.userId !== driverToDelete.userId));
+      alert(`🗑️ Motorista "${driverToDelete.driverName || driverToDelete.fullName || 'Parceiro'}" foi excluído permanentemente do sistema!`);
+      setDriverToDelete(null);
+    } else {
+      alert(`Erro ao excluir motorista: ${res.error || 'Falha de comunicação com o banco'}`);
     }
   };
 
@@ -451,11 +471,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
 
             {/* Filtros */}
-            <div style={{ display: 'flex', gap: '6px' }}>
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
               {[
                 { key: 'all', label: 'Todos' },
                 { key: 'under_review', label: 'Em Análise ⏳' },
                 { key: 'approved', label: 'Aprovados ✅' },
+                { key: 'rejected', label: 'Reprovados ❌' },
                 { key: 'pending_docs', label: 'Sem Documentos' }
               ].map(f => (
                 <button
@@ -479,22 +500,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
 
           {filteredDrivers.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
-              <Car size={40} style={{ margin: '0 auto 10px', opacity: 0.5 }} />
-              <p>Nenhum motorista encontrado neste filtro.</p>
+            <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
+              Nenhum motorista encontrado com o filtro selecionado.
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               {filteredDrivers.map(d => {
                 const missingDocs = getMissingDriverDocs(d);
                 const isReadyToApprove = missingDocs.length === 0;
 
                 return (
-                  <div key={d.id} style={{
-                    background: 'rgba(15, 23, 42, 0.85)',
-                    border: isReadyToApprove ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(239, 68, 68, 0.2)',
+                  <div key={d.id} className="glass-card" style={{
+                    padding: '18px 20px',
                     borderRadius: '16px',
-                    padding: '18px',
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '14px',
@@ -510,8 +528,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                           <strong style={{ fontSize: '1.05rem', color: '#fff' }}>
-                            {d.vehicleBrand ? `${d.vehicleBrand} ${d.vehicleModel}` : 'Veículo não informado'} {d.vehicleYear ? `(${d.vehicleYear})` : ''}
+                            {d.driverName || (d.vehicleBrand ? `${d.vehicleBrand} ${d.vehicleModel}` : 'Motorista Parceiro')}
                           </strong>
+                          {d.vehicleBrand && (
+                            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                              ({d.vehicleBrand} {d.vehicleModel} {d.vehicleYear ? `- ${d.vehicleYear}` : ''})
+                            </span>
+                          )}
                           {d.vehiclePlate && (
                             <span style={{
                               fontSize: '0.75rem',
@@ -533,14 +556,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               ? 'rgba(16, 185, 129, 0.15)' 
                               : d.verificationStatus === 'under_review' 
                               ? 'rgba(245, 158, 11, 0.15)' 
+                              : d.verificationStatus === 'rejected'
+                              ? 'rgba(239, 68, 68, 0.25)'
                               : 'rgba(239, 68, 68, 0.15)',
                             color: d.verificationStatus === 'approved' 
                               ? '#10b981' 
                               : d.verificationStatus === 'under_review' 
                               ? '#f59e0b' 
+                              : d.verificationStatus === 'rejected'
+                              ? '#f87171'
                               : '#ef4444'
                           }}>
-                            {d.verificationStatus === 'approved' ? 'Aprovado ✅' : d.verificationStatus === 'under_review' ? 'Em Análise ⏳' : 'Pendente Docs ⚠️'}
+                            {d.verificationStatus === 'approved' 
+                              ? 'Aprovado ✅' 
+                              : d.verificationStatus === 'under_review' 
+                              ? 'Em Análise ⏳' 
+                              : d.verificationStatus === 'rejected'
+                              ? 'Reprovado ❌'
+                              : 'Pendente Docs ⚠️'}
                           </span>
                         </div>
 
@@ -586,12 +619,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           </button>
                         )}
 
+                        {d.verificationStatus !== 'rejected' && (
+                          <button
+                            onClick={() => handleUpdateStatus(d, 'rejected')}
+                            className="btn-outline"
+                            style={{ padding: '8px 14px', fontSize: '0.8rem', color: '#ef4444' }}
+                            title="Reprovar cadastro do motorista"
+                          >
+                            <XCircle size={14} /> Reprovar
+                          </button>
+                        )}
+
+                        {/* Botão de Excluir Motorista com Confirmação */}
                         <button
-                          onClick={() => handleUpdateStatus(d, 'rejected')}
+                          onClick={() => setDriverToDelete(d)}
                           className="btn-outline"
-                          style={{ padding: '8px 14px', fontSize: '0.8rem', color: '#ef4444' }}
+                          style={{
+                            padding: '8px 12px',
+                            fontSize: '0.8rem',
+                            color: '#ef4444',
+                            borderColor: 'rgba(239, 68, 68, 0.3)',
+                            background: 'rgba(239, 68, 68, 0.08)'
+                          }}
+                          title="Excluir motorista permanentemente"
                         >
-                          <XCircle size={14} /> Reprovar
+                          <Trash2 size={14} /> Excluir
                         </button>
                       </div>
                     </div>
@@ -1679,6 +1731,113 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 style={{ fontSize: '0.8rem', padding: '6px 16px' }}
               >
                 Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DE MOTORISTA */}
+      {driverToDelete && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.85)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px'
+        }}>
+          <div className="glass-panel" style={{
+            maxWidth: '480px',
+            width: '100%',
+            background: '#0f172a',
+            border: '1px solid rgba(239, 68, 68, 0.4)',
+            borderRadius: '20px',
+            padding: '24px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px',
+            boxShadow: '0 20px 50px rgba(0,0,0,0.8)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              <div style={{
+                width: '46px',
+                height: '46px',
+                borderRadius: '50%',
+                background: 'rgba(239, 68, 68, 0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#ef4444',
+                flexShrink: 0
+              }}>
+                <AlertTriangle size={24} />
+              </div>
+              <div>
+                <h4 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#fff', margin: 0 }}>
+                  Confirmar Exclusão
+                </h4>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '2px 0 0' }}>
+                  Esta ação é irreversível e removerá o motorista do sistema.
+                </p>
+              </div>
+            </div>
+
+            <div style={{
+              background: 'rgba(255, 255, 255, 0.03)',
+              borderRadius: '12px',
+              padding: '14px',
+              border: '1px solid var(--border-subtle)',
+              fontSize: '0.85rem',
+              color: '#cbd5e1',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px'
+            }}>
+              <div>Motorista: <strong>{driverToDelete.driverName || driverToDelete.fullName || 'Não informado'}</strong></div>
+              <div>Veículo: <strong>{driverToDelete.vehicleBrand} {driverToDelete.vehicleModel} ({driverToDelete.vehiclePlate || 'Sem placa'})</strong></div>
+              <div>Telefone: <strong>{formatPhone(driverToDelete.phone) || 'Não informado'}</strong></div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+              <button
+                type="button"
+                disabled={isDeletingDriver}
+                onClick={() => setDriverToDelete(null)}
+                className="btn-outline"
+                style={{ flex: 1, padding: '12px', fontSize: '0.85rem', justifyContent: 'center' }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingDriver}
+                onClick={handleDeleteDriverConfirm}
+                style={{
+                  flex: 2,
+                  padding: '12px',
+                  fontSize: '0.85rem',
+                  justifyContent: 'center',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  background: '#ef4444',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontWeight: 700,
+                  cursor: isDeletingDriver ? 'not-allowed' : 'pointer',
+                  opacity: isDeletingDriver ? 0.7 : 1
+                }}
+              >
+                {isDeletingDriver ? <RefreshCw size={15} className="animate-spin" /> : <Trash2 size={15} />}
+                {isDeletingDriver ? 'Excluindo...' : 'Sim, Excluir Motorista'}
               </button>
             </div>
           </div>

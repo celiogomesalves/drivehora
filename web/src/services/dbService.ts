@@ -769,6 +769,43 @@ export const dbAdminUpdateDriverStatus = async (
   return { success: true };
 };
 
+// 10.1 Excluir Registro de Motorista pelo Admin
+export const dbAdminDeleteDriver = async (
+  driverId: string,
+  userId?: string
+): Promise<{ success: boolean; error?: string }> => {
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      // 1. Excluir da tabela drivers
+      let query = sb.from('drivers').delete();
+      if (userId) {
+        query = query.or(`id.eq.${driverId},user_id.eq.${userId}`);
+      } else {
+        query = query.or(`id.eq.${driverId},user_id.eq.${driverId}`);
+      }
+      const res: any = await query;
+      if (res?.error) {
+        console.warn('Erro ao excluir motorista do Supabase:', res.error);
+        return { success: false, error: res.error.message };
+      }
+    } catch (e: any) {
+      console.warn('Erro ao excluir motorista:', e);
+      return { success: false, error: e.message };
+    }
+  }
+
+  // Limpar do localStorage
+  try {
+    const targetUserId = userId || (driverId.startsWith('driver_') ? driverId.replace('driver_', '') : driverId);
+    localStorage.removeItem(`drivehora_driver_profile_${targetUserId}`);
+    localStorage.removeItem(`drivehora_driver_online_${targetUserId}`);
+    localStorage.removeItem(`drivehora_driver_draft_${targetUserId}`);
+  } catch (e) {}
+
+  return { success: true };
+};
+
 // 11. Atualizar Status Online/Offline do Motorista no Banco Supabase
 export const dbUpdateDriverOnlineStatus = async (
   userId: string,
