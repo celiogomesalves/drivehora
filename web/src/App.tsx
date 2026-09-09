@@ -1633,7 +1633,7 @@ export function App() {
                   color: incomingRide.paymentMethod === 'cash' || incomingRide.paymentMethod === 'card_machine' ? '#f59e0b' : '#10b981',
                   fontWeight: 800
                 }}>
-                  {incomingRide.paymentMethod === 'pix' && '⚡ Pix pelo App (Asaas)'}
+                  {incomingRide.paymentMethod === 'pix' && '⚡ Pix pelo App'}
                   {incomingRide.paymentMethod === 'credit_card' && '💳 Cartão pelo App'}
                   {incomingRide.paymentMethod === 'cash' && `💵 Cobrar em Dinheiro (${formatCurrency(incomingRide.total)})`}
                   {incomingRide.paymentMethod === 'card_machine' && `📱 Cobrar na sua Maquininha (${formatCurrency(incomingRide.total)})`}
@@ -2119,7 +2119,7 @@ export function App() {
                       </label>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', marginTop: '6px' }}>
                         {[
-                          { id: 'pix', label: '⚡ Pix pelo App', desc: 'QR Code instantâneo (Asaas)' },
+                          { id: 'pix', label: '⚡ Pix pelo App', desc: 'QR Code e Copia e Cola instantâneo' },
                           { id: 'credit_card', label: '💳 Cartão pelo App', desc: 'Crédito ou Débito online' },
                           { id: 'cash', label: '💵 Dinheiro', desc: 'Pagar ao motorista no veículo' },
                           { id: 'card_machine', label: '📱 Maquininha', desc: 'Cartão direto com o motorista' }
@@ -2180,7 +2180,12 @@ export function App() {
                       }}>
                         <AlertTriangle size={20} color="#ef4444" style={{ flexShrink: 0 }} />
                         <div style={{ fontSize: '0.78rem', color: '#fca5a5', lineHeight: 1.4 }}>
-                          <strong>Indisponibilidade Momentânea:</strong> {gatewayHealthMsg || 'Nosso sistema de pagamentos está em validação técnica. As solicitações serão liberadas em instantes.'}
+                          <strong>Indisponibilidade Momentânea:</strong> Estamos realizando uma breve manutenção preventiva em nosso sistema de solicitações. O serviço será normalizado em instantes. Agradecemos a compreensão.
+                          {isUserAdmin && gatewayHealthMsg && (
+                            <div style={{ marginTop: '4px', fontSize: '0.7rem', color: '#fecaca', opacity: 0.85 }}>
+                              [Aviso Admin: {gatewayHealthMsg}]
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
@@ -3301,7 +3306,12 @@ export function App() {
                     }}>
                       <AlertTriangle size={20} color="#ef4444" style={{ flexShrink: 0, marginTop: '2px' }} />
                       <div style={{ fontSize: '0.8rem', color: '#fca5a5', lineHeight: 1.4 }}>
-                        <strong>Recepção de Corridas Suspensa:</strong> {gatewayHealthMsg || 'O sistema de pagamentos está em validação técnica. Ficar online está temporariamente desabilitado para garantir o recebimento seguro de suas corridas.'}
+                        <strong>Recepção de Corridas Suspensa:</strong> O recebimento de novas solicitações está temporariamente em manutenção preventiva. O sistema será normalizado em instantes.
+                        {isUserAdmin && gatewayHealthMsg && (
+                          <div style={{ marginTop: '4px', fontSize: '0.7rem', color: '#fecaca', opacity: 0.85 }}>
+                            [Aviso Admin: {gatewayHealthMsg}]
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -4009,7 +4019,7 @@ export function App() {
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <strong style={{ fontSize: '1.05rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                ⚡ Pagamento Pix (Asaas)
+                ⚡ Pagamento Pix Instantâneo
               </strong>
               <button
                 type="button"
