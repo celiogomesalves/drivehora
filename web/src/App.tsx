@@ -2215,6 +2215,33 @@ export function App() {
               <Smartphone size={14} />
               <span>Celular</span>
             </button>
+
+            {/* Saldo Discreto do Passageiro */}
+            {clientWallet && (currentUser.role === 'client' || isUserAdmin) && (
+              <div
+                style={{
+                  marginLeft: 'auto',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '5px 11px',
+                  borderRadius: '8px',
+                  background: clientWallet.balance >= 0 ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                  border: `1px solid ${clientWallet.balance >= 0 ? 'rgba(16, 185, 129, 0.35)' : 'rgba(239, 68, 68, 0.35)'}`,
+                  flexShrink: 0,
+                  whiteSpace: 'nowrap',
+                  alignSelf: 'center'
+                }}
+                title="Saldo em créditos disponível na carteira"
+              >
+                <span style={{ fontSize: '0.72rem', color: clientWallet.balance >= 0 ? '#a7f3d0' : '#fca5a5', fontWeight: 600 }}>
+                  Saldo
+                </span>
+                <strong style={{ fontSize: '0.82rem', color: clientWallet.balance >= 0 ? '#10b981' : '#ef4444', fontWeight: 800 }}>
+                  {formatCurrency(clientWallet.balance)}
+                </strong>
+              </div>
+            )}
           </nav>
         </div>
       </header>
@@ -3239,55 +3266,7 @@ export function App() {
                         /* Form de Solicitação */
                         <div className="glass-panel" style={{ padding: '28px' }}>
                           
-                          {/* Badge de Créditos Disponíveis na Carteira */}
-                          {clientWallet && clientWallet.balance > 0 && (
-                            <div style={{
-                              background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(5, 150, 105, 0.08) 100%)',
-                              border: '1px solid rgba(16, 185, 129, 0.35)',
-                              borderRadius: '16px',
-                              padding: '14px 16px',
-                              marginBottom: '20px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              gap: '12px'
-                            }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                <div style={{
-                                  width: '40px',
-                                  height: '40px',
-                                  borderRadius: '12px',
-                                  background: '#10b981',
-                                  color: '#fff',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  fontSize: '1.2rem',
-                                  flexShrink: 0
-                                }}>
-                                  🎁
-                                </div>
-                                <div>
-                                  <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#6ee7b7' }}>
-                                    Saldo de Créditos Disponível
-                                  </div>
-                                  <div style={{ fontSize: '0.78rem', color: '#cbd5e1' }}>
-                                    Será abatido automaticamente no valor desta corrida
-                                  </div>
-                                </div>
-                              </div>
-                              <div style={{
-                                fontSize: '1.1rem',
-                                fontWeight: 800,
-                                color: '#10b981',
-                                background: 'rgba(16, 185, 129, 0.15)',
-                                padding: '6px 14px',
-                                borderRadius: '10px'
-                              }}>
-                                {formatCurrency(clientWallet.balance)}
-                              </div>
-                            </div>
-                          )}
+
                       
                       {/* Banner de Agendamento Direto com Motorista Favorito Selecionado */}
                       {selectedDirectDriver && (
