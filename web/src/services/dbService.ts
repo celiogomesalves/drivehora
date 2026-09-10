@@ -37,6 +37,7 @@ export interface DbRide {
   isScheduled?: boolean;
   scheduledFor?: string;
   requiredAmenities?: string[];
+  favoriteDriverIds?: string[];
 }
 
 // Timeout helper para chamadas de banco nunca travarem
@@ -709,11 +710,12 @@ export const dbCreateRide = async (ride: DbRide): Promise<{ success: boolean; er
         res = await sb.from('rides').insert([payload]);
       }
 
-      // Persiste metadados estendidos na ponte global em tempo real (substatus, comodidades, agendamento)
+      // Persiste metadados estendidos na ponte global em tempo real (substatus, comodidades, agendamento, motoristas favoritos)
       await dbSetRideSubstatus(ride.id, ride.status || 'searching', {
         isScheduled: Boolean(ride.isScheduled),
         scheduledFor: ride.scheduledFor,
-        requiredAmenities: ride.requiredAmenities || []
+        requiredAmenities: ride.requiredAmenities || [],
+        favoriteDriverIds: ride.favoriteDriverIds || []
       });
 
       if (res?.error) {
@@ -740,7 +742,16 @@ export const dbCreateRide = async (ride: DbRide): Promise<{ success: boolean; er
 const SUBSTATUS_STORAGE_KEY = 'drivehora_rides_substatus_map';
 const SUBSTATUS_PROFILE_ID = 'app_global_ride_substatus';
 
-export const dbGetRidesSubstatusMap = async (): Promise<Record<string, { substatus: string; updatedAt: number; cancellationReason?: string; cancelledBy?: string; isScheduled?: boolean; scheduledFor?: string; requiredAmenities?: string[] }>> => {
+export const dbGetRidesSubstatusMap = async (): Promise<Record<string, { 
+  substatus: string; 
+  updatedAt: number; 
+  cancellationReason?: string; 
+  cancelledBy?: string; 
+  isScheduled?: boolean; 
+  scheduledFor?: string; 
+  requiredAmenities?: string[];
+  favoriteDriverIds?: string[];
+}>> => {
   let map: Record<string, any> = {};
   try {
     const raw = localStorage.getItem(SUBSTATUS_STORAGE_KEY) || localStorage.getItem('drivehora_ride_substatus_map');
@@ -774,6 +785,7 @@ export const dbSetRideSubstatus = async (
     isScheduled?: boolean;
     scheduledFor?: string;
     requiredAmenities?: string[];
+    favoriteDriverIds?: string[];
   }
 ): Promise<void> => {
   try {

@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import { Star, ShieldAlert, CheckCircle2, MessageSquare } from 'lucide-react';
+import { Star, ShieldAlert, CheckCircle2, MessageSquare, Heart } from 'lucide-react';
 import { dbSubmitRating, type DbRide } from '../services/dbService';
 
 interface RatingModalProps {
   ride: DbRide;
   currentUserRole: 'client' | 'driver';
   currentUserId: string;
+  isFavorite?: boolean;
+  onToggleFavorite?: (driverId: string) => Promise<void> | void;
   onRatingCompleted: () => void;
 }
 
@@ -13,11 +15,14 @@ export function RatingModal({
   ride,
   currentUserRole,
   currentUserId,
+  isFavorite = false,
+  onToggleFavorite,
   onRatingCompleted
 }: RatingModalProps) {
   const [score, setScore] = useState<number>(5);
   const [hoverScore, setHoverScore] = useState<number>(0);
   const [comment, setComment] = useState<string>('');
+  const [wantsToFavorite, setWantsToFavorite] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -40,6 +45,15 @@ export function RatingModal({
 
     setIsSubmitting(true);
     try {
+      // Se for passageiro e optou por favoritar motorista que ainda não é favorito
+      if (isClient && wantsToFavorite && !isFavorite && onToggleFavorite && targetUserId) {
+        try {
+          await onToggleFavorite(targetUserId);
+        } catch (e) {
+          console.warn('Erro ao favoritar motorista no encerramento da avaliação:', e);
+        }
+      }
+
       await dbSubmitRating({
         id: 'rating_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
         rideId: ride.id,
@@ -207,6 +221,62 @@ export function RatingModal({
               }}
             />
           </div>
+
+          {/* Opção de Favoritar Motorista (se for passageiro avaliando motorista) */}
+          {isClient && targetUserId && (
+            <div
+              style={{
+                padding: '10px 14px',
+                borderRadius: '12px',
+                background: isFavorite ? 'rgba(239, 68, 68, 0.08)' : 'rgba(255, 255, 255, 0.04)',
+                border: isFavorite ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(255, 255, 255, 0.08)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                cursor: isFavorite ? 'default' : 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+              onClick={() => {
+                if (!isFavorite) {
+                  setWantsToFavorite(!wantsToFavorite);
+                }
+              }}
+            >
+              {isFavorite ? (
+                <>
+                  <Heart size={20} fill="#ef4444" color="#ef4444" style={{ flexShrink: 0 }} />
+                  <div style={{ fontSize: '0.82rem', color: '#fca5a5', lineHeight: 1.3 }}>
+                    <strong>Motorista Favorito!</strong> Este parceiro já está na sua lista prioritária.
+                  </div>
+                </>
+              ) : (
+                <>
+                  <input
+                    type="checkbox"
+                    id="favorite-driver-check"
+                    checked={wantsToFavorite}
+                    onChange={(e) => setWantsToFavorite(e.target.checked)}
+                    style={{ width: '18px', height: '18px', accentColor: '#ef4444', cursor: 'pointer' }}
+                  />
+                  <label
+                    htmlFor="favorite-driver-check"
+                    style={{
+                      fontSize: '0.82rem',
+                      color: wantsToFavorite ? '#fff' : 'var(--text-secondary)',
+                      cursor: 'pointer',
+                      lineHeight: 1.3
+                    }}
+                  >
+                    <span style={{ fontWeight: 700, color: wantsToFavorite ? '#f87171' : '#e2e8f0' }}>
+                      ⭐ Adicionar aos meus Motoristas Favoritos
+                    </span>
+                    <br />
+                    Ele terá prioridade na busca das suas próximas corridas!
+                  </label>
+                </>
+              )}
+            </div>
+          )}
 
           {errorMessage && (
             <div

@@ -651,6 +651,7 @@ export function App() {
 
   // Identificar solicitação de corrida pendente em busca de motorista
   // Exclui a si próprio se o usuário logado for o passageiro da corrida
+  // Prioridade para Motoristas Favoritos: se houver favoritos online, apenas eles recebem nos primeiros 45s
   const incomingRide = rides.find(r => {
     if (r.status !== 'searching') return false;
     if (currentUser && r.clientId === currentUser.id) return false;
@@ -659,6 +660,32 @@ export function App() {
         return false;
       }
     }
+
+    // Regra de Prioridade de Despacho para Motoristas Favoritos
+    const favDriverIds = r.favoriteDriverIds || [];
+    if (favDriverIds.length > 0) {
+      const isCurrentDriverFavorite = Boolean(
+        (currentUser?.id && favDriverIds.includes(currentUser.id)) ||
+        (driverProfile?.id && favDriverIds.includes(driverProfile.id))
+      );
+
+      // Verifica se há motoristas favoritos online
+      const hasOnlineFavorites = allDriversList.some(
+        d => d.isOnline && (d.verificationStatus === 'approved' || isSuperAdminEmail(d.phone || '')) &&
+             (favDriverIds.includes(d.id) || favDriverIds.includes(d.userId))
+      );
+
+      const elapsedSeconds = Math.floor((now - (r.createdAt || now)) / 1000);
+      const FAVORITE_WINDOW_SECS = 45;
+
+      // Se há favoritos online e estamos dentro da janela de exclusividade de 45s:
+      if (hasOnlineFavorites && elapsedSeconds < FAVORITE_WINDOW_SECS) {
+        if (!isCurrentDriverFavorite) {
+          return false; // Bloqueia outros motoristas durante os primeiros 45 segundos
+        }
+      }
+    }
+
     return true;
   });
 
@@ -1014,7 +1041,8 @@ export function App() {
               finishedAt: d.finished_at ? new Date(d.finished_at).getTime() : undefined,
               isScheduled: Boolean((sub as any)?.isScheduled || d.ride_type === 'scheduled' || d.scheduled_for || d.is_scheduled || d.isScheduled),
               scheduledFor: (sub as any)?.scheduledFor || d.scheduled_for || d.scheduledFor,
-              requiredAmenities: (sub as any)?.requiredAmenities || d.required_amenities || d.requiredAmenities || []
+              requiredAmenities: (sub as any)?.requiredAmenities || d.required_amenities || d.requiredAmenities || [],
+              favoriteDriverIds: (sub as any)?.favoriteDriverIds || d.favorite_driver_ids || d.favoriteDriverIds || []
             };
           });
           setRides(formatted);
@@ -1050,7 +1078,8 @@ export function App() {
             driverAcknowledgedAt: d.driverAcknowledgedAt ? Number(d.driverAcknowledgedAt) : (d.driver_acknowledged_at ? new Date(d.driver_acknowledged_at).getTime() : undefined),
             isScheduled: Boolean((sub as any)?.isScheduled || d.ride_type === 'scheduled' || d.scheduled_for || d.is_scheduled || d.isScheduled),
             scheduledFor: (sub as any)?.scheduledFor || d.scheduled_for || d.scheduledFor,
-            requiredAmenities: (sub as any)?.requiredAmenities || d.required_amenities || d.requiredAmenities || []
+            requiredAmenities: (sub as any)?.requiredAmenities || d.required_amenities || d.requiredAmenities || [],
+            favoriteDriverIds: (sub as any)?.favoriteDriverIds || d.favorite_driver_ids || d.favoriteDriverIds || []
           };
         });
         setRides(mapped);
@@ -1291,7 +1320,8 @@ export function App() {
       createdAt: Date.now(),
       isScheduled: isScheduledRide,
       scheduledFor: isScheduledRide ? `${scheduledDate}T${scheduledTime}` : undefined,
-      requiredAmenities: selectedAmenities.length > 0 ? selectedAmenities : undefined
+      requiredAmenities: selectedAmenities.length > 0 ? selectedAmenities : undefined,
+      favoriteDriverIds: favoriteDriverIds.length > 0 ? favoriteDriverIds : undefined
     };
 
     // 1. Atualização imediata no estado local do cliente
@@ -2512,6 +2542,30 @@ export function App() {
                 </button>
               </div>
             </div>
+
+            {/* Banner de Motorista Favorito VIP */}
+            {Boolean(
+              (currentUser?.id && incomingRide.favoriteDriverIds?.includes(currentUser.id)) ||
+              (driverProfile?.id && incomingRide.favoriteDriverIds?.includes(driverProfile.id))
+            ) && (
+              <div style={{
+                marginBottom: '14px',
+                padding: '10px 14px',
+                borderRadius: '14px',
+                background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.25), rgba(245, 158, 11, 0.25))',
+                border: '1.5px solid rgba(245, 158, 11, 0.6)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                color: '#fef08a',
+                fontSize: '0.84rem',
+                fontWeight: 800,
+                boxShadow: '0 0 15px rgba(245, 158, 11, 0.3)'
+              }}>
+                <Heart size={18} fill="#ef4444" color="#ef4444" style={{ flexShrink: 0 }} />
+                <span>⭐ VOCÊ É MOTORISTA FAVORITO DESTE PASSAGEIRO! Chamada prioritária exclusiva.</span>
+              </div>
+            )}
 
             {/* Itinerário */}
             <div style={{
@@ -4216,6 +4270,30 @@ export function App() {
                               <p style={{ margin: '6px 0 0 0', fontSize: '0.8rem', color: '#c7d2fe', lineHeight: 1.4 }}>
                                 A solicitação permanece ativa enquanto houver motoristas disponíveis. Se não houver resposta dentro de 10 minutos, a busca será cancelada automaticamente.
                               </p>
+
+                              {Boolean(activeClientRide.favoriteDriverIds && activeClientRide.favoriteDriverIds.length > 0) && (
+                                <div style={{
+                                  marginTop: '8px',
+                                  padding: '6px 10px',
+                                  borderRadius: '8px',
+                                  background: 'rgba(245, 158, 11, 0.15)',
+                                  border: '1px solid rgba(245, 158, 11, 0.35)',
+                                  fontSize: '0.78rem',
+                                  color: '#fef08a',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '6px'
+                                }}>
+                                  <Heart size={14} fill="#ef4444" color="#ef4444" />
+                                  <span>
+                                    {Math.floor((now - (activeClientRide.createdAt || now)) / 1000) < 45 ? (
+                                      <>⭐ <strong>Priorizando seus Motoristas Favoritos</strong> ({Math.max(0, 45 - Math.floor((now - (activeClientRide.createdAt || now)) / 1000))}s)...</>
+                                    ) : (
+                                      <>⭐ Busca expandida para todos os parceiros credenciados na sua região.</>
+                                    )}
+                                  </span>
+                                </div>
+                              )}
                             </div>
                           </div>
                         )
@@ -4973,6 +5051,8 @@ export function App() {
                               const rideTime = r.createdAt || (r as any).created_at ? new Date(r.createdAt || (r as any).created_at) : null;
                               const isExpanded = !!expandedClientRideIds[r.id];
                               const assignedDriver = allDriversList.find(d => d.userId === r.driverId || d.id === r.driverId);
+                              const targetDriverId = r.driverId || assignedDriver?.id || assignedDriver?.userId;
+                              const isDriverFav = Boolean(targetDriverId && favoriteDriverIds.includes(targetDriverId));
                               const amenities = safeAmenitiesArray(r.requiredAmenities);
 
                               return (
@@ -5026,6 +5106,34 @@ export function App() {
                                       </div>
                                       <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                                         <span>Motorista: <strong>{r.driverName || assignedDriver?.driverName || assignedDriver?.fullName || 'Aguardando'}</strong></span>
+                                        {targetDriverId && (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleToggleFavorite(targetDriverId);
+                                              showToast(isDriverFav ? 'Motorista removido dos favoritos' : '⭐ Motorista adicionado aos seus favoritos!', isDriverFav ? 'info' : 'success');
+                                            }}
+                                            style={{
+                                              background: isDriverFav ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255, 255, 255, 0.08)',
+                                              border: isDriverFav ? '1px solid rgba(239, 68, 68, 0.5)' : '1px solid rgba(255, 255, 255, 0.15)',
+                                              borderRadius: '12px',
+                                              padding: '2px 8px',
+                                              fontSize: '0.72rem',
+                                              fontWeight: 700,
+                                              color: isDriverFav ? '#fca5a5' : '#cbd5e1',
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              gap: '4px',
+                                              cursor: 'pointer',
+                                              transition: 'all 0.15s ease'
+                                            }}
+                                            title={isDriverFav ? 'Clique para desfavoritar este motorista' : 'Clique para favoritar este motorista'}
+                                          >
+                                            <Heart size={12} fill={isDriverFav ? '#ef4444' : 'none'} color={isDriverFav ? '#ef4444' : '#cbd5e1'} />
+                                            <span>{isDriverFav ? 'Favorito' : 'Favoritar'}</span>
+                                          </button>
+                                        )}
                                         {rideTime && (
                                           <>
                                             <span>•</span>
@@ -5136,11 +5244,38 @@ export function App() {
                                               </div>
                                             )}
                                           </div>
-                                          {assignedDriver?.phone && (
-                                            <div style={{ fontSize: '0.75rem', color: '#a7f3d0' }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            {targetDriverId && (
+                                              <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  handleToggleFavorite(targetDriverId);
+                                                  showToast(isDriverFav ? 'Motorista removido dos favoritos' : '⭐ Motorista adicionado aos seus favoritos!', isDriverFav ? 'info' : 'success');
+                                                }}
+                                                className="btn-outline"
+                                                style={{
+                                                  fontSize: '0.75rem',
+                                                  padding: '5px 10px',
+                                                  borderRadius: '8px',
+                                                  background: isDriverFav ? 'rgba(239, 68, 68, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                                                  borderColor: isDriverFav ? 'rgba(239, 68, 68, 0.5)' : 'rgba(255, 255, 255, 0.2)',
+                                                  color: isDriverFav ? '#fca5a5' : '#cbd5e1',
+                                                  display: 'inline-flex',
+                                                  alignItems: 'center',
+                                                  gap: '5px'
+                                                }}
+                                              >
+                                                <Heart size={14} fill={isDriverFav ? '#ef4444' : 'none'} color={isDriverFav ? '#ef4444' : 'currentColor'} />
+                                                <span>{isDriverFav ? 'Favorito' : 'Favoritar Motorista'}</span>
+                                              </button>
+                                            )}
+                                            {assignedDriver?.phone && (
+                                              <div style={{ fontSize: '0.75rem', color: '#a7f3d0' }}>
                                               📞 {assignedDriver.phone}
                                             </div>
-                                          )}
+                                            )}
+                                          </div>
                                         </div>
                                       )}
 
@@ -5257,6 +5392,8 @@ export function App() {
                               const rideTime = r.createdAt || (r as any).created_at ? new Date(r.createdAt || (r as any).created_at) : null;
                               const isExpanded = !!expandedClientRideIds[r.id];
                               const assignedDriver = allDriversList.find(d => d.userId === r.driverId || d.id === r.driverId);
+                              const targetDriverId = r.driverId || assignedDriver?.id || assignedDriver?.userId;
+                              const isDriverFav = Boolean(targetDriverId && favoriteDriverIds.includes(targetDriverId));
                               const amenities = safeAmenitiesArray(r.requiredAmenities);
 
                               return (
@@ -5312,6 +5449,34 @@ export function App() {
                                       </div>
                                       <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                                         <span>Motorista: <strong>{r.driverName || assignedDriver?.driverName || assignedDriver?.fullName || 'Sem motorista'}</strong></span>
+                                        {targetDriverId && (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleToggleFavorite(targetDriverId);
+                                              showToast(isDriverFav ? 'Motorista removido dos favoritos' : '⭐ Motorista adicionado aos seus favoritos!', isDriverFav ? 'info' : 'success');
+                                            }}
+                                            style={{
+                                              background: isDriverFav ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255, 255, 255, 0.08)',
+                                              border: isDriverFav ? '1px solid rgba(239, 68, 68, 0.5)' : '1px solid rgba(255, 255, 255, 0.15)',
+                                              borderRadius: '12px',
+                                              padding: '2px 8px',
+                                              fontSize: '0.72rem',
+                                              fontWeight: 700,
+                                              color: isDriverFav ? '#fca5a5' : '#cbd5e1',
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              gap: '4px',
+                                              cursor: 'pointer',
+                                              transition: 'all 0.15s ease'
+                                            }}
+                                            title={isDriverFav ? 'Clique para desfavoritar este motorista' : 'Clique para favoritar este motorista'}
+                                          >
+                                            <Heart size={12} fill={isDriverFav ? '#ef4444' : 'none'} color={isDriverFav ? '#ef4444' : '#cbd5e1'} />
+                                            <span>{isDriverFav ? 'Favorito' : 'Favoritar'}</span>
+                                          </button>
+                                        )}
                                         {rideTime && (
                                           <>
                                             <span>•</span>
@@ -5422,11 +5587,38 @@ export function App() {
                                               </div>
                                             )}
                                           </div>
-                                          {assignedDriver?.phone && (
-                                            <div style={{ fontSize: '0.75rem', color: '#a7f3d0' }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            {targetDriverId && (
+                                              <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  handleToggleFavorite(targetDriverId);
+                                                  showToast(isDriverFav ? 'Motorista removido dos favoritos' : '⭐ Motorista adicionado aos seus favoritos!', isDriverFav ? 'info' : 'success');
+                                                }}
+                                                className="btn-outline"
+                                                style={{
+                                                  fontSize: '0.75rem',
+                                                  padding: '5px 10px',
+                                                  borderRadius: '8px',
+                                                  background: isDriverFav ? 'rgba(239, 68, 68, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                                                  borderColor: isDriverFav ? 'rgba(239, 68, 68, 0.5)' : 'rgba(255, 255, 255, 0.2)',
+                                                  color: isDriverFav ? '#fca5a5' : '#cbd5e1',
+                                                  display: 'inline-flex',
+                                                  alignItems: 'center',
+                                                  gap: '5px'
+                                                }}
+                                              >
+                                                <Heart size={14} fill={isDriverFav ? '#ef4444' : 'none'} color={isDriverFav ? '#ef4444' : 'currentColor'} />
+                                                <span>{isDriverFav ? 'Favorito' : 'Favoritar Motorista'}</span>
+                                              </button>
+                                            )}
+                                            {assignedDriver?.phone && (
+                                              <div style={{ fontSize: '0.75rem', color: '#a7f3d0' }}>
                                               📞 {assignedDriver.phone}
                                             </div>
-                                          )}
+                                            )}
+                                          </div>
                                         </div>
                                       )}
 
@@ -7483,6 +7675,8 @@ export function App() {
           ride={activeRatingRide}
           currentUserRole={currentUser.role === 'driver' ? 'driver' : 'client'}
           currentUserId={currentUser.id}
+          isFavorite={Boolean(activeRatingRide.driverId && favoriteDriverIds.includes(activeRatingRide.driverId))}
+          onToggleFavorite={handleToggleFavorite}
           onRatingCompleted={() => {
             setActiveRatingRide(null);
             setCurrentRideId(null);
