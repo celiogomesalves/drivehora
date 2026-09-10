@@ -5,7 +5,8 @@ import {
   Radio, Award, PlayCircle, Compass, Database, 
   X, Check, LogOut, MapPin, Crown, AlertTriangle, UserCheck,
   BellRing, Volume2, VolumeX, Ban, AlertOctagon, Heart, ShieldAlert, RotateCcw,
-  Filter, Archive, ArchiveRestore, Trash2, CreditCard
+  Filter, Archive, ArchiveRestore, Trash2, CreditCard,
+  ChevronDown, ChevronUp
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import confetti from 'canvas-confetti';
@@ -31,7 +32,7 @@ import {
   dbGetClientProfile, dbGetDriverProfile, dbGetAllDrivers,
   dbCreateRide, dbUpdateRide, dbCancelRide, dbAcknowledgeRide, dbUpdateDriverOnlineStatus, dbUpdateDriverLocation,
   dbGetFavoriteDriverIds, dbToggleFavoriteDriver, dbSaveUserDeviceToken, dbCheckUserSession,
-  dbUpdateDriverPaymentPrefs, type DbRide 
+  type DbRide 
 } from './services/dbService';
 import { requestWebPushToken, onForegroundMessage } from './services/firebase';
 import { getSystemSettings, fetchSystemSettingsFromDb, type SystemSettings } from './services/settingsService';
@@ -297,28 +298,15 @@ export function App() {
     }
   };
 
-  // Preferências de Pagamento do Motorista
-  const [driverAcceptsCash, setDriverAcceptsCash] = useState<boolean>(() => {
-    try {
-      const saved = localStorage.getItem(`drivehora_driver_payprefs_${currentUser?.id}`);
-      if (saved) return JSON.parse(saved).acceptsCash ?? true;
-      return true;
-    } catch { return true; }
-  });
-  const [driverHasCardMachine, setDriverHasCardMachine] = useState<boolean>(() => {
-    try {
-      const saved = localStorage.getItem(`drivehora_driver_payprefs_${currentUser?.id}`);
-      if (saved) return JSON.parse(saved).hasCardMachine ?? true;
-      return true;
-    } catch { return true; }
-  });
-  const [driverPixKey, setDriverPixKey] = useState<string>(() => {
-    try {
-      const saved = localStorage.getItem(`drivehora_driver_payprefs_${currentUser?.id}`);
-      if (saved) return JSON.parse(saved).pixKey || '';
-      return '';
-    } catch { return ''; }
-  });
+  const [driverOnboardingInitialStep, setDriverOnboardingInitialStep] = useState<number>(1);
+  const [expandedDriverRideIds, setExpandedDriverRideIds] = useState<Record<string, boolean>>({});
+
+  const toggleDriverRideExpand = (rideId: string) => {
+    setExpandedDriverRideIds(prev => ({
+      ...prev,
+      [rideId]: !prev[rideId]
+    }));
+  };
 
   // Verificação de Sessão Única Concorrente (Supabase Realtime + Polling a cada 5s com Grace Period)
   useEffect(() => {
@@ -3666,6 +3654,7 @@ export function App() {
               <DriverOnboarding
                 user={currentUser}
                 initialProfile={driverProfile}
+                initialStep={driverOnboardingInitialStep}
                 onComplete={(dp) => {
                   setDriverProfile(dp);
                   if (dp.fullName) {
@@ -3697,6 +3686,7 @@ export function App() {
                 <DriverOnboarding
                   user={currentUser}
                   initialProfile={driverProfile}
+                  initialStep={driverOnboardingInitialStep}
                   onComplete={(dp) => {
                     setDriverProfile(dp);
                     setShowDriverProfileEdit(false);
@@ -3866,7 +3856,10 @@ export function App() {
                       )}
 
                       <button
-                        onClick={() => setShowDriverProfileEdit(true)}
+                        onClick={() => {
+                          setDriverOnboardingInitialStep(1);
+                          setShowDriverProfileEdit(true);
+                        }}
                         className="btn-outline"
                         style={{ fontSize: '0.75rem', padding: '6px 10px' }}
                         title="Editar / Cadastrar dados do veículo e CNH"
@@ -3989,113 +3982,32 @@ export function App() {
                     </div>
                   </div>
 
-                  {/* Card de Preferências de Pagamento do Motorista */}
-                  <div id="driver-payment-prefs" style={{
-                    background: 'rgba(15, 23, 42, 0.75)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: '14px',
-                    padding: '16px',
-                    marginBottom: '20px'
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                      <CreditCard size={18} color="#818cf8" />
-                      <strong style={{ fontSize: '0.9rem', color: '#fff' }}>Minhas Formas de Recebimento</strong>
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                        <span>💵 Aceito receber corridas em Dinheiro</span>
-                        <input
-                          type="checkbox"
-                          checked={driverAcceptsCash}
-                          onChange={(e) => {
-                            const val = e.target.checked;
-                            setDriverAcceptsCash(val);
-                            if (currentUser?.id) {
-                              dbUpdateDriverPaymentPrefs(currentUser.id, {
-                                acceptsCash: val,
-                                hasCardMachine: driverHasCardMachine,
-                                pixKey: driverPixKey
-                              });
-                            }
-                            showToast(val ? 'Você receberá chamados em dinheiro.' : 'Chamados em dinheiro desativados.', 'info');
-                          }}
-                          style={{ width: '18px', height: '18px', accentColor: '#10b981' }}
-                        />
-                      </label>
-
-                      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                        <span>📱 Possuo maquininha própria de cartão</span>
-                        <input
-                          type="checkbox"
-                          checked={driverHasCardMachine}
-                          onChange={(e) => {
-                            const val = e.target.checked;
-                            setDriverHasCardMachine(val);
-                            if (currentUser?.id) {
-                              dbUpdateDriverPaymentPrefs(currentUser.id, {
-                                acceptsCash: driverAcceptsCash,
-                                hasCardMachine: val,
-                                pixKey: driverPixKey
-                              });
-                            }
-                            showToast(val ? 'Você receberá chamados com maquininha.' : 'Chamados com maquininha desativados.', 'info');
-                          }}
-                          style={{ width: '18px', height: '18px', accentColor: '#10b981' }}
-                        />
-                      </label>
-
-                      <div style={{ paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-                        <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
-                          🔑 Minha Chave Pix (para conferência de repasses):
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="CPF, E-mail, Celular ou Chave Aleatória"
-                          value={driverPixKey}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setDriverPixKey(val);
-                            if (currentUser?.id) {
-                              dbUpdateDriverPaymentPrefs(currentUser.id, {
-                                acceptsCash: driverAcceptsCash,
-                                hasCardMachine: driverHasCardMachine,
-                                pixKey: val
-                              });
-                            }
-                          }}
-                          className="input-field"
-                          style={{ width: '100%', fontSize: '0.8rem', padding: '6px 10px' }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Status do Radar */}
-                  <div style={{
-                    padding: '14px',
-                    borderRadius: '12px',
-                    background: isDriverOnline ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255, 255, 255, 0.04)',
-                    border: '1px solid var(--border-subtle)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    marginBottom: '20px'
-                  }}>
-                    <Compass size={20} color={isDriverOnline ? '#10b981' : 'var(--text-muted)'} />
-                    <div style={{ flex: 1, fontSize: '0.85rem' }}>
-                      <span style={{ fontWeight: 700, color: isDriverOnline ? '#10b981' : 'var(--text-muted)' }}>
-                        {isDriverOnline ? 'Radar de Passageiros Ativo' : 'Radar Desconectado'}
-                      </span>
-                      <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: 0 }}>
-                        {isDriverOnline
-                          ? 'Sua localização está sendo transmitida e você receberá solicitações em tempo real.'
-                          : 'Clique no botão acima para ficar ONLINE e começar a receber chamadas de passageiros.'}
-                      </p>
-                    </div>
-                  </div>
-
                   {driverSubTab === 'radar' ? (
                     <>
+                      {/* Status do Radar */}
+                      <div style={{
+                        padding: '14px',
+                        borderRadius: '12px',
+                        background: isDriverOnline ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255, 255, 255, 0.04)',
+                        border: '1px solid var(--border-subtle)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        marginBottom: '20px'
+                      }}>
+                        <Compass size={20} color={isDriverOnline ? '#10b981' : 'var(--text-muted)'} />
+                        <div style={{ flex: 1, fontSize: '0.85rem' }}>
+                          <span style={{ fontWeight: 700, color: isDriverOnline ? '#10b981' : 'var(--text-muted)' }}>
+                            {isDriverOnline ? 'Radar de Passageiros Ativo' : 'Radar Desconectado'}
+                          </span>
+                          <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: 0 }}>
+                            {isDriverOnline
+                              ? 'Sua localização está sendo transmitida e você receberá solicitações em tempo real.'
+                              : 'Clique no botão acima para ficar ONLINE e começar a receber chamadas de passageiros.'}
+                          </p>
+                        </div>
+                      </div>
+
                       {/* Lista de Chamadas em Aberto */}
                       <div className="glass-panel" style={{ padding: '28px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
@@ -4562,48 +4474,181 @@ export function App() {
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                               {filteredDriverRides.map(r => {
                                 const rideTime = r.createdAt || (r as any).created_at ? new Date(r.createdAt || (r as any).created_at) : null;
+                                const isExpanded = !!expandedDriverRideIds[r.id];
+
                                 return (
-                                  <div key={r.id} style={{
-                                    background: 'rgba(15, 23, 42, 0.85)',
-                                    border: '1px solid var(--border-subtle)',
-                                    borderRadius: '14px',
-                                    padding: '16px',
-                                    display: 'flex',
-                                    justifyContent: 'space-between',
-                                    alignItems: 'center',
-                                    flexWrap: 'wrap',
-                                    gap: '10px'
-                                  }}>
-                                    <div>
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                                        <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>{r.origin} ➔ {r.destination}</span>
-                                        <span style={{
-                                          fontSize: '0.7rem',
-                                          fontWeight: 700,
-                                          padding: '2px 8px',
-                                          borderRadius: '10px',
-                                          background: r.status === 'finished' ? 'rgba(16, 185, 129, 0.15)' : r.status === 'in_progress' ? 'rgba(59, 130, 246, 0.15)' : (r.status === 'accepted' || r.status === 'to_pickup') ? 'rgba(245, 158, 11, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                                          color: r.status === 'finished' ? '#10b981' : r.status === 'in_progress' ? '#3b82f6' : (r.status === 'accepted' || r.status === 'to_pickup') ? '#f59e0b' : '#ef4444'
-                                        }}>
-                                          {r.status === 'finished' ? 'CONCLUÍDA' : r.status === 'in_progress' ? 'EM ANDAMENTO' : r.status === 'to_pickup' ? 'A CAMINHO' : r.status === 'accepted' ? 'CONFIRMADA' : r.status === 'searching' ? 'BUSCANDO' : 'CANCELADA'}
-                                        </span>
-                                      </div>
-                                      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                                        Passageiro: <strong>{r.clientName || 'Cliente'}</strong> • Horas: <strong>{r.hours}h</strong> ({formatCurrency(r.hourlyRate)}/h)
-                                      </div>
-                                      {rideTime && (
-                                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '3px' }}>
-                                          Data: {rideTime.toLocaleDateString('pt-BR')} às {rideTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                  <div
+                                    key={r.id}
+                                    style={{
+                                      background: 'rgba(15, 23, 42, 0.85)',
+                                      border: isExpanded ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid var(--border-subtle)',
+                                      borderRadius: '14px',
+                                      overflow: 'hidden',
+                                      transition: 'all 0.2s ease-in-out'
+                                    }}
+                                  >
+                                    {/* Cabeçalho do Card (Sempre Visível, Clicável para Expandir/Recolher) */}
+                                    <div
+                                      onClick={() => toggleDriverRideExpand(r.id)}
+                                      style={{
+                                        padding: '14px 16px',
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        cursor: 'pointer',
+                                        userSelect: 'none',
+                                        gap: '12px'
+                                      }}
+                                      title={isExpanded ? 'Clique para recolher detalhes' : 'Clique para ver detalhes completos'}
+                                    >
+                                      <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                                          <span style={{
+                                            fontWeight: 700,
+                                            fontSize: '0.9rem',
+                                            color: '#fff',
+                                            whiteSpace: 'nowrap',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                            maxWidth: '220px'
+                                          }}>
+                                            {r.origin?.split(',')[0] || r.origin} ➔ {r.destination?.split(',')[0] || r.destination}
+                                          </span>
+                                          <span style={{
+                                            fontSize: '0.68rem',
+                                            fontWeight: 700,
+                                            padding: '2px 8px',
+                                            borderRadius: '10px',
+                                            background: r.status === 'finished' ? 'rgba(16, 185, 129, 0.15)' : r.status === 'in_progress' ? 'rgba(59, 130, 246, 0.15)' : (r.status === 'accepted' || r.status === 'to_pickup') ? 'rgba(245, 158, 11, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                                            color: r.status === 'finished' ? '#10b981' : r.status === 'in_progress' ? '#3b82f6' : (r.status === 'accepted' || r.status === 'to_pickup') ? '#f59e0b' : '#ef4444'
+                                          }}>
+                                            {r.status === 'finished' ? 'CONCLUÍDA' : r.status === 'in_progress' ? 'EM ANDAMENTO' : r.status === 'to_pickup' ? 'A CAMINHO' : r.status === 'accepted' ? 'CONFIRMADA' : r.status === 'searching' ? 'BUSCANDO' : 'CANCELADA'}
+                                          </span>
                                         </div>
-                                      )}
+                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                          <span>{r.clientName || 'Cliente'}</span>
+                                          {rideTime && (
+                                            <>
+                                              <span>•</span>
+                                              <span>{rideTime.toLocaleDateString('pt-BR')} às {rideTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                                            </>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+                                        <div style={{ textAlign: 'right' }}>
+                                          <div style={{ fontWeight: 800, color: '#10b981', fontSize: '1rem', whiteSpace: 'nowrap' }}>
+                                            Ganho: {formatCurrency(r.driverNet)}
+                                          </div>
+                                          <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                                            {r.hours}h ({formatCurrency(r.hourlyRate)}/h)
+                                          </div>
+                                        </div>
+
+                                        <div style={{
+                                          width: '28px',
+                                          height: '28px',
+                                          borderRadius: '50%',
+                                          background: isExpanded ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          color: isExpanded ? '#10b981' : 'var(--text-secondary)',
+                                          transition: 'transform 0.2s'
+                                        }}>
+                                          {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                                        </div>
+                                      </div>
                                     </div>
 
-                                    <div style={{ textAlign: 'right' }}>
-                                      <div style={{ fontWeight: 800, color: '#10b981', fontSize: '1.05rem' }}>
-                                        Ganho: {formatCurrency(r.driverNet)}
+                                    {/* Corpo Expandido com Detalhamento Completo */}
+                                    {isExpanded && (
+                                      <div style={{
+                                        padding: '14px 16px 16px',
+                                        borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                                        background: 'rgba(10, 15, 30, 0.6)',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: '12px'
+                                      }}>
+                                        {/* Grid Financeiro da Corrida */}
+                                        <div style={{
+                                          display: 'grid',
+                                          gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+                                          gap: '8px',
+                                          background: 'rgba(15, 23, 42, 0.6)',
+                                          padding: '12px',
+                              borderRadius: '10px',
+                                          border: '1px solid var(--border-subtle)'
+                                        }}>
+                                          <div>
+                                            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>Total do Cliente:</span>
+                                            <strong style={{ fontSize: '0.9rem', color: '#fff' }}>{formatCurrency(r.total)}</strong>
+                                          </div>
+                                          <div>
+                                            <span style={{ fontSize: '0.7rem', color: '#10b981', display: 'block' }}>Seu Repasse (85%):</span>
+                                            <strong style={{ fontSize: '0.95rem', color: '#10b981' }}>{formatCurrency(r.driverNet)}</strong>
+                                          </div>
+                                          <div>
+                                            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>Taxa Plataforma (15%):</span>
+                                            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{formatCurrency((r as any).platformFee || (r.total - r.driverNet))}</span>
+                                          </div>
+                                          <div>
+                                            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>Pagamento:</span>
+                                            <span style={{ fontSize: '0.8rem', color: '#818cf8', fontWeight: 600 }}>
+                                              {r.paymentMethod === 'credit_card' ? '💳 Cartão de Crédito (App)' : r.paymentMethod === 'cash' ? '💵 Dinheiro ao Motorista' : r.paymentMethod === 'card_machine' ? '📱 Maquininha do Motorista' : r.paymentMethod === 'pix' ? '🔑 Pix Direto' : '💳 Plataforma'}
+                                            </span>
+                                          </div>
+                                        </div>
+
+                                        {/* Endereços Completos */}
+                                        <div style={{ fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
+                                            <span style={{ color: '#10b981', fontWeight: 700, flexShrink: 0 }}>🟢 Origem:</span>
+                                            <span style={{ color: 'var(--text-secondary)' }}>{r.origin}</span>
+                                          </div>
+                                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
+                                            <span style={{ color: '#ef4444', fontWeight: 700, flexShrink: 0 }}>🔴 Destino:</span>
+                                            <span style={{ color: 'var(--text-secondary)' }}>{r.destination}</span>
+                                          </div>
+                                        </div>
+
+                                        {/* Rodapé do Card Expandido com ID e Botão de Ocorrência */}
+                                        <div style={{
+                                          display: 'flex',
+                                          justifyContent: 'space-between',
+                                          alignItems: 'center',
+                                          paddingTop: '8px',
+                                          borderTop: '1px solid rgba(255, 255, 255, 0.05)',
+                                          flexWrap: 'wrap',
+                                          gap: '8px'
+                                        }}>
+                                          <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                                            ID: #{r.id.slice(-8).toUpperCase()}
+                                          </span>
+
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setSelectedRideForReport(r);
+                                              setIsReportModalOpen(true);
+                                            }}
+                                            className="btn-outline"
+                                            style={{
+                                              fontSize: '0.72rem',
+                                              padding: '5px 12px',
+                                              borderRadius: '8px',
+                                              borderColor: 'rgba(239, 68, 68, 0.4)',
+                                              color: '#f87171'
+                                            }}
+                                          >
+                                            ⚠️ Reportar Ocorrência
+                                          </button>
+                                        </div>
                                       </div>
-                                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Total Cliente: {formatCurrency(r.total)}</div>
-                                    </div>
+                                    )}
                                   </div>
                                 );
                               })}
@@ -4975,10 +5020,11 @@ export function App() {
 
             <button
               onClick={() => {
+                setDriverOnboardingInitialStep(1);
                 setShowDriverProfileEdit(true);
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
-              className={`mobile-nav-item ${showDriverProfileEdit ? 'active driver-active' : ''}`}
+              className={`mobile-nav-item ${showDriverProfileEdit && driverOnboardingInitialStep !== 4 ? 'active driver-active' : ''}`}
             >
               <div className="icon-wrapper">
                 <Car size={19} />
@@ -5003,15 +5049,11 @@ export function App() {
             ) : (
               <button
                 onClick={() => {
-                  setShowDriverProfileEdit(false);
-                  const el = document.getElementById('driver-payment-prefs');
-                  if (el) {
-                    el.scrollIntoView({ behavior: 'smooth' });
-                  } else {
-                    showToast('Defina suas preferências de recebimento no painel.', 'info');
-                  }
+                  setDriverOnboardingInitialStep(4);
+                  setShowDriverProfileEdit(true);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
-                className="mobile-nav-item"
+                className={`mobile-nav-item ${showDriverProfileEdit && driverOnboardingInitialStep === 4 ? 'active driver-active' : ''}`}
               >
                 <div className="icon-wrapper">
                   <CreditCard size={19} />

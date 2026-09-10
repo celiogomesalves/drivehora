@@ -4,17 +4,18 @@ import { isSuperAdminEmail } from '../types/auth';
 import { 
   ShieldCheck, Camera, CheckCircle2, 
   UploadCloud, Check, AlertCircle, Eye, Database, Edit3, X,
-  ArrowRight, ArrowLeft, Lock, Send, MessageSquare
+  ArrowRight, ArrowLeft, Lock, Send, MessageSquare, CreditCard, Save, Sparkles
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { formatPhone, formatCpf, formatPlate, validateCpf, validateCnh, validatePlate, validatePhone } from '../utils/formatters';
-import { dbSaveDriverProfile, dbCheckSupabaseStatus } from '../services/dbService';
+import { dbSaveDriverProfile, dbCheckSupabaseStatus, dbUpdateDriverPaymentPrefs } from '../services/dbService';
 import { getSystemSettings, type VehicleCategoryConfig } from '../services/settingsService';
 import { useSystemDialog } from './SystemDialog';
 
 interface DriverOnboardingProps {
   user: UserProfile;
   initialProfile?: DriverProfile | null;
+  initialStep?: number;
   onComplete: (driverProfile: DriverProfile) => void;
   onOpenSupabaseConfig?: () => void;
 }
@@ -82,6 +83,7 @@ const compressImageFile = (file: File): Promise<string> => {
 export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({ 
   user, 
   initialProfile, 
+  initialStep,
   onComplete,
   onOpenSupabaseConfig 
 }) => {
@@ -104,8 +106,58 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
   const categoriesList: VehicleCategoryConfig[] = systemSettings.vehicleCategories || [];
 
   const [step, setStep] = useState<number>(
-    initialProfile?.verificationStatus === 'under_review' ? 5 : draft?.step || 1
+    initialStep || (initialProfile?.verificationStatus === 'under_review' ? 6 : draft?.step || 1)
   );
+
+  useEffect(() => {
+    if (initialStep) {
+      setStep(initialStep);
+    }
+  }, [initialStep]);
+
+  // ABA 4: Formas de Recebimento & Chave Pix
+  const [driverAcceptsCash, setDriverAcceptsCash] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem(`drivehora_driver_payprefs_${user.id}`);
+      if (saved) return JSON.parse(saved).acceptsCash ?? true;
+      return true;
+    } catch { return true; }
+  });
+  const [driverHasCardMachine, setDriverHasCardMachine] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem(`drivehora_driver_payprefs_${user.id}`);
+      if (saved) return JSON.parse(saved).hasCardMachine ?? true;
+      return true;
+    } catch { return true; }
+  });
+  const [driverPixKey, setDriverPixKey] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem(`drivehora_driver_payprefs_${user.id}`);
+      if (saved) return JSON.parse(saved).pixKey || '';
+      return (initialProfile as any)?.pixKey || '';
+    } catch { return ''; }
+  });
+  const [isSavingPayPrefs, setIsSavingPayPrefs] = useState(false);
+  const [payPrefsSavedNotice, setPayPrefsSavedNotice] = useState(false);
+
+  const handleSavePaymentPrefs = async (showNotice = true) => {
+    setIsSavingPayPrefs(true);
+    try {
+      await dbUpdateDriverPaymentPrefs(user.id, {
+        acceptsCash: driverAcceptsCash,
+        hasCardMachine: driverHasCardMachine,
+        pixKey: driverPixKey.trim()
+      });
+      if (showNotice) {
+        setPayPrefsSavedNotice(true);
+        setTimeout(() => setPayPrefsSavedNotice(false), 3000);
+      }
+    } catch (err) {
+      console.error('Erro ao salvar preferências de pagamento:', err);
+    } finally {
+      setIsSavingPayPrefs(false);
+    }
+  };
   
   const initialDriverPhone = (user.phone && user.phone !== '(11) 98765-4321')
     ? formatPhone(user.phone)
@@ -452,7 +504,14 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
     setStep(4);
   };
 
-  const handleStep4Submit = async () => {
+  const handleStep4Submit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setErrorMessage(null);
+    await handleSavePaymentPrefs(false);
+    setStep(5);
+  };
+
+  const handleStep5Submit = async () => {
     setErrorMessage(null);
     setIsDbError(false);
 
@@ -478,7 +537,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
       }
 
       setVerificationStatus('under_review');
-      setStep(5);
+      setStep(6);
     } catch (err: any) {
       setIsDbError(true);
       setErrorMessage(`Erro ao salvar: ${err.message || 'Falha de comunicação'}`);
@@ -580,19 +639,20 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
       <div className="glass-panel" style={{ padding: '12px 16px' }}>
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(5, 1fr)',
-          gap: '6px'
+          gridTemplateColumns: 'repeat(6, 1fr)',
+          gap: '4px'
         }}>
           {[
             { num: 1, label: 'Identificação & CNH', short: 'Identificação' },
             { num: 2, label: 'Veículo & Categoria', short: 'Veículo' },
             { num: 3, label: 'Comodidades & Perfil', short: 'Comodidades' },
-            { num: 4, label: 'Documentos & Fotos', short: 'Documentos' },
-            { num: 5, label: 'Homologação', short: 'Homologação' }
+            { num: 4, label: 'Formas de Recebimento', short: 'Recebimento' },
+            { num: 5, label: 'Documentos & Fotos', short: 'Documentos' },
+            { num: 6, label: 'Homologação', short: 'Homologação' }
           ].map(s => {
             const isActive = step === s.num;
             const isDone = step > s.num || isApproved;
-            const canClick = step > s.num || verificationStatus === 'under_review' || isApproved;
+            const canClick = step > s.num || verificationStatus === 'under_review' || isApproved || s.num === 4;
 
             return (
               <button
@@ -1036,7 +1096,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
                 className="btn-primary"
                 style={{ flex: 2, padding: '14px', fontSize: '0.95rem' }}
               >
-                <span>Avançar para Documentos & Fotos</span>
+                <span>Avançar para Formas de Recebimento</span>
                 <ArrowRight size={18} />
               </button>
             </div>
@@ -1045,12 +1105,216 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
       )}
 
       {/* ========================================================
-          ABA 4: DOCUMENTOS & FOTOS (CNH, CRLV, SELFIE)
+          ABA 4: FORMAS DE RECEBIMENTO & CHAVE PIX
       ======================================================== */}
       {step === 4 && (
+        <div className="glass-panel" style={{ padding: '24px' }}>
+          <div style={{ marginBottom: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <CreditCard size={22} color="#818cf8" />
+              <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#fff', margin: 0 }}>
+                4. Formas de Recebimento & Chave Pix
+              </h3>
+            </div>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+              Configure como você deseja receber o pagamento das suas corridas e informe sua chave Pix para repasses.
+            </p>
+          </div>
+
+          <div style={{
+            background: 'rgba(16, 185, 129, 0.1)',
+            border: '1px solid rgba(16, 185, 129, 0.25)',
+            borderRadius: '12px',
+            padding: '12px 16px',
+            marginBottom: '20px',
+            fontSize: '0.8rem',
+            color: '#a7f3d0',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px'
+          }}>
+            <Sparkles size={18} color="#10b981" style={{ flexShrink: 0 }} />
+            <span>
+              <strong>Acesso Livre:</strong> Suas preferências de recebimento e chave Pix podem ser atualizadas a qualquer momento, mesmo após a homologação da sua conta.
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {/* Opção 1: Dinheiro */}
+            <div
+              onClick={() => {
+                const nextVal = !driverAcceptsCash;
+                setDriverAcceptsCash(nextVal);
+                dbUpdateDriverPaymentPrefs(user.id, {
+                  acceptsCash: nextVal,
+                  hasCardMachine: driverHasCardMachine,
+                  pixKey: driverPixKey.trim()
+                });
+              }}
+              style={{
+                background: driverAcceptsCash ? 'rgba(16, 185, 129, 0.12)' : 'rgba(15, 23, 42, 0.6)',
+                border: driverAcceptsCash ? '1px solid #10b981' : '1px solid var(--border-subtle)',
+                borderRadius: '14px',
+                padding: '16px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                transition: 'all 0.2s'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ fontSize: '1.8rem' }}>💵</span>
+                <div>
+                  <strong style={{ fontSize: '0.95rem', color: '#fff', display: 'block' }}>
+                    Aceito receber corridas em Dinheiro
+                  </strong>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                    O passageiro paga o valor total em dinheiro diretamente a você no desembarque.
+                  </span>
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={driverAcceptsCash}
+                onChange={() => {}}
+                style={{ width: '20px', height: '20px', accentColor: '#10b981', cursor: 'pointer' }}
+              />
+            </div>
+
+            {/* Opção 2: Maquininha Própria */}
+            <div
+              onClick={() => {
+                const nextVal = !driverHasCardMachine;
+                setDriverHasCardMachine(nextVal);
+                dbUpdateDriverPaymentPrefs(user.id, {
+                  acceptsCash: driverAcceptsCash,
+                  hasCardMachine: nextVal,
+                  pixKey: driverPixKey.trim()
+                });
+              }}
+              style={{
+                background: driverHasCardMachine ? 'rgba(16, 185, 129, 0.12)' : 'rgba(15, 23, 42, 0.6)',
+                border: driverHasCardMachine ? '1px solid #10b981' : '1px solid var(--border-subtle)',
+                borderRadius: '14px',
+                padding: '16px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                transition: 'all 0.2s'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ fontSize: '1.8rem' }}>📱</span>
+                <div>
+                  <strong style={{ fontSize: '0.95rem', color: '#fff', display: 'block' }}>
+                    Possuo maquininha própria de cartão
+                  </strong>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                    Permite aceitar passageiros que optam por pagar via cartão na sua maquininha física.
+                  </span>
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={driverHasCardMachine}
+                onChange={() => {}}
+                style={{ width: '20px', height: '20px', accentColor: '#10b981', cursor: 'pointer' }}
+              />
+            </div>
+
+            {/* Opção 3: Chave Pix */}
+            <div style={{
+              background: 'rgba(15, 23, 42, 0.75)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: '14px',
+              padding: '16px'
+            }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', fontWeight: 700, color: '#fff', marginBottom: '8px' }}>
+                <span>🔑</span>
+                <span>Minha Chave Pix (para conferência e repasses da plataforma):</span>
+              </label>
+              <input
+                type="text"
+                className="input-field"
+                placeholder="CPF, E-mail, Celular ou Chave Aleatória"
+                value={driverPixKey}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setDriverPixKey(val);
+                  dbUpdateDriverPaymentPrefs(user.id, {
+                    acceptsCash: driverAcceptsCash,
+                    hasCardMachine: driverHasCardMachine,
+                    pixKey: val.trim()
+                  });
+                }}
+                style={{ width: '100%', padding: '12px 14px', fontSize: '0.9rem' }}
+              />
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginTop: '6px' }}>
+                Utilizada para repasses rápidos das corridas quitadas pelo passageiro via Cartão Online ou Pix no aplicativo.
+              </span>
+            </div>
+
+            {payPrefsSavedNotice && (
+              <div style={{
+                background: 'rgba(16, 185, 129, 0.2)',
+                border: '1px solid #10b981',
+                borderRadius: '10px',
+                padding: '10px 14px',
+                color: '#10b981',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <CheckCircle2 size={16} />
+                Preferências de recebimento salvas com sucesso!
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '10px', marginTop: '10px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => setStep(3)}
+                className="btn-outline"
+                style={{ flex: 1, padding: '14px', fontSize: '0.9rem' }}
+              >
+                <ArrowLeft size={16} /> Voltar
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSavePaymentPrefs(true)}
+                className="btn-outline"
+                style={{ flex: 1, padding: '14px', fontSize: '0.9rem', borderColor: '#10b981', color: '#10b981' }}
+                disabled={isSavingPayPrefs}
+              >
+                <Save size={16} /> {isSavingPayPrefs ? 'Salvando...' : 'Salvar Preferências'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleStep4Submit()}
+                className="btn-primary"
+                style={{ flex: 2, padding: '14px', fontSize: '0.95rem' }}
+              >
+                <span>Avançar para Documentos & Fotos</span>
+                <ArrowRight size={18} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================
+          ABA 5: DOCUMENTOS & FOTOS (CNH, CRLV, SELFIE)
+      ======================================================== */}
+      {step === 5 && (
         <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
           <div>
-            <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#fff' }}>4. Envio de Documentos e Biometria Facial</h3>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#fff' }}>5. Envio de Documentos e Biometria Facial</h3>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
               Anexe fotos nítidas dos documentos para auditoria de segurança da plataforma.
             </p>
@@ -1261,7 +1525,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
           <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
             <button
               type="button"
-              onClick={() => setStep(3)}
+              onClick={() => setStep(4)}
               className="btn-outline"
               style={{ flex: 1, padding: '14px', fontSize: '0.9rem' }}
             >
@@ -1269,7 +1533,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
             </button>
             <button
               type="button"
-              onClick={handleStep4Submit}
+              onClick={handleStep5Submit}
               disabled={isSaving || !cnhUrl || !crlvUrl || !selfieUrl}
               className="btn-success"
               style={{
@@ -1287,9 +1551,9 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
       )}
 
       {/* ========================================================
-          ABA 5: STATUS DE HOMOLOGAÇÃO & REVISÃO
+          ABA 6: STATUS DE HOMOLOGAÇÃO & REVISÃO
       ======================================================== */}
-      {step === 5 && (
+      {step === 6 && (
         <div className="glass-panel" style={{ padding: '28px', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '18px', alignItems: 'center' }}>
           
           <div style={{
