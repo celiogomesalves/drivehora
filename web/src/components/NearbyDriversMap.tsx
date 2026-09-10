@@ -332,57 +332,57 @@ export function NearbyDriversMap({
   }, [onlineDrivers, userLocation]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+    <div className="radar-container-spacing">
       {/* Cabeçalho do Radar em Tempo Real */}
-      <div className="glass-panel" style={{ padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <div style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', padding: '12px', borderRadius: '14px' }}>
-            <Radio size={28} className="animate-pulse" />
+      <div className="glass-panel radar-header-panel">
+        <div className="radar-header-info">
+          <div className="radar-header-icon">
+            <Radio size={22} className="animate-pulse" />
           </div>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <h2 style={{ fontSize: '1.35rem', fontWeight: 800, margin: 0 }}>
-                Radar de Motoristas em Tempo Real
+              <h2 className="radar-header-title">
+                Radar de Motoristas
               </h2>
-              <span style={{ fontSize: '0.7rem', background: '#10b981', color: '#fff', padding: '2px 8px', borderRadius: '12px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Zap size={11} /> GPS AO VIVO
+              <span style={{ fontSize: '0.65rem', background: '#10b981', color: '#fff', padding: '2px 7px', borderRadius: '10px', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '3px', whiteSpace: 'nowrap' }}>
+                <Zap size={10} /> GPS AO VIVO
               </span>
             </div>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: '4px 0 0' }}>
+            <p className="radar-header-subtitle">
               Posicionamento geográfico contínuo dos motoristas conectados com auto-enquadramento inteligente.
             </p>
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+        <div className="radar-actions-row">
           {/* Botão de Enquadrar Visão Geral */}
           <button
             onClick={() => fitMapToAllDrivers(true)}
             title="Ajustar zoom para enquadrar a visão geral de todos os motoristas"
-            className="btn-outline"
-            style={{ fontSize: '0.8rem', padding: '8px 14px', display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(99, 102, 241, 0.1)', borderColor: 'rgba(99, 102, 241, 0.4)', color: '#a5b4fc' }}
+            className="btn-outline radar-action-btn"
+            style={{ background: 'rgba(99, 102, 241, 0.1)', borderColor: 'rgba(99, 102, 241, 0.4)', color: '#a5b4fc' }}
           >
-            <Maximize2 size={14} />
-            <span>Enquadrar Visão Geral</span>
+            <Maximize2 size={13} />
+            <span>Enquadrar</span>
           </button>
 
           <button
             onClick={() => loadDrivers(true)}
             disabled={isSyncing}
-            className="btn-outline"
-            style={{ fontSize: '0.8rem', padding: '8px 14px', display: 'flex', alignItems: 'center', gap: '6px' }}
+            className="btn-outline radar-action-btn"
+            title={`Atualizado às ${lastSyncTime.toLocaleTimeString()}`}
           >
-            <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} />
-            <span>Sincronizar ({lastSyncTime.toLocaleTimeString()})</span>
+            <RefreshCw size={13} className={isSyncing ? 'animate-spin' : ''} />
+            <span>Sincronizar</span>
           </button>
 
           {onSelectDriverToRequest && (
             <button
               onClick={onSelectDriverToRequest}
-              className="btn-primary"
-              style={{ fontSize: '0.85rem', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '6px' }}
+              className="btn-primary radar-action-btn"
+              title="Solicitar nova corrida"
             >
-              <Car size={16} />
+              <Car size={14} />
               <span>Solicitar Corrida</span>
             </button>
           )}
@@ -390,37 +390,38 @@ export function NearbyDriversMap({
       </div>
 
       {/* Mapa Interativo Estável com Controles de Auto-Zoom */}
-      <div className="glass-panel" style={{ padding: '0', overflow: 'hidden', borderRadius: '20px', position: 'relative', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+      <div className="glass-panel radar-map-container-card" style={{ padding: '0', overflow: 'hidden', position: 'relative', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
         <div 
           ref={mapContainerRef} 
-          style={{ width: '100%', height: '480px', background: '#090d16', zIndex: 1 }} 
+          className="radar-map-wrapper"
         />
 
         {/* Overlay informativo e Botão Flutuante de Auto-Enquadramento */}
         <div style={{
           position: 'absolute',
-          top: '16px',
-          right: '16px',
+          top: '12px',
+          right: '12px',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'flex-end',
-          gap: '8px',
+          gap: '6px',
           zIndex: 500
         }}>
           <div style={{
             background: 'rgba(15, 23, 42, 0.92)',
             backdropFilter: 'blur(10px)',
             border: '1px solid rgba(255, 255, 255, 0.15)',
-            borderRadius: '12px',
-            padding: '8px 14px',
-            fontSize: '0.8rem',
+            borderRadius: '10px',
+            padding: '6px 10px',
+            fontSize: '0.74rem',
             color: '#fff',
             display: 'flex',
             alignItems: 'center',
-            gap: '8px',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.5)'
+            gap: '6px',
+            boxShadow: '0 4px 15px rgba(0,0,0,0.5)',
+            whiteSpace: 'nowrap'
           }}>
-            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981' }}></span>
+            <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#10b981' }}></span>
             <span><strong>{onlineDrivers.length}</strong> motorista(s) visíveis</span>
           </div>
 
@@ -431,16 +432,17 @@ export function NearbyDriversMap({
               backdropFilter: 'blur(10px)',
               border: '1px solid rgba(99, 102, 241, 0.5)',
               borderRadius: '10px',
-              padding: '7px 12px',
-              fontSize: '0.75rem',
+              padding: '6px 10px',
+              fontSize: '0.72rem',
               color: '#818cf8',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
-              gap: '6px',
+              gap: '5px',
               fontWeight: 700,
-              boxShadow: '0 4px 15px rgba(0,0,0,0.4)',
-              transition: 'all 0.2s'
+              boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+              transition: 'all 0.2s',
+              whiteSpace: 'nowrap'
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.background = 'rgba(99, 102, 241, 0.25)';
@@ -451,7 +453,7 @@ export function NearbyDriversMap({
               e.currentTarget.style.color = '#818cf8';
             }}
           >
-            <Maximize2 size={13} />
+            <Maximize2 size={12} />
             <span>Enquadrar Visão Geral</span>
           </button>
         </div>

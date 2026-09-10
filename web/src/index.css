@@ -494,9 +494,148 @@ h1, h2, h3, h4, h5, h6 {
     width: 100%;
     display: block !important;
   }
+
+  /* Otimização de Layout para o Radar no Mobile (Foco Total no Mapa) */
+  .radar-container-spacing {
+    gap: 10px !important;
+  }
+
+  .radar-header-panel {
+    padding: 8px 12px !important;
+    gap: 8px !important;
+    border-radius: 14px !important;
+    margin-bottom: 2px !important;
+  }
+
+  .radar-header-info {
+    gap: 8px !important;
+  }
+
+  .radar-header-icon {
+    padding: 6px !important;
+    border-radius: 8px !important;
+  }
+
+  .radar-header-icon svg {
+    width: 18px !important;
+    height: 18px !important;
+  }
+
+  .radar-header-title {
+    font-size: 0.95rem !important;
+    line-height: 1.2 !important;
+    margin: 0 !important;
+  }
+
+  .radar-header-subtitle {
+    display: none !important;
+  }
+
+  .radar-actions-row {
+    width: 100% !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    overflow-x: auto !important;
+    padding-bottom: 2px !important;
+    -webkit-overflow-scrolling: touch !important;
+    flex-wrap: nowrap !important;
+  }
+
+  .radar-action-btn {
+    white-space: nowrap !important;
+    font-size: 0.74rem !important;
+    padding: 6px 10px !important;
+    flex-shrink: 0 !important;
+    border-radius: 8px !important;
+  }
+
+  .radar-map-wrapper {
+    height: calc(100vh - 250px) !important;
+    min-height: 380px !important;
+    max-height: 540px !important;
+  }
+
+  .radar-map-container-card {
+    border-radius: 14px !important;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4) !important;
+  }
 }
 
 /* Regras Padrão (Desktop) */
+.radar-container-spacing {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.radar-header-panel {
+  padding: 18px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.radar-header-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.radar-header-icon {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  padding: 10px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.radar-header-title {
+  font-size: 1.25rem;
+  font-weight: 800;
+  margin: 0;
+}
+
+.radar-header-subtitle {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  margin: 3px 0 0;
+}
+
+.radar-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.radar-action-btn {
+  white-space: nowrap !important;
+  font-size: 0.8rem;
+  padding: 7px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 10px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.radar-map-wrapper {
+  width: 100%;
+  height: 520px;
+  background: #090d16;
+  z-index: 1;
+}
+
+.radar-map-container-card {
+  border-radius: 20px;
+}
+
 .client-subnav-desktop {
   display: flex;
 }
