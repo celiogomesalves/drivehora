@@ -30,6 +30,7 @@ export interface DbRide {
   acceptedAt?: number;
   startedAt?: number;
   finishedAt?: number;
+  driverAcknowledgedAt?: number;
 }
 
 // Timeout helper para chamadas de banco nunca travarem
@@ -615,6 +616,22 @@ export const dbCancelRide = async (rideId: string): Promise<void> => {
 
   try {
     await fetch(`/api/rides/${rideId}/cancel`, { method: 'POST' });
+  } catch (e) {}
+};
+
+// 7.1.1 Confirmar leitura de cancelamento pelo Motorista no Banco
+export const dbAcknowledgeRide = async (rideId: string): Promise<void> => {
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      await sb.from('rides').update({ driver_acknowledged_at: new Date().toISOString() }).eq('id', rideId);
+    } catch (e) {
+      console.warn('Erro ao atualizar driver_acknowledged_at no Supabase:', e);
+    }
+  }
+
+  try {
+    await fetch(`/api/rides/${rideId}/acknowledge`, { method: 'POST' });
   } catch (e) {}
 };
 

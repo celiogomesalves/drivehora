@@ -27,6 +27,7 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS active_device_name TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMPTZ;
 ALTER TABLE public.drivers ADD COLUMN IF NOT EXISTS fcm_token TEXT;
 ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS fcm_token TEXT;
+ALTER TABLE public.rides ADD COLUMN IF NOT EXISTS driver_acknowledged_at TIMESTAMPTZ;
 
 -- 2. Tabela de Passageiros / Clientes (clients)
 CREATE TABLE IF NOT EXISTS public.clients (

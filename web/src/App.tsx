@@ -29,7 +29,7 @@ import { getCurrentPosition, reverseGeocode, searchAddressPlaces, geocodeAddress
 import { formatCurrency, formatCurrencyInput, parseCurrencyInput } from './utils/formatters';
 import { 
   dbGetClientProfile, dbGetDriverProfile, dbGetAllDrivers,
-  dbCreateRide, dbUpdateRide, dbCancelRide, dbUpdateDriverOnlineStatus, dbUpdateDriverLocation,
+  dbCreateRide, dbUpdateRide, dbCancelRide, dbAcknowledgeRide, dbUpdateDriverOnlineStatus, dbUpdateDriverLocation,
   dbGetFavoriteDriverIds, dbToggleFavoriteDriver, dbSaveUserDeviceToken, dbCheckUserSession,
   dbUpdateDriverPaymentPrefs, type DbRide 
 } from './services/dbService';
@@ -208,7 +208,8 @@ export function App() {
     }
   });
 
-  const handleDismissCancellation = (rideId: string) => {
+  const handleDismissCancellation = async (rideId: string) => {
+    // 1. Atualização imediata no estado local e cache para feedback instantâneo
     setDismissedCancellationIds(prev => {
       const updated = Array.from(new Set([...prev, rideId]));
       try {
@@ -216,6 +217,16 @@ export function App() {
       } catch {}
       return updated;
     });
+
+    // 2. Atualiza a lista de corridas na memória
+    setRides(prev => prev.map(r => r.id === rideId ? { ...r, driverAcknowledgedAt: Date.now() } : r));
+
+    // 3. Persistência definitiva no banco de dados (Supabase + Backend)
+    try {
+      await dbAcknowledgeRide(rideId);
+    } catch (e) {
+      console.warn('Erro ao persistir reconhecimento da corrida no banco:', e);
+    }
   };
 
   // Modal de Reportar Problema com Corrida
@@ -757,6 +768,7 @@ export function App() {
             commission: Number(d.commission),
             driverNet: Number(d.driver_net),
             status: d.status,
+            driverAcknowledgedAt: d.driver_acknowledged_at ? new Date(d.driver_acknowledged_at).getTime() : undefined,
             createdAt: new Date(d.created_at).getTime(),
             acceptedAt: d.accepted_at ? new Date(d.accepted_at).getTime() : undefined,
             startedAt: d.started_at ? new Date(d.started_at).getTime() : undefined,
@@ -778,8 +790,12 @@ export function App() {
       const res = await fetch('/api/rides');
       if (res.ok) {
         const data = await res.json();
-        setRides(data);
-        const finished = data.filter((r: DbRide) => r.status === 'finished');
+        const mapped = data.map((d: any) => ({
+          ...d,
+          driverAcknowledgedAt: d.driverAcknowledgedAt ? Number(d.driverAcknowledgedAt) : (d.driver_acknowledged_at ? new Date(d.driver_acknowledged_at).getTime() : undefined)
+        }));
+        setRides(mapped);
+        const finished = mapped.filter((r: DbRide) => r.status === 'finished');
         const sum = finished.reduce((acc: number, cur: DbRide) => acc + (cur.driverNet || 0), 0);
         setDriverEarnings(sum);
       }
@@ -1179,9 +1195,10 @@ export function App() {
   const pendingRides = rides.filter(r => r.status === 'searching');
   const myDriverRides = rides.filter(r => (r.status === 'accepted' || r.status === 'to_pickup' || r.status === 'in_progress') && (r.driverId === currentUser?.id || !r.driverId));
 
-  // Corrida cancelada recente para alertar o motorista (apenas se recente e não descartada anteriormente)
+  // Corrida cancelada recente para alertar o motorista (apenas se recente e não descartada no banco/local)
   const cancelledRideForDriver = rides.find(r => {
     if (r.status !== 'cancelled' || r.driverId !== currentUser?.id) return false;
+    if (r.driverAcknowledgedAt) return false;
     if (dismissedCancellationIds.includes(r.id)) return false;
     const rideTime = (r as any).cancelledAt || r.finishedAt || r.acceptedAt || r.createdAt || 0;
     const isRecent = !rideTime || (Date.now() - rideTime) < 6 * 3600 * 1000;

@@ -79,6 +79,7 @@ interface Ride {
   acceptedAt?: number;
   startedAt?: number;
   finishedAt?: number;
+  driverAcknowledgedAt?: number;
 }
 
 const memoryRides: Map<string, Ride> = new Map();
@@ -302,6 +303,26 @@ app.post("/rides/:id/finish", async (req, res) => {
       await db.collection("rideRequests").doc(id).update({
         status: "finished",
         finishedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+    } catch (e: any) {}
+  }
+
+  res.json({ ok: true, ride: memoryRides.get(id) });
+});
+
+// Marcar cancelamento/aviso como reconhecido pelo motorista
+app.post("/rides/:id/acknowledge", async (req, res) => {
+  const id = req.params.id;
+  const ride = memoryRides.get(id);
+  if (ride) {
+    ride.driverAcknowledgedAt = Date.now();
+    memoryRides.set(id, ride);
+  }
+
+  if (useFirestore && db) {
+    try {
+      await db.collection("rideRequests").doc(id).update({
+        driverAcknowledgedAt: admin.firestore.FieldValue.serverTimestamp()
       });
     } catch (e: any) {}
   }
