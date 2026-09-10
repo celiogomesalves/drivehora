@@ -26,7 +26,17 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS active_session_token TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS active_device_name TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMPTZ;
 ALTER TABLE public.drivers ADD COLUMN IF NOT EXISTS fcm_token TEXT;
+ALTER TABLE public.drivers ADD COLUMN IF NOT EXISTS driver_name TEXT;
+ALTER TABLE public.drivers ADD COLUMN IF NOT EXISTS full_name TEXT;
+ALTER TABLE public.drivers ADD COLUMN IF NOT EXISTS cep TEXT;
+ALTER TABLE public.drivers ADD COLUMN IF NOT EXISTS street TEXT;
+ALTER TABLE public.drivers ADD COLUMN IF NOT EXISTS number TEXT;
+ALTER TABLE public.drivers ADD COLUMN IF NOT EXISTS complement TEXT;
+ALTER TABLE public.drivers ADD COLUMN IF NOT EXISTS neighborhood TEXT;
+ALTER TABLE public.drivers ADD COLUMN IF NOT EXISTS city TEXT;
+ALTER TABLE public.drivers ADD COLUMN IF NOT EXISTS state TEXT;
 ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS fcm_token TEXT;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS full_name TEXT;
 ALTER TABLE public.rides ADD COLUMN IF NOT EXISTS driver_acknowledged_at TIMESTAMPTZ;
 
 -- 2. Tabela de Passageiros / Clientes (clients)

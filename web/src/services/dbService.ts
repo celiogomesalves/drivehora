@@ -265,11 +265,12 @@ export const dbForceDisconnectOtherSessions = async (
 
 // 2. Salvar ou atualizar Perfil de Cliente (Passageiro) com Auto-garantia de Profile
 export const dbSaveClientProfile = async (
-  client: ClientProfile, 
+  client: ClientProfile,
   userProfile?: UserProfile | null
 ): Promise<{ success: boolean; error?: string }> => {
   try {
     localStorage.setItem(`drivehora_client_profile_${client.userId}`, JSON.stringify(client));
+    localStorage.setItem(`drivehora_client_${client.userId}`, JSON.stringify(client));
   } catch (e) {}
 
   const sb = getSupabase();
@@ -286,20 +287,27 @@ export const dbSaveClientProfile = async (
       }
     }
 
+    const resolvedFullName = client.fullName?.trim() || current?.fullName?.trim() || 'Passageiro DriveHora';
+    const resolvedPhone = client.phone || current?.phone || '';
+    const resolvedEmail = (current?.email || client.email || `client_${client.userId}@drivehora.com`).toLowerCase().trim();
+
+    // 1. Atualizar profiles (garantindo que full_name seja gravado com o nome real digitado)
     await withTimeout(sb.from('profiles').upsert({
       id: client.userId,
-      email: (current?.email || `client_${client.userId}@drivehora.com`).toLowerCase().trim(),
-      full_name: current?.fullName || 'Passageiro DriveHora',
-      role: 'client',
-      phone: client.phone || current?.phone || '',
+      email: resolvedEmail,
+      full_name: resolvedFullName,
+      role: current?.role || 'client',
+      phone: resolvedPhone,
       updated_at: new Date().toISOString()
     }), 8000);
 
+    // 2. Atualizar clients
     await withTimeout(sb.from('clients').upsert({
       id: client.id,
       user_id: client.userId,
+      full_name: resolvedFullName,
       cpf: client.cpf,
-      phone: client.phone,
+      phone: resolvedPhone,
       cep: client.cep,
       street: client.street,
       number: client.number,
@@ -310,6 +318,29 @@ export const dbSaveClientProfile = async (
       is_profile_complete: true
     }), 8000);
 
+    // 3. Se o usuário também for motorista cadastrado, sincronizar o nome, cpf e telefone na tabela drivers
+    try {
+      await sb.from('drivers').update({
+        driver_name: resolvedFullName,
+        full_name: resolvedFullName,
+        cpf: client.cpf,
+        phone: resolvedPhone
+      }).or(`user_id.eq.${client.userId},id.eq.driver_${client.userId}`);
+    } catch (dErr) {}
+
+    // 4. Sincronizar cache local do usuário ativo
+    try {
+      const savedUserStr = localStorage.getItem('drivehora_current_user');
+      if (savedUserStr) {
+        const u = JSON.parse(savedUserStr);
+        if (u.id === client.userId || u.email?.toLowerCase() === resolvedEmail) {
+          u.fullName = resolvedFullName;
+          u.phone = resolvedPhone;
+          localStorage.setItem('drivehora_current_user', JSON.stringify(u));
+        }
+      }
+    } catch (e) {}
+
     return { success: true };
   } catch (e: any) {
     console.warn('Erro ao sincronizar client no Supabase (salvo localmente):', e);
@@ -317,67 +348,50 @@ export const dbSaveClientProfile = async (
   }
 };
 
-// 3. Obter Perfil de Cliente (com busca resiliente por userId e email)
+// 3. Obter Perfil de Cliente (com busca resiliente por userId e email e junção com profiles)
 export const dbGetClientProfile = async (userId: string, email?: string): Promise<ClientProfile | null> => {
   const sb = getSupabase();
   if (sb) {
     try {
-      let res: any = await withTimeout(
-        sb.from('clients').select('*').eq('user_id', userId).maybeSingle(),
-        6000
-      );
-
-      let userProfileData: any = null;
-      if ((!res?.data || res?.error) && email) {
-        const pRes: any = await withTimeout(
-          sb.from('profiles').select('*').ilike('email', email.trim()).maybeSingle(),
-          5000
-        );
-        if (pRes?.data) {
-          userProfileData = pRes.data;
-          res = await withTimeout(
-            sb.from('clients').select('*').eq('user_id', userProfileData.id).maybeSingle(),
-            5000
-          );
-        }
+      let pQuery = sb.from('profiles').select('*');
+      if (userId) {
+        pQuery = pQuery.eq('id', userId);
+      } else if (email) {
+        pQuery = pQuery.ilike('email', email.trim());
       }
 
-      if (!res?.error && res?.data) {
-        return {
-          id: res.data.id,
-          userId: res.data.user_id,
-          fullName: userProfileData?.full_name,
-          email: userProfileData?.email,
-          cpf: res.data.cpf || '',
-          phone: res.data.phone || userProfileData?.phone || '',
-          cep: res.data.cep || '',
-          street: res.data.street || '',
-          number: res.data.number || '',
-          complement: res.data.complement || '',
-          neighborhood: res.data.neighborhood || '',
-          city: res.data.city || '',
-          state: res.data.state || '',
-          isProfileComplete: true
-        };
-      }
+      const [cRes, pRes] = await Promise.all([
+        withTimeout(sb.from('clients').select('*').eq('user_id', userId).maybeSingle(), 5000),
+        withTimeout(pQuery.maybeSingle(), 5000)
+      ]);
 
-      if (userProfileData) {
-        return {
-          id: 'client_' + userProfileData.id,
-          userId: userProfileData.id,
-          fullName: userProfileData.full_name,
-          email: userProfileData.email,
-          cpf: userProfileData.cpf || '',
-          phone: userProfileData.phone || '',
-          cep: userProfileData.cep || '',
-          street: userProfileData.street || '',
-          number: userProfileData.number || '',
-          complement: userProfileData.complement || '',
-          neighborhood: userProfileData.neighborhood || '',
-          city: userProfileData.city || '',
-          state: userProfileData.state || '',
-          isProfileComplete: true
+      const clientData = cRes?.data;
+      const profileData = pRes?.data;
+
+      if (clientData || profileData) {
+        const fullName = profileData?.full_name || clientData?.full_name || '';
+        const profile: ClientProfile = {
+          id: clientData?.id || ('client_' + (userId || profileData?.id)),
+          userId: clientData?.user_id || userId || profileData?.id,
+          fullName: fullName,
+          email: profileData?.email || email || '',
+          cpf: clientData?.cpf || '',
+          phone: clientData?.phone || profileData?.phone || '',
+          cep: clientData?.cep || '',
+          street: clientData?.street || '',
+          number: clientData?.number || '',
+          complement: clientData?.complement || '',
+          neighborhood: clientData?.neighborhood || '',
+          city: clientData?.city || '',
+          state: clientData?.state || '',
+          isProfileComplete: Boolean(clientData?.is_profile_complete || (clientData?.cpf && clientData?.street))
         };
+
+        try {
+          localStorage.setItem(`drivehora_client_profile_${userId}`, JSON.stringify(profile));
+        } catch (e) {}
+
+        return profile;
       }
     } catch (e) {
       console.warn('Erro ao carregar perfil do cliente:', e);
@@ -400,6 +414,7 @@ export const dbSaveDriverProfile = async (
   try {
     const lightweightDriver = { ...driver, cnhUrl: undefined, crlvUrl: undefined, selfieUrl: undefined };
     localStorage.setItem(`drivehora_driver_profile_${driver.userId}`, JSON.stringify(lightweightDriver));
+    localStorage.setItem(`drivehora_driver_${driver.userId}`, JSON.stringify(lightweightDriver));
   } catch (e) {
     console.warn('Armazenamento local cheio, prosseguindo com gravação no banco.');
   }
@@ -418,20 +433,28 @@ export const dbSaveDriverProfile = async (
       }
     }
 
+    const resolvedName = driver.fullName?.trim() || driver.driverName?.trim() || current?.fullName?.trim() || 'Motorista Parceiro';
+    const resolvedPhone = driver.phone || current?.phone || '';
+    const resolvedEmail = (current?.email || `driver_${driver.userId}@drivehora.com`).toLowerCase().trim();
+
+    // 1. Atualizar profiles (garantindo que full_name seja gravado com o nome do motorista)
     await withTimeout(sb.from('profiles').upsert({
       id: driver.userId,
-      email: (current?.email || `driver_${driver.userId}@drivehora.com`).toLowerCase().trim(),
-      full_name: current?.fullName || 'Motorista Parceiro',
-      role: 'driver',
-      phone: driver.phone || current?.phone || '',
+      email: resolvedEmail,
+      full_name: resolvedName,
+      role: current?.role === 'admin' ? 'admin' : 'driver',
+      phone: resolvedPhone,
       updated_at: new Date().toISOString()
     }), 8000);
 
+    // 2. Atualizar drivers
     const res: any = await withTimeout(sb.from('drivers').upsert({
       id: driver.id,
       user_id: driver.userId,
+      driver_name: resolvedName,
+      full_name: resolvedName,
       cpf: driver.cpf,
-      phone: driver.phone,
+      phone: resolvedPhone,
       cnh_number: driver.cnhNumber,
       cnh_category: driver.cnhCategory,
       vehicle_brand: driver.vehicleBrand,
@@ -446,6 +469,28 @@ export const dbSaveDriverProfile = async (
       rating: driver.rating,
       total_rides: driver.totalRides
     }), 10000);
+
+    // 3. Se houver registro em clients para este mesmo usuário, sincronizar CPF e Telefone também
+    try {
+      await sb.from('clients').update({
+        cpf: driver.cpf,
+        phone: resolvedPhone,
+        full_name: resolvedName
+      }).eq('user_id', driver.userId);
+    } catch (cErr) {}
+
+    // 4. Sincronizar cache local do usuário ativo
+    try {
+      const savedUserStr = localStorage.getItem('drivehora_current_user');
+      if (savedUserStr) {
+        const u = JSON.parse(savedUserStr);
+        if (u.id === driver.userId || u.email?.toLowerCase() === resolvedEmail) {
+          u.fullName = resolvedName;
+          u.phone = resolvedPhone;
+          localStorage.setItem('drivehora_current_user', JSON.stringify(u));
+        }
+      }
+    } catch (e) {}
 
     if (res?.error) {
       console.warn('Erro ao salvar driver no Supabase:', res.error);
@@ -464,23 +509,45 @@ export const dbGetDriverProfile = async (userId: string, email?: string): Promis
   if (sb) {
     try {
       let res: any = await withTimeout(sb.from('drivers').select('*').eq('user_id', userId).maybeSingle(), 6000);
-      
+      let pData: any = null;
+
       if ((!res?.data || res?.error) && email) {
         const pRes: any = await withTimeout(
-          sb.from('profiles').select('id').ilike('email', email.trim()).maybeSingle(),
+          sb.from('profiles').select('*').ilike('email', email.trim()).maybeSingle(),
           4000
         );
         if (pRes?.data?.id) {
+          pData = pRes.data;
           res = await withTimeout(sb.from('drivers').select('*').eq('user_id', pRes.data.id).maybeSingle(), 4000);
         }
       }
 
+      if (!pData && (res?.data?.user_id || userId)) {
+        const pRes: any = await withTimeout(
+          sb.from('profiles').select('*').eq('id', res?.data?.user_id || userId).maybeSingle(),
+          4000
+        );
+        pData = pRes?.data;
+      }
+
       if (!res?.error && res?.data) {
+        let driverName = res.data.driver_name || res.data.full_name || pData?.full_name || 'Motorista Parceiro';
+        if (driverName.includes('@')) {
+          if (pData?.full_name && !pData.full_name.includes('@')) {
+            driverName = pData.full_name;
+          } else {
+            const userPart = driverName.split('@')[0];
+            driverName = userPart.replace(/[._-]/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
+          }
+        }
+
         const profile: DriverProfile = {
           id: res.data.id,
           userId: res.data.user_id,
-          cpf: res.data.cpf || '',
-          phone: res.data.phone || '',
+          fullName: driverName,
+          driverName: driverName,
+          cpf: res.data.cpf || pData?.cpf || '',
+          phone: res.data.phone || pData?.phone || '',
           cnhNumber: res.data.cnh_number || '',
           cnhCategory: res.data.cnh_category || 'B',
           vehicleBrand: res.data.vehicle_brand || '',
@@ -500,6 +567,7 @@ export const dbGetDriverProfile = async (userId: string, email?: string): Promis
         try {
           localStorage.setItem(`drivehora_driver_profile_${res.data.user_id}`, JSON.stringify(profile));
           localStorage.setItem(`drivehora_driver_profile_${userId}`, JSON.stringify(profile));
+          localStorage.setItem(`drivehora_driver_${res.data.user_id}`, JSON.stringify(profile));
         } catch (e) {}
 
         return profile;
@@ -507,7 +575,7 @@ export const dbGetDriverProfile = async (userId: string, email?: string): Promis
     } catch (e) {}
   }
   try {
-    const local = localStorage.getItem(`drivehora_driver_profile_${userId}`);
+    const local = localStorage.getItem(`drivehora_driver_profile_${userId}`) || localStorage.getItem(`drivehora_driver_${userId}`);
     return local ? JSON.parse(local) : null;
   } catch (e) {
     return null;
@@ -658,32 +726,59 @@ export const dbDeleteRide = async (rideId: string): Promise<{ success: boolean; 
   return { success: true };
 };
 
-// 8. Buscar todos os motoristas cadastrados (unindo profiles e drivers)
+// 8. Buscar todos os motoristas cadastrados (unindo profiles, drivers e clients)
 export const dbGetAllDrivers = async (): Promise<DriverProfile[]> => {
   const sb = getSupabase();
   if (sb) {
     try {
-      const [driversRes, profilesRes] = await Promise.all([
+      const [driversRes, profilesRes, clientsRes] = await Promise.all([
         sb.from('drivers').select('*').order('created_at', { ascending: false }),
-        sb.from('profiles').select('*')
+        sb.from('profiles').select('*'),
+        sb.from('clients').select('*')
       ]);
 
       const profileMap = new Map<string, any>();
       (profilesRes.data || []).forEach((p: any) => {
-        profileMap.set(p.id, p);
+        if (p.id) profileMap.set(p.id, p);
+        if (p.email) profileMap.set(p.email.toLowerCase().trim(), p);
+      });
+
+      const clientMap = new Map<string, any>();
+      (clientsRes.data || []).forEach((c: any) => {
+        if (c.user_id) clientMap.set(c.user_id, c);
+        if (c.id) clientMap.set(c.id, c);
       });
 
       const list: DriverProfile[] = (driversRes.data || []).map((d: any) => {
-        const p = profileMap.get(d.user_id);
+        const p = profileMap.get(d.user_id) || profileMap.get(d.id);
+        const c = clientMap.get(d.user_id) || clientMap.get(p?.id);
         const isOnline = d.is_online === true || d.is_online === 'true' || d.is_online === 1 || Boolean(d.is_online);
-        const driverName = p?.full_name || p?.fullName || d.driver_name || d.full_name || 'Motorista Parceiro';
+
+        // Resolução de nome completa e inteligente
+        let driverName = d.driver_name || d.full_name || p?.full_name || p?.name || c?.full_name || c?.fullName;
+        if (!driverName || driverName.includes('@')) {
+          if (p?.full_name && !p.full_name.includes('@')) {
+            driverName = p.full_name;
+          } else if (c?.full_name && !c.full_name.includes('@')) {
+            driverName = c.full_name;
+          } else if (driverName && driverName.includes('@')) {
+            const userPart = driverName.split('@')[0];
+            driverName = userPart.replace(/[._-]/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
+          } else {
+            driverName = 'Motorista Parceiro';
+          }
+        }
+
+        const resolvedCpf = d.cpf || c?.cpf || p?.cpf || '';
+        const resolvedPhone = d.phone || p?.phone || c?.phone || '';
+
         return {
           id: d.id,
           userId: d.user_id,
           fullName: driverName,
           driverName: driverName,
-          cpf: d.cpf || p?.cpf || '',
-          phone: d.phone || p?.phone || '',
+          cpf: resolvedCpf,
+          phone: resolvedPhone,
           cnhNumber: d.cnh_number || '',
           cnhCategory: d.cnh_category || 'B',
           vehicleBrand: d.vehicle_brand || 'Motorista',
@@ -716,29 +811,50 @@ export const dbGetAllClients = async (): Promise<ClientProfile[]> => {
   const sb = getSupabase();
   if (sb) {
     try {
-      const [profilesRes, clientsRes] = await Promise.all([
-        sb.from('profiles').select('*').eq('role', 'client').order('created_at', { ascending: false }),
-        sb.from('clients').select('*').order('created_at', { ascending: false })
+      const [profilesRes, clientsRes, driversRes] = await Promise.all([
+        sb.from('profiles').select('*').order('created_at', { ascending: false }),
+        sb.from('clients').select('*').order('created_at', { ascending: false }),
+        sb.from('drivers').select('*')
       ]);
 
       const clientMap = new Map<string, any>();
       (clientsRes.data || []).forEach((c: any) => {
-        clientMap.set(c.user_id, c);
+        if (c.user_id) clientMap.set(c.user_id, c);
+        if (c.id) clientMap.set(c.id, c);
+      });
+
+      const driverMap = new Map<string, any>();
+      (driversRes.data || []).forEach((d: any) => {
+        if (d.user_id) driverMap.set(d.user_id, d);
+        if (d.id) driverMap.set(d.id, d);
       });
 
       const list: ClientProfile[] = [];
       const seenUserIds = new Set<string>();
 
       (profilesRes.data || []).forEach((p: any) => {
-        seenUserIds.add(p.id);
+        // Exibir se for client ou se tiver cadastro de passageiro
         const c = clientMap.get(p.id);
+        const d = driverMap.get(p.id);
+        seenUserIds.add(p.id);
+
+        let resolvedName = p.full_name || c?.full_name || d?.driver_name || d?.full_name;
+        if (!resolvedName || resolvedName.includes('@')) {
+          if (resolvedName && resolvedName.includes('@')) {
+            const userPart = resolvedName.split('@')[0];
+            resolvedName = userPart.replace(/[._-]/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
+          } else {
+            resolvedName = 'Cliente DriveHora';
+          }
+        }
+
         list.push({
           id: c?.id || 'client_' + p.id,
           userId: p.id,
-          fullName: p.full_name,
+          fullName: resolvedName,
           email: p.email,
-          cpf: c?.cpf || '',
-          phone: p.phone || c?.phone || '',
+          cpf: c?.cpf || d?.cpf || '',
+          phone: p.phone || c?.phone || d?.phone || '',
           cep: c?.cep || '',
           street: c?.street || '',
           number: c?.number || '',
@@ -746,7 +862,7 @@ export const dbGetAllClients = async (): Promise<ClientProfile[]> => {
           neighborhood: c?.neighborhood || '',
           city: c?.city || '',
           state: c?.state || '',
-          isProfileComplete: Boolean(c?.is_profile_complete || true),
+          isProfileComplete: Boolean(c?.is_profile_complete || (c?.cpf && c?.street)),
           createdAt: p.created_at || p.updated_at
         });
       });
@@ -756,6 +872,7 @@ export const dbGetAllClients = async (): Promise<ClientProfile[]> => {
           list.push({
             id: c.id,
             userId: c.user_id,
+            fullName: c.full_name || 'Passageiro',
             cpf: c.cpf || '',
             phone: c.phone || '',
             cep: c.cep || '',
@@ -777,6 +894,132 @@ export const dbGetAllClients = async (): Promise<ClientProfile[]> => {
     }
   }
   return [];
+};
+
+// 9.1 Atualizar Dados do Motorista pelo Administrador (Sincroniza profiles, drivers e clients)
+export const dbAdminUpdateDriverProfile = async (
+  driver: Partial<DriverProfile> & { id: string; userId: string }
+): Promise<{ success: boolean; error?: string }> => {
+  const sb = getSupabase();
+  const resolvedName = driver.fullName || driver.driverName;
+
+  try {
+    if (sb) {
+      // 1. Atualizar profiles
+      if (resolvedName || driver.phone) {
+        const pUpdate: any = { updated_at: new Date().toISOString() };
+        if (resolvedName) pUpdate.full_name = resolvedName;
+        if (driver.phone) pUpdate.phone = driver.phone;
+        await sb.from('profiles').update(pUpdate).eq('id', driver.userId);
+      }
+
+      // 2. Atualizar drivers
+      const updateData: any = {};
+      if (resolvedName) {
+        updateData.driver_name = resolvedName;
+        updateData.full_name = resolvedName;
+      }
+      if (driver.cpf !== undefined) updateData.cpf = driver.cpf;
+      if (driver.phone !== undefined) updateData.phone = driver.phone;
+      if (driver.cnhNumber !== undefined) updateData.cnh_number = driver.cnhNumber;
+      if (driver.cnhCategory !== undefined) updateData.cnh_category = driver.cnhCategory;
+      if (driver.vehicleBrand !== undefined) updateData.vehicle_brand = driver.vehicleBrand;
+      if (driver.vehicleModel !== undefined) updateData.vehicle_model = driver.vehicleModel;
+      if (driver.vehicleYear !== undefined) updateData.vehicle_year = driver.vehicleYear;
+      if (driver.vehiclePlate !== undefined) updateData.vehicle_plate = driver.vehiclePlate;
+      if (driver.vehicleColor !== undefined) updateData.vehicle_color = driver.vehicleColor;
+      if (driver.verificationStatus !== undefined) updateData.verification_status = driver.verificationStatus;
+
+      await sb.from('drivers').update(updateData).or(`id.eq.${driver.id},user_id.eq.${driver.userId}`);
+
+      // 3. Atualizar clients se existir
+      try {
+        const clientUpdate: any = {};
+        if (driver.cpf) clientUpdate.cpf = driver.cpf;
+        if (driver.phone) clientUpdate.phone = driver.phone;
+        if (resolvedName) clientUpdate.full_name = resolvedName;
+        await sb.from('clients').update(clientUpdate).eq('user_id', driver.userId);
+      } catch (e) {}
+    }
+
+    // 4. Atualizar cache local
+    try {
+      const pKey = `drivehora_driver_profile_${driver.userId}`;
+      const saved = localStorage.getItem(pKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        Object.assign(parsed, driver);
+        if (resolvedName) {
+          parsed.fullName = resolvedName;
+          parsed.driverName = resolvedName;
+        }
+        localStorage.setItem(pKey, JSON.stringify(parsed));
+      }
+    } catch (e) {}
+
+    return { success: true };
+  } catch (err: any) {
+    console.warn('Erro ao atualizar motorista pelo Admin:', err);
+    return { success: false, error: err.message };
+  }
+};
+
+// 9.2 Atualizar Dados do Cliente pelo Administrador (Sincroniza profiles, clients e drivers)
+export const dbAdminUpdateClientProfile = async (
+  client: Partial<ClientProfile> & { id: string; userId: string }
+): Promise<{ success: boolean; error?: string }> => {
+  const sb = getSupabase();
+  try {
+    if (sb) {
+      if (client.fullName || client.phone) {
+        const pUpdate: any = { updated_at: new Date().toISOString() };
+        if (client.fullName) pUpdate.full_name = client.fullName;
+        if (client.phone) pUpdate.phone = client.phone;
+        await sb.from('profiles').update(pUpdate).eq('id', client.userId);
+      }
+
+      const clientUpdate: any = {};
+      if (client.fullName) clientUpdate.full_name = client.fullName;
+      if (client.cpf !== undefined) clientUpdate.cpf = client.cpf;
+      if (client.phone !== undefined) clientUpdate.phone = client.phone;
+      if (client.cep !== undefined) clientUpdate.cep = client.cep;
+      if (client.street !== undefined) clientUpdate.street = client.street;
+      if (client.number !== undefined) clientUpdate.number = client.number;
+      if (client.complement !== undefined) clientUpdate.complement = client.complement;
+      if (client.neighborhood !== undefined) clientUpdate.neighborhood = client.neighborhood;
+      if (client.city !== undefined) clientUpdate.city = client.city;
+      if (client.state !== undefined) clientUpdate.state = client.state;
+
+      await sb.from('clients').update(clientUpdate).or(`id.eq.${client.id},user_id.eq.${client.userId}`);
+
+      // Sincronizar na tabela drivers se for motorista
+      try {
+        const driverUpdate: any = {};
+        if (client.fullName) {
+          driverUpdate.driver_name = client.fullName;
+          driverUpdate.full_name = client.fullName;
+        }
+        if (client.cpf) driverUpdate.cpf = client.cpf;
+        if (client.phone) driverUpdate.phone = client.phone;
+        await sb.from('drivers').update(driverUpdate).eq('user_id', client.userId);
+      } catch (e) {}
+    }
+
+    try {
+      const key = `drivehora_client_profile_${client.userId}`;
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        Object.assign(parsed, client);
+        localStorage.setItem(key, JSON.stringify(parsed));
+      }
+    } catch (e) {}
+
+    return { success: true };
+  } catch (err: any) {
+    console.warn('Erro ao atualizar cliente pelo Admin:', err);
+    return { success: false, error: err.message };
+  }
 };
 
 // 10. Atualizar Status de Verificação de Motorista pelo Admin

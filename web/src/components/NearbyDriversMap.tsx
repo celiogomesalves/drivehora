@@ -253,7 +253,11 @@ export function NearbyDriversMap({
 
       const dist = calculateDistanceKm(userLocation, { latitude: driverLat, longitude: driverLng });
       const etaMin = Math.max(1, Math.round(Number(dist) * 2.2));
-      const driverFullName = driver.fullName || driver.driverName || 'Motorista Parceiro';
+      let driverFullName = driver.fullName || driver.driverName || 'Motorista Parceiro';
+      if (driverFullName.includes('@')) {
+        const userPart = driverFullName.split('@')[0];
+        driverFullName = userPart.replace(/[._-]/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
+      }
 
       const popupHtml = `
         <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 6px; min-width: 210px;">
@@ -488,7 +492,11 @@ export function NearbyDriversMap({
               const estimatedMins = Math.max(1, Math.round(Number(calculatedKm) * 2.2));
               const hasExactGps = Boolean(d.currentLat && d.currentLng);
 
-              const rawName = d.fullName || d.driverName || 'Motorista Parceiro';
+              let rawName = d.fullName || d.driverName || 'Motorista Parceiro';
+              if (rawName.includes('@')) {
+                const userPart = rawName.split('@')[0];
+                rawName = userPart.replace(/[._-]/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
+              }
               const driverDisplayName = rawName;
               const isDriverFav = favoriteDriverIds.includes(driverId) || (d.userId ? favoriteDriverIds.includes(d.userId) : false);
 

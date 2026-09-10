@@ -745,13 +745,19 @@ export function App() {
       try {
         const [ridesRes, profilesRes] = await Promise.all([
           sb.from('rides').select('*').order('created_at', { ascending: false }).limit(50),
-          sb.from('profiles').select('id, full_name')
+          sb.from('profiles').select('id, full_name, email')
         ]);
 
         if (!ridesRes.error && ridesRes.data) {
           const profilesMap = new Map<string, string>();
           (profilesRes.data || []).forEach((p: any) => {
-            if (p.id && p.full_name) profilesMap.set(p.id, p.full_name);
+            let name = p.full_name;
+            if (name && name.includes('@')) {
+              const userPart = name.split('@')[0];
+              name = userPart.replace(/[._-]/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
+            }
+            if (p.id && name) profilesMap.set(p.id, name);
+            if (p.email && name) profilesMap.set(p.email.toLowerCase().trim(), name);
           });
 
           const formatted: DbRide[] = ridesRes.data.map((d: any) => ({
@@ -2122,7 +2128,26 @@ export function App() {
                     initialProfile={clientProfile}
                     onSaveSuccess={(updated) => {
                       setClientProfile(updated);
-                      showToast('Dados cadastrais atualizados com sucesso!', 'success');
+                      if (updated.fullName) {
+                        setCurrentUser(prev => prev ? { ...prev, fullName: updated.fullName!, phone: updated.phone || prev.phone } : prev);
+                        try {
+                          const savedUser = localStorage.getItem('drivehora_current_user');
+                          if (savedUser) {
+                            const parsed = JSON.parse(savedUser);
+                            parsed.fullName = updated.fullName;
+                            if (updated.phone) parsed.phone = updated.phone;
+                            localStorage.setItem('drivehora_current_user', JSON.stringify(parsed));
+                          }
+                        } catch (e) {}
+                      }
+                      setDriverProfile(prev => prev ? {
+                        ...prev,
+                        fullName: updated.fullName || prev.fullName,
+                        driverName: updated.fullName || prev.driverName,
+                        cpf: updated.cpf || prev.cpf,
+                        phone: updated.phone || prev.phone
+                      } : prev);
+                      showToast('Dados cadastrais atualizados com sucesso em todo o sistema!', 'success');
                     }}
                   />
                 )}
@@ -3621,7 +3646,22 @@ export function App() {
               <DriverOnboarding
                 user={currentUser}
                 initialProfile={driverProfile}
-                onComplete={(dp) => setDriverProfile(dp)}
+                onComplete={(dp) => {
+                  setDriverProfile(dp);
+                  if (dp.fullName) {
+                    setCurrentUser(prev => prev ? { ...prev, fullName: dp.fullName!, phone: dp.phone || prev.phone } : prev);
+                    try {
+                      const savedUser = localStorage.getItem('drivehora_current_user');
+                      if (savedUser) {
+                        const parsed = JSON.parse(savedUser);
+                        parsed.fullName = dp.fullName;
+                        if (dp.phone) parsed.phone = dp.phone;
+                        localStorage.setItem('drivehora_current_user', JSON.stringify(parsed));
+                      }
+                    } catch (e) {}
+                  }
+                  showToast('Cadastro do motorista salvo e sincronizado com sucesso!', 'success');
+                }}
                 onOpenSupabaseConfig={isUserAdmin ? () => setShowConfigModal(true) : undefined}
               />
             ) : showDriverProfileEdit ? (
@@ -3640,6 +3680,19 @@ export function App() {
                   onComplete={(dp) => {
                     setDriverProfile(dp);
                     setShowDriverProfileEdit(false);
+                    if (dp.fullName) {
+                      setCurrentUser(prev => prev ? { ...prev, fullName: dp.fullName!, phone: dp.phone || prev.phone } : prev);
+                      try {
+                        const savedUser = localStorage.getItem('drivehora_current_user');
+                        if (savedUser) {
+                          const parsed = JSON.parse(savedUser);
+                          parsed.fullName = dp.fullName;
+                          if (dp.phone) parsed.phone = dp.phone;
+                          localStorage.setItem('drivehora_current_user', JSON.stringify(parsed));
+                        }
+                      } catch (e) {}
+                    }
+                    showToast('Cadastro do motorista atualizado em todo o sistema!', 'success');
                   }}
                   onOpenSupabaseConfig={isUserAdmin ? () => setShowConfigModal(true) : undefined}
                 />

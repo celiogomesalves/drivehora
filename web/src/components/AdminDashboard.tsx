@@ -5,10 +5,22 @@ import {
   XCircle, Clock, RefreshCw, 
   TrendingUp, Database, Image, AlertTriangle, Eye, X, Check,
   Settings, Bell, CreditCard, Sliders, Send, Save, Trash2,
-  Calendar, Filter, Globe, Key, Radio, Power, MessageSquare
+  Calendar, Filter, Globe, Key, Radio, Power, MessageSquare, Edit3
 } from 'lucide-react';
 import { formatCurrency, formatCurrencyInput, parseCurrencyInput, formatPhone, formatCpf, formatPlate } from '../utils/formatters';
-import { dbGetAllDrivers, dbGetAllClients, dbAdminUpdateDriverStatus, dbAdminDeleteDriver, dbAdminToggleDriverOnline, dbGetRideReports, dbUpdateRideReportStatus, type DbRide, type RideReport } from '../services/dbService';
+import { 
+  dbGetAllDrivers, 
+  dbGetAllClients, 
+  dbAdminUpdateDriverStatus, 
+  dbAdminDeleteDriver, 
+  dbAdminToggleDriverOnline,
+  dbAdminUpdateDriverProfile,
+  dbAdminUpdateClientProfile,
+  dbGetRideReports, 
+  dbUpdateRideReportStatus, 
+  type DbRide, 
+  type RideReport 
+} from '../services/dbService';
 import { getSupabase } from '../supabase';
 import { getSystemSettings, saveSystemSettings, fetchSystemSettingsFromDb, type SystemSettings } from '../services/settingsService';
 import { testGatewayConnection, type GatewayHealthResult } from '../services/paymentGatewayService';
@@ -52,6 +64,62 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [previewDoc, setPreviewDoc] = useState<{ title: string; url: string } | null>(null);
   const [driverToDelete, setDriverToDelete] = useState<DriverProfile | null>(null);
   const [isDeletingDriver, setIsDeletingDriver] = useState(false);
+
+  // Estados para Edição Cadastral de Motoristas pelo Admin
+  const [editingDriver, setEditingDriver] = useState<DriverProfile | null>(null);
+  const [editDriverForm, setEditDriverForm] = useState<{
+    fullName: string;
+    cpf: string;
+    phone: string;
+    cnhNumber: string;
+    cnhCategory: string;
+    vehicleBrand: string;
+    vehicleModel: string;
+    vehicleYear: string;
+    vehiclePlate: string;
+    vehicleColor: string;
+    verificationStatus: DriverVerificationStatus;
+  }>({
+    fullName: '',
+    cpf: '',
+    phone: '',
+    cnhNumber: '',
+    cnhCategory: 'B',
+    vehicleBrand: '',
+    vehicleModel: '',
+    vehicleYear: '',
+    vehiclePlate: '',
+    vehicleColor: '',
+    verificationStatus: 'approved'
+  });
+  const [isSavingDriverEdit, setIsSavingDriverEdit] = useState(false);
+
+  // Estados para Edição Cadastral de Passageiros pelo Admin
+  const [editingClient, setEditingClient] = useState<ClientProfile | null>(null);
+  const [editClientForm, setEditClientForm] = useState<{
+    fullName: string;
+    cpf: string;
+    phone: string;
+    cep: string;
+    street: string;
+    number: string;
+    complement: string;
+    neighborhood: string;
+    city: string;
+    state: string;
+  }>({
+    fullName: '',
+    cpf: '',
+    phone: '',
+    cep: '',
+    street: '',
+    number: '',
+    complement: '',
+    neighborhood: '',
+    city: '',
+    state: ''
+  });
+  const [isSavingClientEdit, setIsSavingClientEdit] = useState(false);
 
   // Filtros de Data para Auditoria de Corridas (Padrão: Esta semana)
   const [rideDateFilter, setRideDateFilter] = useState<'all' | 'today' | 'week' | '15days' | '30days' | 'custom'>('week');
@@ -252,6 +320,97 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         type: newOnlineStatus ? 'info' : 'warning'
       }
     );
+  };
+
+  // Handlers para Edição Cadastral de Motoristas
+  const handleOpenEditDriver = (d: DriverProfile) => {
+    setEditingDriver(d);
+    setEditDriverForm({
+      fullName: d.fullName || d.driverName || '',
+      cpf: formatCpf(d.cpf || ''),
+      phone: formatPhone(d.phone || ''),
+      cnhNumber: d.cnhNumber || '',
+      cnhCategory: d.cnhCategory || 'B',
+      vehicleBrand: d.vehicleBrand || '',
+      vehicleModel: d.vehicleModel || '',
+      vehicleYear: d.vehicleYear || '',
+      vehiclePlate: formatPlate(d.vehiclePlate || ''),
+      vehicleColor: d.vehicleColor || '',
+      verificationStatus: d.verificationStatus || 'approved'
+    });
+  };
+
+  const handleSaveDriverEdit = async () => {
+    if (!editingDriver) return;
+    setIsSavingDriverEdit(true);
+    const res = await dbAdminUpdateDriverProfile({
+      id: editingDriver.id,
+      userId: editingDriver.userId,
+      fullName: editDriverForm.fullName.trim(),
+      driverName: editDriverForm.fullName.trim(),
+      cpf: editDriverForm.cpf.replace(/\D/g, ''),
+      phone: editDriverForm.phone.replace(/\D/g, ''),
+      cnhNumber: editDriverForm.cnhNumber.trim(),
+      cnhCategory: editDriverForm.cnhCategory,
+      vehicleBrand: editDriverForm.vehicleBrand.trim(),
+      vehicleModel: editDriverForm.vehicleModel.trim(),
+      vehicleYear: editDriverForm.vehicleYear.trim(),
+      vehiclePlate: editDriverForm.vehiclePlate.trim().toUpperCase(),
+      vehicleColor: editDriverForm.vehicleColor.trim(),
+      verificationStatus: editDriverForm.verificationStatus
+    });
+    setIsSavingDriverEdit(false);
+    if (res.success) {
+      showToast('Dados do motorista atualizados e sincronizados em todo o sistema!', 'success');
+      setEditingDriver(null);
+      await loadAdminData();
+    } else {
+      showAlert(`Erro ao salvar motorista: ${res.error}`, 'error');
+    }
+  };
+
+  // Handlers para Edição Cadastral de Clientes/Passageiros
+  const handleOpenEditClient = (c: ClientProfile) => {
+    setEditingClient(c);
+    setEditClientForm({
+      fullName: c.fullName || '',
+      cpf: formatCpf(c.cpf || ''),
+      phone: formatPhone(c.phone || ''),
+      cep: c.cep || '',
+      street: c.street || '',
+      number: c.number || '',
+      complement: c.complement || '',
+      neighborhood: c.neighborhood || '',
+      city: c.city || '',
+      state: c.state || ''
+    });
+  };
+
+  const handleSaveClientEdit = async () => {
+    if (!editingClient) return;
+    setIsSavingClientEdit(true);
+    const res = await dbAdminUpdateClientProfile({
+      id: editingClient.id,
+      userId: editingClient.userId,
+      fullName: editClientForm.fullName.trim(),
+      cpf: editClientForm.cpf.replace(/\D/g, ''),
+      phone: editClientForm.phone.replace(/\D/g, ''),
+      cep: editClientForm.cep.replace(/\D/g, ''),
+      street: editClientForm.street.trim(),
+      number: editClientForm.number.trim(),
+      complement: editClientForm.complement.trim(),
+      neighborhood: editClientForm.neighborhood.trim(),
+      city: editClientForm.city.trim(),
+      state: editClientForm.state.trim().toUpperCase()
+    });
+    setIsSavingClientEdit(false);
+    if (res.success) {
+      showToast('Dados do passageiro atualizados e sincronizados em todo o sistema!', 'success');
+      setEditingClient(null);
+      await loadAdminData();
+    } else {
+      showAlert(`Erro ao salvar passageiro: ${res.error}`, 'error');
+    }
   };
 
   // Cálculos de métricas
@@ -858,6 +1017,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           </button>
                         )}
 
+                        {/* Botão de Editar Cadastro do Motorista */}
+                        <button
+                          onClick={() => handleOpenEditDriver(d)}
+                          className="btn-outline"
+                          style={{
+                            padding: '8px 12px',
+                            fontSize: '0.8rem',
+                            color: '#818cf8',
+                            borderColor: 'rgba(99, 102, 241, 0.4)',
+                            background: 'rgba(99, 102, 241, 0.08)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px'
+                          }}
+                          title="Editar dados cadastrais do motorista (Nome, CPF, Veículo, CNH)"
+                        >
+                          <Edit3 size={14} /> Editar
+                        </button>
+
                         {/* Botão de Excluir Motorista com Confirmação */}
                         <button
                           onClick={() => setDriverToDelete(d)}
@@ -1057,16 +1235,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </span>
                       )}
                     </div>
-                    <span style={{
-                      fontSize: '0.75rem',
-                      padding: '3px 8px',
-                      borderRadius: '6px',
-                      background: 'rgba(16, 185, 129, 0.15)',
-                      color: '#10b981',
-                      fontWeight: 700
-                    }}>
-                      {c.isProfileComplete ? 'Perfil Ativo ✅' : 'Cadastrado 👤'}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{
+                        fontSize: '0.75rem',
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        background: 'rgba(16, 185, 129, 0.15)',
+                        color: '#10b981',
+                        fontWeight: 700
+                      }}>
+                        {c.isProfileComplete ? 'Perfil Ativo ✅' : 'Cadastrado 👤'}
+                      </span>
+                      <button
+                        onClick={() => handleOpenEditClient(c)}
+                        className="btn-outline"
+                        style={{
+                          padding: '4px 10px',
+                          fontSize: '0.75rem',
+                          color: '#818cf8',
+                          borderColor: 'rgba(99, 102, 241, 0.3)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                        title="Editar dados cadastrais do passageiro"
+                      >
+                        <Edit3 size={12} /> Editar Cadastro
+                      </button>
+                    </div>
                   </div>
 
                   <div style={{ fontSize: '0.85rem', color: '#cbd5e1', display: 'flex', flexWrap: 'wrap', gap: '14px' }}>
@@ -2893,6 +3089,472 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 {isDeletingDriver ? 'Excluindo...' : 'Sim, Excluir Motorista'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE EDIÇÃO CADASTRAL DO MOTORISTA */}
+      {editingDriver && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.85)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: 'var(--bg-card, #0f172a)',
+            border: '1px solid rgba(99, 102, 241, 0.3)',
+            borderRadius: '20px',
+            maxWidth: '560px',
+            width: '100%',
+            maxHeight: '90vh',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8)'
+          }}>
+            <div style={{
+              padding: '16px 20px',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <strong style={{ fontSize: '1.05rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Edit3 size={18} color="#818cf8" />
+                Editar Cadastro do Motorista
+              </strong>
+              <button
+                onClick={() => setEditingDriver(null)}
+                style={{ background: 'rgba(255, 255, 255, 0.1)', border: 'none', color: '#fff', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSaveDriverEdit();
+              }}
+              style={{ padding: '20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '14px' }}
+            >
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                  Nome Completo *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editDriverForm.fullName}
+                  onChange={(e) => setEditDriverForm(prev => ({ ...prev, fullName: e.target.value }))}
+                  placeholder="Nome e Sobrenome"
+                  className="input-field"
+                  style={{ width: '100%' }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                    CPF
+                  </label>
+                  <input
+                    type="text"
+                    value={editDriverForm.cpf}
+                    onChange={(e) => setEditDriverForm(prev => ({ ...prev, cpf: formatCpf(e.target.value) }))}
+                    placeholder="000.000.000-00"
+                    className="input-field"
+                    style={{ width: '100%' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                    Telefone / WhatsApp
+                  </label>
+                  <input
+                    type="text"
+                    value={editDriverForm.phone}
+                    onChange={(e) => setEditDriverForm(prev => ({ ...prev, phone: formatPhone(e.target.value) }))}
+                    placeholder="(00) 00000-0000"
+                    className="input-field"
+                    style={{ width: '100%' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                    Número da CNH
+                  </label>
+                  <input
+                    type="text"
+                    value={editDriverForm.cnhNumber}
+                    onChange={(e) => setEditDriverForm(prev => ({ ...prev, cnhNumber: e.target.value }))}
+                    placeholder="Número da CNH"
+                    className="input-field"
+                    style={{ width: '100%' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                    Cat. CNH
+                  </label>
+                  <select
+                    value={editDriverForm.cnhCategory}
+                    onChange={(e) => setEditDriverForm(prev => ({ ...prev, cnhCategory: e.target.value }))}
+                    className="input-field"
+                    style={{ width: '100%' }}
+                  >
+                    <option value="B">B</option>
+                    <option value="AB">AB</option>
+                    <option value="C">C</option>
+                    <option value="D">D</option>
+                    <option value="E">E</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                    Marca do Veículo
+                  </label>
+                  <input
+                    type="text"
+                    value={editDriverForm.vehicleBrand}
+                    onChange={(e) => setEditDriverForm(prev => ({ ...prev, vehicleBrand: e.target.value }))}
+                    placeholder="Ex: Toyota, Honda"
+                    className="input-field"
+                    style={{ width: '100%' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                    Modelo do Veículo
+                  </label>
+                  <input
+                    type="text"
+                    value={editDriverForm.vehicleModel}
+                    onChange={(e) => setEditDriverForm(prev => ({ ...prev, vehicleModel: e.target.value }))}
+                    placeholder="Ex: Corolla, Civic"
+                    className="input-field"
+                    style={{ width: '100%' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                    Ano
+                  </label>
+                  <input
+                    type="text"
+                    value={editDriverForm.vehicleYear}
+                    onChange={(e) => setEditDriverForm(prev => ({ ...prev, vehicleYear: e.target.value }))}
+                    placeholder="Ex: 2022"
+                    className="input-field"
+                    style={{ width: '100%' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                    Placa
+                  </label>
+                  <input
+                    type="text"
+                    value={editDriverForm.vehiclePlate}
+                    onChange={(e) => setEditDriverForm(prev => ({ ...prev, vehiclePlate: formatPlate(e.target.value) }))}
+                    placeholder="ABC-1234"
+                    className="input-field"
+                    style={{ width: '100%' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                    Cor
+                  </label>
+                  <input
+                    type="text"
+                    value={editDriverForm.vehicleColor}
+                    onChange={(e) => setEditDriverForm(prev => ({ ...prev, vehicleColor: e.target.value }))}
+                    placeholder="Ex: Prata"
+                    className="input-field"
+                    style={{ width: '100%' }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                  Status de Verificação
+                </label>
+                <select
+                  value={editDriverForm.verificationStatus}
+                  onChange={(e) => setEditDriverForm(prev => ({ ...prev, verificationStatus: e.target.value as any }))}
+                  className="input-field"
+                  style={{ width: '100%' }}
+                >
+                  <option value="approved">Aprovado ✅ (Apto a fazer corridas)</option>
+                  <option value="under_review">Em Análise ⏳</option>
+                  <option value="pending_docs">Pendente de Documentos ⚠️</option>
+                  <option value="rejected">Reprovado ❌</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '12px' }}>
+                <button
+                  type="button"
+                  onClick={() => setEditingDriver(null)}
+                  className="btn-outline"
+                  style={{ flex: 1, padding: '12px', justifyContent: 'center' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingDriverEdit}
+                  className="btn-primary"
+                  style={{ flex: 2, padding: '12px', justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '8px' }}
+                >
+                  {isSavingDriverEdit ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
+                  {isSavingDriverEdit ? 'Salvando...' : 'Salvar e Sincronizar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE EDIÇÃO CADASTRAL DO PASSAGEIRO */}
+      {editingClient && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.85)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: 'var(--bg-card, #0f172a)',
+            border: '1px solid rgba(99, 102, 241, 0.3)',
+            borderRadius: '20px',
+            maxWidth: '560px',
+            width: '100%',
+            maxHeight: '90vh',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8)'
+          }}>
+            <div style={{
+              padding: '16px 20px',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <strong style={{ fontSize: '1.05rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Edit3 size={18} color="#818cf8" />
+                Editar Cadastro do Passageiro
+              </strong>
+              <button
+                onClick={() => setEditingClient(null)}
+                style={{ background: 'rgba(255, 255, 255, 0.1)', border: 'none', color: '#fff', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSaveClientEdit();
+              }}
+              style={{ padding: '20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '14px' }}
+            >
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                  Nome Completo *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editClientForm.fullName}
+                  onChange={(e) => setEditClientForm(prev => ({ ...prev, fullName: e.target.value }))}
+                  placeholder="Nome e Sobrenome"
+                  className="input-field"
+                  style={{ width: '100%' }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                    CPF
+                  </label>
+                  <input
+                    type="text"
+                    value={editClientForm.cpf}
+                    onChange={(e) => setEditClientForm(prev => ({ ...prev, cpf: formatCpf(e.target.value) }))}
+                    placeholder="000.000.000-00"
+                    className="input-field"
+                    style={{ width: '100%' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                    Telefone / WhatsApp
+                  </label>
+                  <input
+                    type="text"
+                    value={editClientForm.phone}
+                    onChange={(e) => setEditClientForm(prev => ({ ...prev, phone: formatPhone(e.target.value) }))}
+                    placeholder="(00) 00000-0000"
+                    className="input-field"
+                    style={{ width: '100%' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                    CEP
+                  </label>
+                  <input
+                    type="text"
+                    value={editClientForm.cep}
+                    onChange={(e) => setEditClientForm(prev => ({ ...prev, cep: e.target.value }))}
+                    placeholder="00000-000"
+                    className="input-field"
+                    style={{ width: '100%' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                    Rua / Logradouro
+                  </label>
+                  <input
+                    type="text"
+                    value={editClientForm.street}
+                    onChange={(e) => setEditClientForm(prev => ({ ...prev, street: e.target.value }))}
+                    placeholder="Rua, Avenida..."
+                    className="input-field"
+                    style={{ width: '100%' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                    Número
+                  </label>
+                  <input
+                    type="text"
+                    value={editClientForm.number}
+                    onChange={(e) => setEditClientForm(prev => ({ ...prev, number: e.target.value }))}
+                    placeholder="Ex: 123"
+                    className="input-field"
+                    style={{ width: '100%' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                    Complemento
+                  </label>
+                  <input
+                    type="text"
+                    value={editClientForm.complement}
+                    onChange={(e) => setEditClientForm(prev => ({ ...prev, complement: e.target.value }))}
+                    placeholder="Apto, Bloco..."
+                    className="input-field"
+                    style={{ width: '100%' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 2fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                    Bairro
+                  </label>
+                  <input
+                    type="text"
+                    value={editClientForm.neighborhood}
+                    onChange={(e) => setEditClientForm(prev => ({ ...prev, neighborhood: e.target.value }))}
+                    placeholder="Bairro"
+                    className="input-field"
+                    style={{ width: '100%' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                    Cidade
+                  </label>
+                  <input
+                    type="text"
+                    value={editClientForm.city}
+                    onChange={(e) => setEditClientForm(prev => ({ ...prev, city: e.target.value }))}
+                    placeholder="Cidade"
+                    className="input-field"
+                    style={{ width: '100%' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                    UF
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={2}
+                    value={editClientForm.state}
+                    onChange={(e) => setEditClientForm(prev => ({ ...prev, state: e.target.value.toUpperCase() }))}
+                    placeholder="SP"
+                    className="input-field"
+                    style={{ width: '100%' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '12px' }}>
+                <button
+                  type="button"
+                  onClick={() => setEditingClient(null)}
+                  className="btn-outline"
+                  style={{ flex: 1, padding: '12px', justifyContent: 'center' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingClientEdit}
+                  className="btn-primary"
+                  style={{ flex: 2, padding: '12px', justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '8px' }}
+                >
+                  {isSavingClientEdit ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
+                  {isSavingClientEdit ? 'Salvando...' : 'Salvar e Sincronizar'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
