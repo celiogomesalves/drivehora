@@ -70,7 +70,11 @@ interface Ride {
   total: number;
   commission: number;
   driverNet: number;
-  status: "searching" | "accepted" | "in_progress" | "finished" | "cancelled";
+  originLat?: number;
+  originLng?: number;
+  destLat?: number;
+  destLng?: number;
+  status: "searching" | "accepted" | "to_pickup" | "in_progress" | "finished" | "cancelled";
   createdAt: number;
   acceptedAt?: number;
   startedAt?: number;
@@ -241,7 +245,27 @@ app.post("/rides/:id/accept", async (req, res) => {
   res.json({ ok: true, ride: memoryRides.get(id) });
 });
 
-// Iniciar corrida
+// Iniciar deslocamento até o passageiro (status: to_pickup)
+app.post("/rides/:id/to-pickup", async (req, res) => {
+  const id = req.params.id;
+  const ride = memoryRides.get(id);
+  if (ride) {
+    ride.status = "to_pickup";
+    memoryRides.set(id, ride);
+  }
+
+  if (useFirestore && db) {
+    try {
+      await db.collection("rideRequests").doc(id).update({
+        status: "to_pickup"
+      });
+    } catch (e: any) {}
+  }
+
+  res.json({ ok: true, ride: memoryRides.get(id) });
+});
+
+// Iniciar corrida (status: in_progress)
 app.post("/rides/:id/start", async (req, res) => {
   const id = req.params.id;
   const ride = memoryRides.get(id);

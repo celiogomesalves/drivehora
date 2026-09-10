@@ -25,7 +25,7 @@ import { ClientProfileManager } from './components/ClientProfileManager';
 import { GpsNavigationModal } from './components/GpsNavigationModal';
 import { getDriverPreferredGps, launchNavigationApp } from './services/gpsNavigationService';
 import { sendAppNotification, requestNotificationPermission } from './services/soundAndNotificationService';
-import { getCurrentPosition, reverseGeocode, searchAddressPlaces } from './services/gpsService';
+import { getCurrentPosition, reverseGeocode, searchAddressPlaces, geocodeAddress } from './services/gpsService';
 import { formatCurrency, formatCurrencyInput, parseCurrencyInput } from './utils/formatters';
 import { 
   dbGetClientProfile, dbGetDriverProfile, dbGetAllDrivers,
@@ -189,6 +189,7 @@ export function App() {
   const [hourlyRate, setHourlyRate] = useState(60);
   const [isRequesting, setIsRequesting] = useState(false);
   const [isLocatingGPS, setIsLocatingGPS] = useState(false);
+  const [clientOriginCoords, setClientOriginCoords] = useState<{ lat: number; lng: number } | null>(null);
 
   // Cliente: Sub-aba (Solicitar Corrida, Radar, Favoritos VIP, Histórico ou Meus Dados/CPF)
   const [clientSubTab, setClientSubTab] = useState<'request' | 'nearby_radar' | 'favorites' | 'history' | 'profile'>('request');
@@ -669,6 +670,7 @@ export function App() {
         try {
           setIsLocatingGPS(true);
           const coords = await getCurrentPosition();
+          setClientOriginCoords({ lat: coords.latitude, lng: coords.longitude });
           const address = await reverseGeocode(coords);
           if (address) {
             setOrigin(address);
@@ -774,6 +776,7 @@ export function App() {
     setIsLocatingGPS(true);
     try {
       const coords = await getCurrentPosition();
+      setClientOriginCoords({ lat: coords.latitude, lng: coords.longitude });
       const address = await reverseGeocode(coords);
       setOrigin(address);
     } catch (error) {
@@ -900,12 +903,39 @@ export function App() {
       }
     }
 
+    // Geocodificação real dos endereços de embarque e destino
+    let oLat: number | undefined = clientOriginCoords?.lat;
+    let oLng: number | undefined = clientOriginCoords?.lng;
+    let dLat: number | undefined;
+    let dLng: number | undefined;
+
+    try {
+      const [oGeo, dGeo] = await Promise.all([
+        !oLat ? geocodeAddress(origin) : Promise.resolve(null),
+        geocodeAddress(destination)
+      ]);
+      if (oGeo) {
+        oLat = oGeo.latitude;
+        oLng = oGeo.longitude;
+      }
+      if (dGeo) {
+        dLat = dGeo.latitude;
+        dLng = dGeo.longitude;
+      }
+    } catch (err) {
+      console.warn('Erro ao geocodificar endereços:', err);
+    }
+
     const newRide: DbRide = {
       id: rideId,
       clientId,
       clientName: currentUser?.fullName || 'Passageiro',
       origin,
       destination,
+      originLat: oLat,
+      originLng: oLng,
+      destLat: dLat,
+      destLng: dLng,
       hours,
       hourlyRate,
       total: totalAmount,
@@ -974,7 +1004,6 @@ export function App() {
     const driverId = currentUser?.id || 'driver_demo_01';
     const driverName = currentUser?.fullName || 'Motorista Parceiro';
     setDismissedRideId(null);
-    const targetRide = rides.find(r => r.id === rideId);
     await dbUpdateRide(rideId, {
       driverId,
       driverName,
@@ -982,7 +1011,16 @@ export function App() {
       acceptedAt: Date.now()
     });
     fetchRides();
-    showToast('Corrida aceita com sucesso! Inicie o deslocamento até o passageiro.', 'success');
+    showToast('Corrida confirmada! Quando estiver pronto para sair, clique em Iniciar Deslocamento.', 'success');
+  };
+
+  const handleStartToPickup = async (rideId: string) => {
+    const targetRide = rides.find(r => r.id === rideId);
+    await dbUpdateRide(rideId, {
+      status: 'to_pickup'
+    });
+    fetchRides();
+    showToast('Deslocamento iniciado! Passageiro notificado que você está a caminho.', 'info');
 
     if (targetRide) {
       handleOpenGpsNavigation(
@@ -1000,7 +1038,7 @@ export function App() {
       startedAt: Date.now()
     });
     fetchRides();
-    showToast('Corrida iniciada! Abrindo GPS para navegação até o destino.', 'success');
+    showToast('Corrida iniciada! O tempo contratado começou a ser contabilizado.', 'success');
 
     if (targetRide) {
       handleOpenGpsNavigation(
@@ -1115,14 +1153,14 @@ export function App() {
   // ========================================================
   // CÁLCULOS E EFEITOS DO SISTEMA (DECLARADOS ANTES DO RENDER CONDICIONAL PARA RESPEITAR AS REGRAS DOS HOOKS DO REACT)
   // ========================================================
-  const isRideActive = (status?: string) => status === 'searching' || status === 'accepted' || status === 'in_progress';
+  const isRideActive = (status?: string) => status === 'searching' || status === 'accepted' || status === 'to_pickup' || status === 'in_progress';
 
   const activeClientRide = 
     (currentRideId ? rides.find(r => r.id === currentRideId && isRideActive(r.status)) : null) || 
     rides.find(r => currentUser && r.clientId === currentUser.id && isRideActive(r.status)) ||
     null;
   const pendingRides = rides.filter(r => r.status === 'searching');
-  const myDriverRides = rides.filter(r => (r.status === 'accepted' || r.status === 'in_progress') && (r.driverId === currentUser?.id || !r.driverId));
+  const myDriverRides = rides.filter(r => (r.status === 'accepted' || r.status === 'to_pickup' || r.status === 'in_progress') && (r.driverId === currentUser?.id || !r.driverId));
 
   // Corrida cancelada recente para alertar o motorista
   const cancelledRideForDriver = rides.find(
@@ -1187,19 +1225,26 @@ export function App() {
     if (lastClientRideStatus && currentStatus && lastClientRideStatus !== currentStatus) {
       if (lastClientRideStatus === 'searching' && currentStatus === 'accepted') {
         sendAppNotification({
-          title: '🚗 Motorista a Caminho!',
-          body: `${activeClientRide?.driverName || 'O motorista parceiro'} aceitou sua chamada e está se deslocando até seu local de embarque.`,
+          title: '✅ Motorista Confirmado!',
+          body: `${activeClientRide?.driverName || 'O motorista parceiro'} confirmou sua chamada e está se preparando para sair. Aguarde o aviso de deslocamento.`,
           soundType: 'accepted'
         });
-        showToast('Motorista aceitou sua corrida e já está a caminho!', 'success');
-      } else if (lastClientRideStatus === 'accepted' && currentStatus === 'in_progress') {
+        showToast('Motorista confirmado! Aguardando início do deslocamento.', 'info');
+      } else if (currentStatus === 'to_pickup') {
+        sendAppNotification({
+          title: '🚗 Motorista a Caminho!',
+          body: `${activeClientRide?.driverName || 'O motorista parceiro'} iniciou o deslocamento e está a caminho do seu local de embarque!`,
+          soundType: 'accepted'
+        });
+        showToast('Motorista a caminho do seu local de embarque!', 'success');
+      } else if (currentStatus === 'in_progress') {
         sendAppNotification({
           title: '🏁 Corrida Iniciada!',
-          body: 'Sua viagem começou! Acompanhe a rota ao vivo na tela.',
+          body: 'Sua viagem começou! O tempo de serviço contratado está sendo contabilizado.',
           soundType: 'in_progress'
         });
-        showToast('Sua corrida começou! Acompanhe o trajeto em tempo real.', 'info');
-      } else if (lastClientRideStatus === 'in_progress' && currentStatus === 'finished') {
+        showToast('Sua corrida começou! Tempo contratado em andamento.', 'info');
+      } else if (currentStatus === 'finished') {
         sendAppNotification({
           title: '✅ Corrida Concluída!',
           body: 'Você chegou ao seu destino. Obrigado por viajar com o DriveHora!',
@@ -2673,7 +2718,13 @@ export function App() {
                             {activeClientRide.status === 'accepted' && (
                               <>
                                 <CheckCircle2 color="#f59e0b" size={20} />
-                                <span>Motorista ({activeClientRide.driverName || 'Parceiro'}) aceitou! A caminho</span>
+                                <span>Motorista ({activeClientRide.driverName || 'Parceiro'}) Confirmado! Aguardando Saída</span>
+                              </>
+                            )}
+                            {activeClientRide.status === 'to_pickup' && (
+                              <>
+                                <Car color="#f59e0b" size={20} className="animate-car" />
+                                <span>Motorista a Caminho do Embarque!</span>
                               </>
                             )}
                             {activeClientRide.status === 'in_progress' && (
@@ -2770,10 +2821,28 @@ export function App() {
                         </div>
                       )}
 
+                      {/* Fase 1: Aceita / Confirmada (Motorista preparando saída) */}
                       {activeClientRide.status === 'accepted' && (
                         <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                          {/* Mapa de Rastreamento em Tempo Real do Motorista a Caminho */}
-                          <LiveRideTrackerMap ride={activeClientRide} />
+                          <div style={{
+                            background: 'rgba(99, 102, 241, 0.12)',
+                            border: '1px solid rgba(99, 102, 241, 0.35)',
+                            borderRadius: '14px',
+                            padding: '16px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '14px'
+                          }}>
+                            <div style={{ fontSize: '28px' }}>⏳</div>
+                            <div>
+                              <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#fff' }}>
+                                Motorista Confirmado • Preparando Saída
+                              </h4>
+                              <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: '#c7d2fe', lineHeight: 1.4 }}>
+                                O motorista aceitou sua corrida e está se preparando para iniciar o trajeto até você. Assim que ele iniciar o deslocamento, você poderá acompanhar o trajeto ao vivo no mapa!
+                              </p>
+                            </div>
+                          </div>
 
                           <div style={{
                             background: canCancelAccepted ? 'rgba(245, 158, 11, 0.12)' : 'rgba(239, 68, 68, 0.12)',
@@ -2791,7 +2860,7 @@ export function App() {
                               <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
                                 {canCancelAccepted 
                                   ? 'Você tem até 5 minutos após o aceite para cancelar a chamada gratuitamente.' 
-                                  : 'O prazo de 5 minutos expirou. O motorista já está em deslocamento até seu local.'}
+                                  : 'O prazo de 5 minutos expirou.'}
                               </div>
                             </div>
                             {canCancelAccepted && (
@@ -2825,6 +2894,62 @@ export function App() {
                         </div>
                       )}
 
+                      {/* Fase 2: Motorista a Caminho do Passageiro (Trajeto ao vivo até o embarque) */}
+                      {activeClientRide.status === 'to_pickup' && (
+                        <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                          <LiveRideTrackerMap ride={activeClientRide} />
+
+                          <div style={{
+                            background: canCancelAccepted ? 'rgba(245, 158, 11, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                            border: `1px solid ${canCancelAccepted ? 'rgba(245, 158, 11, 0.4)' : 'rgba(239, 68, 68, 0.4)'}`,
+                            borderRadius: '12px',
+                            padding: '14px',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center'
+                          }}>
+                            <div>
+                              <div style={{ fontSize: '0.75rem', color: canCancelAccepted ? '#f59e0b' : '#ef4444', fontWeight: 700 }}>
+                                {canCancelAccepted ? '⏱️ PRAZO DE CANCELAMENTO GRATUITO' : '⚠️ MOTORISTA JÁ EM DESLOCAMENTO'}
+                              </div>
+                              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                                {canCancelAccepted 
+                                  ? 'Você tem até 5 minutos após o aceite para cancelar a chamada gratuitamente.' 
+                                  : 'O prazo de cancelamento gratuito expirou. O motorista está a caminho do seu local.'}
+                              </div>
+                            </div>
+                            {canCancelAccepted && (
+                              <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#f59e0b', fontFamily: 'monospace' }}>
+                                {formattedCountdown}
+                              </div>
+                            )}
+                          </div>
+
+                          {canCancelAccepted && (
+                            <button
+                              type="button"
+                              onClick={() => handleCancelRideByClient(activeClientRide.id)}
+                              className="btn-outline"
+                              style={{
+                                width: '100%',
+                                padding: '12px',
+                                color: '#ef4444',
+                                borderColor: 'rgba(239, 68, 68, 0.4)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '8px',
+                                fontWeight: 700
+                              }}
+                            >
+                              <Ban size={16} />
+                              <span>Cancelar Corrida ({formattedCountdown} restantes)</span>
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Fase 3: Corrida Iniciada até o Destino (Contabilização do tempo e trajeto final) */}
                       {activeClientRide.status === 'in_progress' && (
                         <div style={{ marginTop: '20px' }}>
                           <LiveRideTrackerMap ride={activeClientRide} />
@@ -2838,7 +2963,7 @@ export function App() {
                             marginTop: '12px',
                             textAlign: 'center'
                           }}>
-                            ✅ <strong>Corrida em andamento:</strong> Acompanhe a rota no mapa em tempo real. O motorista concluirá o período contratado ao final.
+                            ✅ <strong>Corrida em andamento:</strong> O tempo contratado está sendo contabilizado. Acompanhe a rota até o destino no mapa.
                           </div>
                         </div>
                       )}
@@ -3226,10 +3351,10 @@ export function App() {
                                         fontWeight: 700,
                                         padding: '2px 8px',
                                         borderRadius: '10px',
-                                        background: r.status === 'finished' ? 'rgba(16, 185, 129, 0.15)' : r.status === 'in_progress' ? 'rgba(59, 130, 246, 0.15)' : r.status === 'accepted' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                                        color: r.status === 'finished' ? '#10b981' : r.status === 'in_progress' ? '#3b82f6' : r.status === 'accepted' ? '#f59e0b' : '#ef4444'
+                                        background: r.status === 'finished' ? 'rgba(16, 185, 129, 0.15)' : r.status === 'in_progress' ? 'rgba(59, 130, 246, 0.15)' : (r.status === 'accepted' || r.status === 'to_pickup') ? 'rgba(245, 158, 11, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                                        color: r.status === 'finished' ? '#10b981' : r.status === 'in_progress' ? '#3b82f6' : (r.status === 'accepted' || r.status === 'to_pickup') ? '#f59e0b' : '#ef4444'
                                       }}>
-                                        {r.status === 'finished' ? 'CONCLUÍDA' : r.status === 'in_progress' ? 'EM ANDAMENTO' : r.status === 'accepted' ? 'ACEITA' : r.status === 'searching' ? 'BUSCANDO' : 'CANCELADA'}
+                                        {r.status === 'finished' ? 'CONCLUÍDA' : r.status === 'in_progress' ? 'EM ANDAMENTO' : r.status === 'to_pickup' ? 'A CAMINHO' : r.status === 'accepted' ? 'CONFIRMADA' : r.status === 'searching' ? 'BUSCANDO' : 'CANCELADA'}
                                       </span>
                                     </div>
                                     <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
@@ -3936,7 +4061,14 @@ export function App() {
                               >
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                                   <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>{r.origin} ➔ {r.destination}</span>
-                                  <span style={{ fontSize: '0.75rem', color: '#f59e0b', fontWeight: 700, textTransform: 'uppercase' }}>{r.status}</span>
+                                  <span style={{
+                                    fontSize: '0.75rem',
+                                    color: r.status === 'in_progress' ? '#10b981' : '#f59e0b',
+                                    fontWeight: 800,
+                                    textTransform: 'uppercase'
+                                  }}>
+                                    {r.status === 'to_pickup' ? 'A CAMINHO' : r.status === 'accepted' ? 'CONFIRMADA' : r.status === 'in_progress' ? 'EM ANDAMENTO' : r.status}
+                                  </span>
                                 </div>
 
                                 <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>
@@ -3951,17 +4083,17 @@ export function App() {
                                     <button
                                       type="button"
                                       onClick={() => {
-                                        if (r.status === 'accepted') {
-                                          handleOpenGpsNavigation(
-                                            r.origin,
-                                            'Ponto de Embarque do Passageiro',
-                                            r.originLat && r.originLng ? { lat: r.originLat, lng: r.originLng } : undefined
-                                          );
-                                        } else {
+                                        if (r.status === 'in_progress') {
                                           handleOpenGpsNavigation(
                                             r.destination,
                                             'Destino Final da Corrida',
                                             r.destLat && r.destLng ? { lat: r.destLat, lng: r.destLng } : undefined
+                                          );
+                                        } else {
+                                          handleOpenGpsNavigation(
+                                            r.origin,
+                                            'Ponto de Embarque do Passageiro',
+                                            r.originLat && r.originLng ? { lat: r.originLat, lng: r.originLng } : undefined
                                           );
                                         }
                                       }}
@@ -3982,7 +4114,7 @@ export function App() {
                                       title="Abrir rota no Waze, Google Maps ou Apple Maps"
                                     >
                                       <Navigation size={16} />
-                                      <span>{r.status === 'accepted' ? '🗺️ Navegar até o Passageiro' : '🗺️ Navegar até o Destino'}</span>
+                                      <span>{r.status === 'in_progress' ? '🗺️ Navegar até o Destino' : '🗺️ Navegar até o Passageiro'}</span>
                                     </button>
 
                                     <button
@@ -3990,11 +4122,11 @@ export function App() {
                                       onClick={() => {
                                         setGpsModalData({
                                           isOpen: true,
-                                          destinationAddress: r.status === 'accepted' ? r.origin : r.destination,
-                                          destinationLabel: r.status === 'accepted' ? 'Ponto de Embarque' : 'Destino Final',
-                                          coords: r.status === 'accepted'
-                                            ? (r.originLat && r.originLng ? { lat: r.originLat, lng: r.originLng } : undefined)
-                                            : (r.destLat && r.destLng ? { lat: r.destLat, lng: r.destLng } : undefined)
+                                          destinationAddress: r.status === 'in_progress' ? r.destination : r.origin,
+                                          destinationLabel: r.status === 'in_progress' ? 'Destino Final' : 'Ponto de Embarque',
+                                          coords: r.status === 'in_progress'
+                                            ? (r.destLat && r.destLng ? { lat: r.destLat, lng: r.destLng } : undefined)
+                                            : (r.originLat && r.originLng ? { lat: r.originLat, lng: r.originLng } : undefined)
                                         });
                                       }}
                                       className="btn-outline"
@@ -4013,21 +4145,60 @@ export function App() {
                                   {/* Ação de Transição de Status da Corrida */}
                                   {r.status === 'accepted' && (
                                     <button
+                                      onClick={() => handleStartToPickup(r.id)}
+                                      className="btn-primary"
+                                      style={{
+                                        width: '100%',
+                                        padding: '12px',
+                                        fontSize: '0.88rem',
+                                        fontWeight: 800,
+                                        background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '8px'
+                                      }}
+                                    >
+                                      <Navigation size={18} />
+                                      <span>🚗 Iniciar Deslocamento até o Passageiro</span>
+                                    </button>
+                                  )}
+                                  {r.status === 'to_pickup' && (
+                                    <button
                                       onClick={() => handleStartRide(r.id)}
                                       className="btn-primary"
-                                      style={{ width: '100%', padding: '10px', fontSize: '0.85rem', fontWeight: 700 }}
+                                      style={{
+                                        width: '100%',
+                                        padding: '12px',
+                                        fontSize: '0.88rem',
+                                        fontWeight: 800,
+                                        background: 'linear-gradient(135deg, #10b981, #059669)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '8px'
+                                      }}
                                     >
-                                      <PlayCircle size={16} />
-                                      <span>Iniciar Trajeto com Passageiro</span>
+                                      <PlayCircle size={18} />
+                                      <span>🏁 Iniciar Corrida até o Destino (Começar Horas)</span>
                                     </button>
                                   )}
                                   {r.status === 'in_progress' && (
                                     <button
                                       onClick={() => handleFinishRide(r.id)}
                                       className="btn-success"
-                                      style={{ width: '100%', padding: '10px', fontSize: '0.85rem', fontWeight: 700 }}
+                                      style={{
+                                        width: '100%',
+                                        padding: '12px',
+                                        fontSize: '0.88rem',
+                                        fontWeight: 800,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '8px'
+                                      }}
                                     >
-                                      <CheckCircle2 size={16} />
+                                      <CheckCircle2 size={18} />
                                       <span>Concluir Corrida e Receber {formatCurrency(r.driverNet)}</span>
                                     </button>
                                   )}
@@ -4278,10 +4449,10 @@ export function App() {
                                           fontWeight: 700,
                                           padding: '2px 8px',
                                           borderRadius: '10px',
-                                          background: r.status === 'finished' ? 'rgba(16, 185, 129, 0.15)' : r.status === 'in_progress' ? 'rgba(59, 130, 246, 0.15)' : r.status === 'accepted' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                                          color: r.status === 'finished' ? '#10b981' : r.status === 'in_progress' ? '#3b82f6' : r.status === 'accepted' ? '#f59e0b' : '#ef4444'
+                                          background: r.status === 'finished' ? 'rgba(16, 185, 129, 0.15)' : r.status === 'in_progress' ? 'rgba(59, 130, 246, 0.15)' : (r.status === 'accepted' || r.status === 'to_pickup') ? 'rgba(245, 158, 11, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                                          color: r.status === 'finished' ? '#10b981' : r.status === 'in_progress' ? '#3b82f6' : (r.status === 'accepted' || r.status === 'to_pickup') ? '#f59e0b' : '#ef4444'
                                         }}>
-                                          {r.status === 'finished' ? 'CONCLUÍDA' : r.status === 'in_progress' ? 'EM ANDAMENTO' : r.status === 'accepted' ? 'ACEITA' : r.status === 'searching' ? 'BUSCANDO' : 'CANCELADA'}
+                                          {r.status === 'finished' ? 'CONCLUÍDA' : r.status === 'in_progress' ? 'EM ANDAMENTO' : r.status === 'to_pickup' ? 'A CAMINHO' : r.status === 'accepted' ? 'CONFIRMADA' : r.status === 'searching' ? 'BUSCANDO' : 'CANCELADA'}
                                         </span>
                                       </div>
                                       <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>

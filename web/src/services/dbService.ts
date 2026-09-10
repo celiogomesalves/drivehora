@@ -19,7 +19,7 @@ export interface DbRide {
   total: number;
   commission: number;
   driverNet: number;
-  status: 'searching' | 'accepted' | 'in_progress' | 'finished' | 'cancelled';
+  status: 'searching' | 'accepted' | 'to_pickup' | 'in_progress' | 'finished' | 'cancelled';
   paymentMethod?: 'pix' | 'credit_card' | 'cash' | 'card_machine';
   paymentStatus?: 'pending' | 'paid' | 'in_person_pending' | 'in_person_completed' | 'failed';
   paymentGateway?: 'asaas' | 'mercadopago' | 'stripe';
@@ -537,6 +537,10 @@ export const dbCreateRide = async (ride: DbRide): Promise<{ success: boolean; er
         driver_net: Number(ride.driverNet) || 42.5,
         status: ride.status || 'searching'
       };
+      if (ride.originLat) payload.origin_lat = ride.originLat;
+      if (ride.originLng) payload.origin_lng = ride.originLng;
+      if (ride.destLat) payload.dest_lat = ride.destLat;
+      if (ride.destLng) payload.dest_lng = ride.destLng;
 
       const res = await sb.from('rides').insert([payload]);
       if (res?.error) {
@@ -588,6 +592,8 @@ export const dbUpdateRide = async (
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ driverId: updates.driverId })
     });
+  } else if (updates.status === 'to_pickup') {
+    await fetch(`/api/rides/${rideId}/to-pickup`, { method: 'POST' }).catch(() => {});
   } else if (updates.status === 'in_progress') {
     await fetch(`/api/rides/${rideId}/start`, { method: 'POST' });
   } else if (updates.status === 'finished') {

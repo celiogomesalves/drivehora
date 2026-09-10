@@ -177,3 +177,72 @@ export const calculateDistanceKm = (coord1: Coordinates, coord2: Coordinates): n
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return Number((R * c).toFixed(1));
 };
+
+// 5. Geocodificação Real de Endereço em Texto para Coordenadas (Nominatim / Photon)
+export const geocodeAddress = async (address: string): Promise<Coordinates | null> => {
+  const clean = address.trim();
+  if (clean.length < 3) return null;
+
+  try {
+    const encoded = encodeURIComponent(clean);
+    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encoded}&countrycodes=br&limit=1`;
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'DriveHoraApp/1.0 (contact@drivehora.com)',
+        'Accept-Language': 'pt-BR,pt;q=0.9'
+      }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        return {
+          latitude: parseFloat(data[0].lat),
+          longitude: parseFloat(data[0].lon)
+        };
+      }
+    }
+  } catch (err) {
+    console.warn('Erro geocodeAddress Nominatim:', err);
+  }
+
+  // Fallback Photon
+  try {
+    const encoded = encodeURIComponent(clean);
+    const res = await fetch(`https://photon.komoot.io/api/?q=${encoded}&limit=1`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.features && data.features.length > 0) {
+        const [lon, lat] = data.features[0].geometry.coordinates;
+        return { latitude: lat, longitude: lon };
+      }
+    }
+  } catch (err) {
+    console.warn('Erro geocodeAddress Photon:', err);
+  }
+
+  return null;
+};
+
+// 6. Obter Traçado de Rota Real por Ruas (OpenStreetMap / OSRM Routing)
+export const fetchRouteGeometry = async (start: Coordinates, end: Coordinates): Promise<[number, number][]> => {
+  try {
+    const url = `https://router.project-osrm.org/route/v1/driving/${start.longitude},${start.latitude};${end.longitude},${end.latitude}?overview=full&geometries=geojson`;
+    const res = await fetch(url);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.routes && data.routes.length > 0) {
+        const coords = data.routes[0].geometry.coordinates;
+        // OSRM retorna [lng, lat], convertemos para [lat, lng] compatível com Leaflet
+        return coords.map(([lng, lat]: [number, number]) => [lat, lng]);
+      }
+    }
+  } catch (err) {
+    console.warn('Erro ao obter traçado OSRM:', err);
+  }
+
+  // Fallback linear caso o serviço esteja temporariamente indisponível
+  return [
+    [start.latitude, start.longitude],
+    [end.latitude, end.longitude]
+  ];
+};
