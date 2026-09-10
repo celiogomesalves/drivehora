@@ -63,6 +63,8 @@ export function App() {
     }
   });
 
+  const isUserAdmin = Boolean(currentUser?.isAdmin || currentUser?.role === 'admin' || isSuperAdminEmail(currentUser?.email));
+
   const [activeTab, setActiveTab] = useState<'client' | 'driver' | 'admin' | 'mobile'>(() => {
     try {
       const saved = localStorage.getItem('drivehora_current_user');
@@ -692,8 +694,6 @@ export function App() {
     || (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1' 
         ? window.location.origin 
         : 'https://drivehora.agenc-ia.net');
-
-  const isUserAdmin = Boolean(currentUser?.isAdmin || currentUser?.role === 'admin' || isSuperAdminEmail(currentUser?.email));
 
   // Cálculos financeiros
   const totalAmount = hours * hourlyRate;
