@@ -3739,9 +3739,9 @@ export function App() {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }}>
                   {/* Painel do Motorista */}
                   <div className="glass-panel" style={{ padding: '28px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
                     <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                         <h2 style={{ fontSize: '1.3rem', fontWeight: 700 }}>Painel do Motorista</h2>
                         {driverProfile?.verificationStatus === 'approved' ? (
                           <span style={{ fontSize: '0.7rem', color: '#10b981', background: 'rgba(16, 185, 129, 0.15)', padding: '2px 8px', borderRadius: '10px', fontWeight: 700 }}>
@@ -3752,13 +3752,35 @@ export function App() {
                             Admin (Cadastro Pendente)
                           </span>
                         )}
+                        {/* Indicador de Status Online/Offline visível no topo */}
+                        <span style={{
+                          fontSize: '0.7rem',
+                          color: isDriverOnline ? '#10b981' : '#ef4444',
+                          background: isDriverOnline ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                          border: `1px solid ${isDriverOnline ? 'rgba(16, 185, 129, 0.35)' : 'rgba(239, 68, 68, 0.35)'}`,
+                          padding: '2px 8px',
+                          borderRadius: '12px',
+                          fontWeight: 700,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}>
+                          <span style={{
+                            width: '6px',
+                            height: '6px',
+                            borderRadius: '50%',
+                            background: isDriverOnline ? '#10b981' : '#ef4444',
+                            display: 'inline-block'
+                          }} />
+                          {isDriverOnline ? 'ONLINE' : 'OFFLINE'}
+                        </span>
                       </div>
-                      <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                      <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
                         {driverProfile?.vehicleBrand ? `${driverProfile.vehicleBrand} ${driverProfile.vehicleModel} • ${driverProfile.vehiclePlate}` : 'Complete seu veículo para atender chamados'}
                       </p>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <div className="driver-subnav-desktop" style={{ alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                       <div style={{
                         display: 'flex',
                         background: 'rgba(15, 23, 42, 0.8)',
@@ -3948,7 +3970,7 @@ export function App() {
                   </div>
 
                   {/* Card de Preferências de Pagamento do Motorista */}
-                  <div style={{
+                  <div id="driver-payment-prefs" style={{
                     background: 'rgba(15, 23, 42, 0.75)',
                     border: '1px solid var(--border-subtle)',
                     borderRadius: '14px',
@@ -4883,6 +4905,106 @@ export function App() {
               </div>
               <span>Meus Dados</span>
             </button>
+          </nav>
+        </>
+      )}
+
+      {/* Barra de Navegação Inferior Mobile para Motorista (Menu no Rodapé Estilo App Nativo) */}
+      {activeTab === 'driver' && (
+        <>
+          <div className="mobile-nav-spacer" />
+          <nav className="mobile-bottom-nav" aria-label="Menu Inferior do Motorista">
+            <button
+              onClick={() => {
+                setShowDriverProfileEdit(false);
+                setDriverSubTab('radar');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className={`mobile-nav-item ${driverSubTab === 'radar' && !showDriverProfileEdit ? 'active driver-active' : ''}`}
+            >
+              <div className="icon-wrapper">
+                <Radio size={19} className={isDriverOnline ? 'animate-pulse' : ''} />
+              </div>
+              <span>Radar</span>
+            </button>
+
+            <button
+              onClick={() => {
+                setShowDriverProfileEdit(false);
+                setDriverSubTab('history');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className={`mobile-nav-item ${driverSubTab === 'history' && !showDriverProfileEdit ? 'active driver-active' : ''}`}
+            >
+              <div className="icon-wrapper">
+                <Clock size={19} />
+              </div>
+              <span>Histórico</span>
+            </button>
+
+            {/* Botão Central de Alternância de Status Online/Offline */}
+            <button
+              onClick={handleToggleDriverOnline}
+              disabled={isTogglingOnline}
+              className={`mobile-nav-item driver-status-item ${isDriverOnline ? 'is-online' : 'is-offline'}`}
+              title={isDriverOnline ? 'Toque para ficar Offline' : 'Toque para ficar Online'}
+            >
+              <div className="icon-wrapper driver-status-icon">
+                {isTogglingOnline ? (
+                  <RefreshCw size={19} className="animate-spin" />
+                ) : (
+                  <Radio size={19} className={isDriverOnline ? 'animate-pulse' : ''} />
+                )}
+              </div>
+              <span style={{ fontWeight: 800, fontSize: '0.68rem' }}>{isDriverOnline ? 'ONLINE' : 'OFFLINE'}</span>
+            </button>
+
+            <button
+              onClick={() => {
+                setShowDriverProfileEdit(true);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className={`mobile-nav-item ${showDriverProfileEdit ? 'active driver-active' : ''}`}
+            >
+              <div className="icon-wrapper">
+                <Car size={19} />
+              </div>
+              <span>Veículo/Doc</span>
+            </button>
+
+            {isUserAdmin ? (
+              <button
+                onClick={() => {
+                  setActiveTab('admin');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="mobile-nav-item"
+                style={{ color: '#f59e0b' }}
+              >
+                <div className="icon-wrapper">
+                  <Crown size={19} color="#f59e0b" />
+                </div>
+                <span>Admin</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => {
+                  setShowDriverProfileEdit(false);
+                  const el = document.getElementById('driver-payment-prefs');
+                  if (el) {
+                    el.scrollIntoView({ behavior: 'smooth' });
+                  } else {
+                    showToast('Defina suas preferências de recebimento no painel.', 'info');
+                  }
+                }}
+                className="mobile-nav-item"
+              >
+                <div className="icon-wrapper">
+                  <CreditCard size={19} />
+                </div>
+                <span>Receber</span>
+              </button>
+            )}
           </nav>
         </>
       )}
