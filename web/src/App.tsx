@@ -508,9 +508,54 @@ export function App() {
     d => d.isOnline && (d.verificationStatus === 'approved' || isSuperAdminEmail(d.phone || ''))
   ).length;
 
+  // Formatador seguro de data e hora agendada (à prova de falhas entre navegadores e fusos)
+  const formatScheduledDate = (val?: string | null): string => {
+    if (!val) return 'Data marcada';
+    try {
+      const raw = String(val).trim();
+      const dateObj = new Date(raw.length === 16 ? `${raw}:00` : raw);
+      if (!isNaN(dateObj.getTime())) {
+        const d = String(dateObj.getDate()).padStart(2, '0');
+        const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const y = dateObj.getFullYear();
+        const h = String(dateObj.getHours()).padStart(2, '0');
+        const min = String(dateObj.getMinutes()).padStart(2, '0');
+        return `${d}/${m}/${y} às ${h}:${min}`;
+      }
+      if (raw.includes('T')) {
+        const [dPart, tPart] = raw.split('T');
+        const [y, m, d] = dPart.split('-');
+        return `${d}/${m}/${y} às ${tPart}`;
+      }
+      return raw;
+    } catch {
+      return String(val || 'Data marcada');
+    }
+  };
+
+  // Garante que comodidades sejam sempre tratadas como um array de strings seguro
+  const safeAmenitiesArray = (val: any): string[] => {
+    if (!val) return [];
+    if (Array.isArray(val)) {
+      return val.map(item => (typeof item === 'string' ? item : (item?.id || item?.label || String(item))));
+    }
+    if (typeof val === 'string') {
+      try {
+        const parsed = JSON.parse(val);
+        if (Array.isArray(parsed)) return safeAmenitiesArray(parsed);
+      } catch {}
+      if (val.startsWith('{') && val.endsWith('}')) {
+        return val.slice(1, -1).split(',').map(s => s.trim().replace(/^"|"$/g, ''));
+      }
+      return [val];
+    }
+    return [];
+  };
+
   // Normalizador de comodidades (compatibilidade entre IDs curtos e rótulos longos de onboarding)
-  const normalizeAmenity = (a: string): string => {
-    const s = (a || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  const normalizeAmenity = (a: any): string => {
+    const raw = typeof a === 'string' ? a : (a?.id || a?.label || String(a || ''));
+    const s = raw.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
     if (s.includes('pcd') || s.includes('acessib') || s.includes('defic')) return 'acessibilidade_pcd';
     if (s.includes('ar') || s.includes('clima') || s.includes('condicion')) return 'ar_condicionado';
     if (s.includes('pet') || s.includes('anim')) return 'pet_friendly';
@@ -520,16 +565,18 @@ export function App() {
     return s;
   };
 
-  const driverHasAllAmenities = (driverAmenities: string[] | undefined, requiredAmenities: string[] | undefined): boolean => {
-    if (!requiredAmenities || requiredAmenities.length === 0) return true;
-    const normalizedDriver = (driverAmenities || []).map(normalizeAmenity);
-    return requiredAmenities.every(req => normalizedDriver.includes(normalizeAmenity(req)));
+  const driverHasAllAmenities = (driverAmenities: any, requiredAmenities: any): boolean => {
+    const reqArr = safeAmenitiesArray(requiredAmenities);
+    if (reqArr.length === 0) return true;
+    const normalizedDriver = safeAmenitiesArray(driverAmenities).map(normalizeAmenity);
+    return reqArr.every(req => normalizedDriver.includes(normalizeAmenity(req)));
   };
 
   // Identificar solicitação de corrida pendente em busca de motorista
-  // Administradores veem todas para fins de teste e gestão da plataforma
+  // Exclui a si próprio se o usuário logado for o passageiro da corrida
   const incomingRide = rides.find(r => {
     if (r.status !== 'searching') return false;
+    if (currentUser && r.clientId === currentUser.id) return false;
     if (!isUserAdmin && r.requiredAmenities && r.requiredAmenities.length > 0) {
       if (!driverHasAllAmenities(driverProfile?.amenities, r.requiredAmenities)) {
         return false;
@@ -2212,7 +2259,7 @@ export function App() {
       {/* ======================================================== */}
       {/* MODAL DE ALERTA VISUAL E SONORO DE NOVA CORRIDA (MOTORISTA ONLINE) */}
       {/* ======================================================== */}
-      {isDriverOnline && incomingRide && incomingRide.id !== dismissedRideId && driverSecondsRemaining > 0 && (
+      {activeTab === 'driver' && isDriverOnline && incomingRide && incomingRide.clientId !== currentUser?.id && incomingRide.id !== dismissedRideId && driverSecondsRemaining > 0 && (
         <div style={{
           position: 'fixed',
           top: 0,
@@ -2276,15 +2323,15 @@ export function App() {
                     width: '100%',
                     height: '100%',
                     borderRadius: '50%',
-                    border: '2px solid rgba(99, 102, 241, 0.6)'
+                    border: `2px solid ${incomingRide.isScheduled ? 'rgba(59, 130, 246, 0.5)' : 'rgba(239, 68, 68, 0.5)'}`
                   }}></div>
                   <div style={{
-                    width: '42px',
-                    height: '42px',
+                    width: '40px',
+                    height: '40px',
                     borderRadius: '50%',
-                    background: incomingRide.isScheduled
-                      ? 'radial-gradient(circle, rgba(59, 130, 246, 0.3) 0%, rgba(99, 102, 241, 0.4) 100%)'
-                      : 'radial-gradient(circle, rgba(239, 68, 68, 0.3) 0%, rgba(99, 102, 241, 0.4) 100%)',
+                    background: incomingRide.isScheduled 
+                      ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.3), rgba(30, 58, 138, 0.5))' 
+                      : 'linear-gradient(135deg, rgba(239, 68, 68, 0.3), rgba(127, 29, 29, 0.5))',
                     border: `1.5px solid ${incomingRide.isScheduled ? 'rgba(59, 130, 246, 0.6)' : 'rgba(239, 68, 68, 0.6)'}`,
                     display: 'flex',
                     alignItems: 'center',
@@ -2301,7 +2348,7 @@ export function App() {
                   </h3>
                   <span style={{ fontSize: '0.8rem', color: incomingRide.isScheduled ? '#93c5fd' : '#a5b4fc', fontWeight: 600 }}>
                     {incomingRide.isScheduled 
-                      ? `Prevista para: ${incomingRide.scheduledFor ? new Date(incomingRide.scheduledFor).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : 'Data marcada'}`
+                      ? `Prevista para: ${formatScheduledDate(incomingRide.scheduledFor)}`
                       : 'Aceite antes do tempo esgotar'}
                   </span>
                 </div>
@@ -2388,7 +2435,7 @@ export function App() {
               </div>
 
               {/* Comodidades Requeridas (se houver) */}
-              {incomingRide.requiredAmenities && incomingRide.requiredAmenities.length > 0 && (
+              {safeAmenitiesArray(incomingRide.requiredAmenities).length > 0 && (
                 <div style={{
                   padding: '8px 12px',
                   borderRadius: '10px',
@@ -2402,7 +2449,7 @@ export function App() {
                 }}>
                   <span>✨ <strong>Comodidades Requeridas:</strong></span>
                   <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                    {incomingRide.requiredAmenities.map(am => (
+                    {safeAmenitiesArray(incomingRide.requiredAmenities).map(am => (
                       <span key={am} style={{ background: 'rgba(59, 130, 246, 0.25)', padding: '2px 8px', borderRadius: '6px', fontWeight: 700 }}>
                         {am === 'acessibilidade_pcd' ? '♿ Adaptado PCD' : am === 'ar_condicionado' ? '❄️ Ar-Condicionado' : am === 'pet_friendly' ? '🐾 Pet Friendly' : am}
                       </span>
@@ -3493,16 +3540,16 @@ export function App() {
                                     borderRadius: '12px',
                                     fontWeight: 700
                                   }}>
-                                    🗓️ {new Date(activeClientRide.scheduledFor).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+                                    🗓️ {formatScheduledDate(activeClientRide.scheduledFor)}
                                   </span>
                                 )}
                               </div>
                               <p style={{ margin: '6px 0 0 0', fontSize: '0.82rem', color: '#bae6fd', lineHeight: 1.4 }}>
                                 Sua solicitação foi publicada no Mural de Agendamentos dos motoristas parceiros. Como se trata de agendamento prévio, não há prazo limite de cancelamento automático.
                               </p>
-                              {activeClientRide.requiredAmenities && activeClientRide.requiredAmenities.length > 0 && (
+                              {safeAmenitiesArray(activeClientRide.requiredAmenities).length > 0 && (
                                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '8px' }}>
-                                  {activeClientRide.requiredAmenities.map(amenityId => (
+                                  {safeAmenitiesArray(activeClientRide.requiredAmenities).map(amenityId => (
                                     <span key={amenityId} style={{
                                       fontSize: '0.72rem',
                                       padding: '2px 8px',
@@ -5040,13 +5087,13 @@ export function App() {
                                     alignItems: 'center',
                                     gap: '6px'
                                   }}>
-                                    🗓️ Data/Hora Agendada: {new Date(r.scheduledFor).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+                                    🗓️ Data/Hora Agendada: {formatScheduledDate(r.scheduledFor)}
                                   </div>
                                 )}
 
-                                {r.requiredAmenities && r.requiredAmenities.length > 0 && (
+                                {safeAmenitiesArray(r.requiredAmenities).length > 0 && (
                                   <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '10px' }}>
-                                    {r.requiredAmenities.map(am => (
+                                    {safeAmenitiesArray(r.requiredAmenities).map(am => (
                                       <span key={am} style={{
                                         fontSize: '0.72rem',
                                         padding: '2px 8px',
@@ -5183,13 +5230,13 @@ export function App() {
                                         alignItems: 'center',
                                         gap: '6px'
                                       }}>
-                                        📅 Corrida Agendada para: {new Date(r.scheduledFor).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+                                        📅 Corrida Agendada para: {formatScheduledDate(r.scheduledFor)}
                                       </div>
                                     )}
 
-                                    {r.requiredAmenities && r.requiredAmenities.length > 0 && (
+                                    {safeAmenitiesArray(r.requiredAmenities).length > 0 && (
                                       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '10px' }}>
-                                        {r.requiredAmenities.map(am => (
+                                        {safeAmenitiesArray(r.requiredAmenities).map(am => (
                                           <span key={am} style={{
                                             fontSize: '0.7rem',
                                             padding: '2px 8px',

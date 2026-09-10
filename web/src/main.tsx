@@ -3,11 +3,14 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import { SystemDialogProvider } from './components/SystemDialog.tsx'
+import { ErrorBoundary } from './components/ErrorBoundary.tsx'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <SystemDialogProvider>
-      <App />
-    </SystemDialogProvider>
+    <ErrorBoundary>
+      <SystemDialogProvider>
+        <App />
+      </SystemDialogProvider>
+    </ErrorBoundary>
   </StrictMode>,
 )
