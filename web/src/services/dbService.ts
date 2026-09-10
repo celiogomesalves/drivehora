@@ -621,7 +621,17 @@ export const dbCreateRide = async (ride: DbRide): Promise<{ success: boolean; er
       if (ride.destLat) payload.dest_lat = ride.destLat;
       if (ride.destLng) payload.dest_lng = ride.destLng;
 
-      const res = await sb.from('rides').insert([payload]);
+      let res = await sb.from('rides').insert([payload]);
+      if (res?.error) {
+        console.warn('Tentativa de inserção com coordenadas falhou, tentando campos essenciais:', res.error);
+        // Fallback imediato: remove colunas adicionais caso o schema do Supabase ainda não as tenha
+        delete payload.origin_lat;
+        delete payload.origin_lng;
+        delete payload.dest_lat;
+        delete payload.dest_lng;
+        res = await sb.from('rides').insert([payload]);
+      }
+
       if (res?.error) {
         console.warn('Erro ao inserir corrida no Supabase:', res.error);
         return { success: false, error: res.error.message };
@@ -657,6 +667,8 @@ export const dbUpdateRide = async (
       if (updates.acceptedAt) payload.accepted_at = new Date(updates.acceptedAt).toISOString();
       if (updates.startedAt) payload.started_at = new Date(updates.startedAt).toISOString();
       if (updates.finishedAt) payload.finished_at = new Date(updates.finishedAt).toISOString();
+      if (updates.createdAt) payload.created_at = new Date(updates.createdAt).toISOString();
+      if (updates.paymentStatus) payload.payment_status = updates.paymentStatus;
 
       await sb.from('rides').update(payload).eq('id', rideId);
       return;

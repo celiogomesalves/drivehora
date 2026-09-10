@@ -1236,6 +1236,9 @@ export function App() {
   useEffect(() => {
     if (!currentUser) return;
     if (activeClientRide && activeClientRide.status === 'searching') {
+      // Não auto-cancelar enquanto o passageiro ainda estiver no modal de pagamento Pix
+      if (pixModalData) return;
+
       // Caso 1: Passou de 10 minutos de busca
       if (searchElapsedSeconds >= MAX_SEARCH_DURATION_SECS) {
         dbCancelRide(activeClientRide.id);
@@ -2650,7 +2653,7 @@ export function App() {
                 </div>
 
                 {/* Status em Tempo Real da Corrida do Cliente */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <div id="active-ride-tracking-section" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                   {activeClientRide ? (
                     <div 
                       className={`glass-panel ${activeClientRide.status === 'searching' ? 'animate-searching-glow' : ''}`} 
@@ -4859,19 +4862,33 @@ export function App() {
               <button
                 type="button"
                 onClick={async () => {
+                  const confirmedAt = Date.now();
                   try {
                     // Confirma e registra a cobrança no painel do Asaas como RECEBIDA
                     if (pixModalData.externalId) {
                       await simulateAsaasPayment(pixModalData.externalId, pixModalData.amount);
                     }
-                    await dbUpdateRide(pixModalData.rideId, { paymentStatus: 'paid' });
-                    setRides(prev => prev.map(r => r.id === pixModalData.rideId ? { ...r, paymentStatus: 'paid' } : r));
+                    await dbUpdateRide(pixModalData.rideId, { 
+                      paymentStatus: 'paid',
+                      status: 'searching',
+                      createdAt: confirmedAt 
+                    });
+                    setRides(prev => prev.map(r => r.id === pixModalData.rideId ? { ...r, paymentStatus: 'paid', status: 'searching', createdAt: confirmedAt } : r));
+                    setCurrentRideId(pixModalData.rideId);
                     await fetchRides();
                   } catch (e) {
                     console.warn('Erro ao atualizar status de pagamento do Pix:', e);
                   }
                   setPixModalData(null);
                   showToast('Pagamento Pix confirmado no Asaas com sucesso! O motorista já foi notificado.', 'success');
+
+                  // Rolar suavemente até o radar de busca e acompanhamento
+                  setTimeout(() => {
+                    const radarEl = document.getElementById('active-ride-tracking-section');
+                    if (radarEl) {
+                      radarEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                  }, 200);
                 }}
                 className="btn-primary"
                 style={{ width: '100%', padding: '12px', fontSize: '0.9rem', background: '#10b981', borderColor: '#10b981' }}
