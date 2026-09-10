@@ -7,7 +7,7 @@ import {
   BellRing, Volume2, VolumeX, Ban, AlertOctagon, Heart, ShieldAlert, RotateCcw,
   Filter, Archive, ArchiveRestore, Trash2, CreditCard,
   ChevronDown, ChevronUp, AlertCircle, Headphones,
-  Calendar, Zap
+  Calendar, Zap, Share2, Copy
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import confetti from 'canvas-confetti';
@@ -1477,6 +1477,22 @@ export function App() {
       status: 'finished',
       finishedAt: Date.now()
     });
+
+    // Atualizar contagem real de corridas do motorista no banco de dados
+    if (targetRide?.driverId) {
+      try {
+        const sb = getSupabase();
+        if (sb) {
+          const { count } = await sb.from('rides').select('*', { count: 'exact', head: true })
+            .eq('driver_id', targetRide.driverId)
+            .in('status', ['finished', 'completed']);
+          if (count !== null) {
+            await sb.from('drivers').update({ total_rides: count }).or(`id.eq.${targetRide.driverId},user_id.eq.${targetRide.driverId}`);
+          }
+        }
+      } catch (e) {}
+    }
+
     confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
     fetchRides();
     showToast('Corrida finalizada com sucesso! Ganhos creditados.', 'success');
@@ -2212,8 +2228,8 @@ export function App() {
                 color: activeTab === 'mobile' ? '#000' : 'var(--text-secondary)'
               }}
             >
-              <Smartphone size={14} />
-              <span>Celular</span>
+              <Share2 size={14} />
+              <span>Compartilhar</span>
             </button>
 
             {/* Saldo Discreto do Passageiro */}
@@ -2749,6 +2765,7 @@ export function App() {
                 {clientSubTab === 'nearby_radar' && (
                   <NearbyDriversMap 
                     clientId={currentUser.id}
+                    allRides={rides}
                     favoriteDriverIds={favoriteDriverIds}
                     onOpenDriverProfile={(driver) => setSelectedDriverForProfile(driver)}
                     onToggleFavorite={handleToggleFavorite}
@@ -6720,80 +6737,187 @@ export function App() {
           </div>
         )}
 
-        {/* TAB: ABRIR NO CELULAR */}
+        {/* TAB: COMPARTILHAR O APLICATIVO */}
         {activeTab === 'mobile' && (
-          <div style={{ maxWidth: '750px', margin: '0 auto' }}>
-            <div className="glass-panel" style={{ padding: '36px', textAlign: 'center' }}>
+          <div style={{ maxWidth: '640px', margin: '0 auto' }}>
+            <div className="glass-panel" style={{ padding: '24px 20px', textAlign: 'center' }}>
               <div style={{
                 background: 'rgba(245, 158, 11, 0.15)',
-                width: '60px',
-                height: '60px',
+                width: '50px',
+                height: '50px',
                 borderRadius: '50%',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                margin: '0 auto 16px'
+                margin: '0 auto 12px'
               }}>
-                <Smartphone size={32} color="#f59e0b" />
+                <Share2 size={24} color="#f59e0b" />
               </div>
 
-              <h2 style={{ fontSize: '1.6rem', fontWeight: 800, marginBottom: '8px' }}>
-                Acesse o DriveHora pelo seu Celular
+              <h2 style={{ fontSize: '1.3rem', fontWeight: 800, marginBottom: '6px', color: '#fff' }}>
+                Compartilhar o DriveHora
               </h2>
-              <p style={{ fontSize: '0.95rem', color: 'var(--text-secondary)', marginBottom: '28px' }}>
-                Aponte a câmera do seu smartphone para o QR Code abaixo para abrir diretamente a versão mobile:
+              <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', marginBottom: '20px', maxWidth: '440px', margin: '0 auto 20px' }}>
+                Envie o link de acesso rápido para novos passageiros e motoristas parceiros ou aponte a câmera para o QR Code:
               </p>
 
-              {/* QR Code */}
+              {/* QR Code Compacto */}
               <div style={{
                 background: '#ffffff',
-                padding: '20px',
-                borderRadius: '20px',
+                padding: '16px',
+                borderRadius: '16px',
                 display: 'inline-block',
-                boxShadow: '0 10px 30px rgba(0, 0, 0, 0.5)',
-                marginBottom: '24px'
+                boxShadow: '0 8px 24px rgba(0, 0, 0, 0.4)',
+                marginBottom: '20px'
               }}>
                 <QRCodeSVG
                   value={appAccessUrl}
-                  size={220}
+                  size={190}
                   level="H"
                   includeMargin={true}
                 />
               </div>
 
-              {/* Link Direto */}
+              {/* Card de Link Direto Sem Quebra de Linha */}
               <div style={{
-                background: 'rgba(15, 23, 42, 0.8)',
+                background: 'rgba(15, 23, 42, 0.85)',
                 border: '1px solid var(--border-subtle)',
-                borderRadius: '12px',
-                padding: '14px',
+                borderRadius: '14px',
+                padding: '14px 16px',
                 display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '12px',
-                margin: '0 auto 28px',
-                maxWidth: '480px'
+                flexDirection: 'column',
+                gap: '10px',
+                margin: '0 auto 20px',
+                maxWidth: '460px'
               }}>
-                <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Ou digite no navegador do celular:</span>
-                <strong style={{ fontSize: '1rem', color: '#818cf8' }}>{appAccessUrl}</strong>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                  <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600 }}>Link de Acesso Rápido</span>
+                  <span style={{ fontSize: '0.72rem', color: '#10b981', fontWeight: 700 }}>● Online</span>
+                </div>
+
+                <div style={{
+                  background: 'rgba(0, 0, 0, 0.35)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  borderRadius: '10px',
+                  padding: '8px 12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '8px'
+                }}>
+                  <span style={{
+                    fontSize: '0.85rem',
+                    color: '#818cf8',
+                    fontWeight: 700,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    textAlign: 'left'
+                  }}>
+                    {appAccessUrl}
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(appAccessUrl);
+                      showToast('Link copiado para a área de transferência!', 'success');
+                    }}
+                    className="btn-outline"
+                    style={{
+                      padding: '5px 10px',
+                      fontSize: '0.76rem',
+                      borderRadius: '8px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0,
+                      background: 'rgba(99, 102, 241, 0.15)',
+                      borderColor: 'rgba(99, 102, 241, 0.4)',
+                      color: '#a5b4fc'
+                    }}
+                  >
+                    <Copy size={12} />
+                    <span>Copiar</span>
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {typeof navigator !== 'undefined' && 'share' in navigator && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        try {
+                          navigator.share({
+                            title: 'DriveHora — Mobilidade por Hora',
+                            text: 'Acesse o DriveHora e solicite seu motorista particular por hora ou agende suas viagens:',
+                            url: appAccessUrl
+                          });
+                        } catch (e) {}
+                      }}
+                      className="btn-primary"
+                      style={{
+                        flex: '1 1 140px',
+                        padding: '8px 12px',
+                        fontSize: '0.8rem',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        borderRadius: '8px',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      <Share2 size={13} />
+                      <span>Compartilhar Link</span>
+                    </button>
+                  )}
+
+                  <a
+                    href={`https://api.whatsapp.com/send?text=${encodeURIComponent(`Acesse o DriveHora — Mobilidade por Hora: ${appAccessUrl}`)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn-outline"
+                    style={{
+                      flex: '1 1 140px',
+                      padding: '8px 12px',
+                      fontSize: '0.8rem',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      borderRadius: '8px',
+                      borderColor: 'rgba(16, 185, 129, 0.4)',
+                      color: '#10b981',
+                      background: 'rgba(16, 185, 129, 0.1)',
+                      textDecoration: 'none',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    <span>Enviar no WhatsApp</span>
+                  </a>
+                </div>
               </div>
 
-              {/* Passo a passo */}
+              {/* Guia Rápido de Instalação no Smartphone */}
               <div style={{
                 textAlign: 'left',
                 background: 'rgba(15, 23, 42, 0.5)',
-                padding: '24px',
-                borderRadius: '16px',
-                border: '1px solid var(--border-subtle)'
+                padding: '16px 18px',
+                borderRadius: '14px',
+                border: '1px solid var(--border-subtle)',
+                maxWidth: '460px',
+                margin: '0 auto'
               }}>
-                <h4 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '14px', color: '#fff' }}>
-                  📱 Como instalar como aplicativo no smartphone:
+                <h4 style={{ fontSize: '0.88rem', fontWeight: 700, marginBottom: '10px', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Smartphone size={15} color="#38bdf8" />
+                  <span>Como instalar como atalho no smartphone:</span>
                 </h4>
-                <ol style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <li>Abra a câmera do celular ou o navegador e acesse o endereço acima (<strong>{appAccessUrl}</strong>).</li>
-                  <li>No <strong>Android (Chrome)</strong>: Toque no menu de 3 pontinhos e selecione <em>"Adicionar à tela inicial"</em> ou <em>"Instalar aplicativo"</em>.</li>
-                  <li>No <strong>iPhone (Safari)</strong>: Toque no botão de compartilhar e selecione <em>"Adicionar à Tela de Início"</em>.</li>
-                  <li>O ícone do <strong>DriveHora</strong> ficará na tela inicial como um app nativo!</li>
+                <ol style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '6px', margin: 0 }}>
+                  <li>Acesse o link pelo navegador do celular.</li>
+                  <li>No <strong>Android (Chrome)</strong>: Toque no menu (3 pontinhos) e escolha <em>"Instalar aplicativo"</em> ou <em>"Adicionar à tela inicial"</em>.</li>
+                  <li>No <strong>iPhone (Safari)</strong>: Toque no botão de compartilhar e escolha <em>"Adicionar à Tela de Início"</em>.</li>
                 </ol>
               </div>
             </div>

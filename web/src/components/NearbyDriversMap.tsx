@@ -7,6 +7,7 @@ import type { DriverProfile, DriverPublicProfile } from '../types/auth';
 
 interface NearbyDriversMapProps {
   clientId?: string;
+  allRides?: any[];
   onSelectDriverToRequest?: () => void;
   onOpenDriverProfile?: (driver: DriverPublicProfile) => void;
   onToggleFavorite?: (driverId: string) => Promise<void>;
@@ -15,6 +16,7 @@ interface NearbyDriversMapProps {
 
 export function NearbyDriversMap({ 
   clientId,
+  allRides,
   onSelectDriverToRequest,
   onOpenDriverProfile,
   onToggleFavorite,
@@ -111,7 +113,22 @@ export function NearbyDriversMap({
     try {
       const all = await dbGetAllDrivers();
       // Exibir APENAS motoristas que estão ONLINE e com cadastro APROVADO
-      const online = all.filter(d => d.isOnline === true && d.verificationStatus === 'approved');
+      let online = all.filter(d => d.isOnline === true && d.verificationStatus === 'approved');
+
+      // Se allRides estiver disponível, recalcular/validar a contagem real de corridas finalizadas
+      if (allRides && allRides.length > 0) {
+        online = online.map(d => {
+          const completedCount = allRides.filter((r: any) => 
+            (r.driverId === d.id || r.driverId === d.userId) && 
+            (r.status === 'finished' || r.status === 'completed')
+          ).length;
+          return {
+            ...d,
+            totalRides: Math.max(d.totalRides || 0, completedCount)
+          };
+        });
+      }
+
       setOnlineDrivers(online);
       setLastSyncTime(new Date());
     } catch (e) {
@@ -119,7 +136,7 @@ export function NearbyDriversMap({
     } finally {
       if (isManual) setIsSyncing(false);
     }
-  }, []);
+  }, [allRides]);
 
   // 3. Inscrição em Tempo Real (Supabase Realtime) + Polling Suave
   useEffect(() => {
@@ -276,8 +293,8 @@ export function NearbyDriversMap({
           <div style="font-size: 11px; color: #64748b; margin-bottom: 6px;">
             Placa: <strong>${driver.vehiclePlate || 'Mercosul'}</strong> (${driver.vehicleColor || 'Prata'})
           </div>
-          <div style="font-size: 11px; color: #333; display: flex; justify-content: space-between; border-top: 1px solid #e2e8f0; padding-top: 6px;">
-            <span>⭐ ${driver.rating || 5.0} (${driver.totalRides || 0} corridas)</span>
+          <div style="font-size: 11px; color: #333; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #e2e8f0; padding-top: 6px;">
+            <span style="font-weight: 700; color: #0f172a;">⭐ ${Number(driver.rating || 5.0).toFixed(1)} <span style="font-weight: 400; color: #64748b;">(${driver.totalRides || 0} ${driver.totalRides === 1 ? 'corrida' : 'corridas'})</span></span>
             <span style="color: #6366f1; font-weight: bold;">Chegada: ~${etaMin} min</span>
           </div>
         </div>
@@ -698,8 +715,8 @@ export function NearbyDriversMap({
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#f59e0b', fontWeight: 700 }}>
                       <Star size={14} fill="#f59e0b" />
-                      <span>{d.rating || '5.0'}</span>
-                      <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>({d.totalRides || 0} corridas)</span>
+                      <span>{Number(d.rating || 5.0).toFixed(1)}</span>
+                      <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>({d.totalRides || 0} {d.totalRides === 1 ? 'corrida' : 'corridas'})</span>
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#10b981', fontWeight: 600 }}>

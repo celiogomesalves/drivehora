@@ -1090,6 +1090,58 @@ export const dbGetAllDrivers = async (): Promise<DriverProfile[]> => {
         sb.from('clients').select('*')
       ]);
 
+      // Buscar corridas e avaliações reais para sincronizar estatísticas de todos os motoristas
+      const completedRidesByDriver = new Map<string, number>();
+      const ratingsByDriver = new Map<string, { totalScore: number; count: number }>();
+
+      try {
+        const [ridesRes, ratingsRes] = await Promise.all([
+          sb.from('rides').select('id, driver_id, status'),
+          sb.from('ratings').select('to_user_id, score')
+        ]);
+
+        (ridesRes.data || []).forEach((r: any) => {
+          const isCompleted = r.status === 'finished' || r.status === 'completed';
+          if (isCompleted && r.driver_id) {
+            completedRidesByDriver.set(r.driver_id, (completedRidesByDriver.get(r.driver_id) || 0) + 1);
+          }
+        });
+
+        (ratingsRes.data || []).forEach((rt: any) => {
+          if (rt.to_user_id) {
+            const cur = ratingsByDriver.get(rt.to_user_id) || { totalScore: 0, count: 0 };
+            cur.totalScore += Number(rt.score) || 5;
+            cur.count += 1;
+            ratingsByDriver.set(rt.to_user_id, cur);
+          }
+        });
+      } catch (errStats) {
+        console.warn('Aviso ao consultar estatísticas de rides/ratings no Supabase:', errStats);
+      }
+
+      // Sincronizar com cache local de corridas e avaliações para testes offline
+      try {
+        const localRides = JSON.parse(localStorage.getItem('drivehora_rides') || '[]');
+        localRides.forEach((r: any) => {
+          const isCompleted = r.status === 'finished' || r.status === 'completed';
+          if (isCompleted && r.driverId) {
+            const localCount = localRides.filter((lr: any) => lr.driverId === r.driverId && (lr.status === 'finished' || lr.status === 'completed')).length;
+            const current = completedRidesByDriver.get(r.driverId) || 0;
+            completedRidesByDriver.set(r.driverId, Math.max(current, localCount));
+          }
+        });
+
+        const localRatings = JSON.parse(localStorage.getItem('drivehora_ratings_cache') || '[]');
+        localRatings.forEach((rt: any) => {
+          if (rt.toUserId && !ratingsByDriver.has(rt.toUserId)) {
+            const cur = ratingsByDriver.get(rt.toUserId) || { totalScore: 0, count: 0 };
+            cur.totalScore += Number(rt.score) || 5;
+            cur.count += 1;
+            ratingsByDriver.set(rt.toUserId, cur);
+          }
+        });
+      } catch (e) {}
+
       const profileMap = new Map<string, any>();
       (profilesRes.data || []).forEach((p: any) => {
         if (p.id) profileMap.set(p.id, p);
@@ -1125,6 +1177,17 @@ export const dbGetAllDrivers = async (): Promise<DriverProfile[]> => {
         const resolvedCpf = d.cpf || c?.cpf || p?.cpf || '';
         const resolvedPhone = d.phone || p?.phone || c?.phone || '';
 
+        // Contagem real de corridas realizadas (cruzando ID do motorista e user_id)
+        const ridesById = completedRidesByDriver.get(d.id) || 0;
+        const ridesByUserId = (d.user_id && d.user_id !== d.id) ? (completedRidesByDriver.get(d.user_id) || 0) : 0;
+        const totalCompleted = Math.max(Number(d.total_rides) || 0, ridesById, ridesByUserId);
+
+        // Nota real calculada com base nas avaliações recebidas
+        const ratingStats = ratingsByDriver.get(d.user_id) || ratingsByDriver.get(d.id);
+        const resolvedRating = ratingStats && ratingStats.count > 0
+          ? Number((ratingStats.totalScore / ratingStats.count).toFixed(1))
+          : (Number(d.rating) || 5.0);
+
         return {
           id: d.id,
           userId: d.user_id,
@@ -1143,8 +1206,8 @@ export const dbGetAllDrivers = async (): Promise<DriverProfile[]> => {
           crlvUrl: d.crlv_url,
           selfieUrl: d.selfie_url,
           verificationStatus: dataVerificationStatus(d.verification_status),
-          rating: Number(d.rating) || 5.0,
-          totalRides: Number(d.total_rides) || 0,
+          rating: resolvedRating,
+          totalRides: totalCompleted,
           isOnline: isOnline,
           currentLat: d.current_lat ? Number(d.current_lat) : undefined,
           currentLng: d.current_lng ? Number(d.current_lng) : undefined,
