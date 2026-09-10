@@ -2052,7 +2052,7 @@ export function App() {
       )}
 
       {/* Top Header Logado */}
-      <header style={{
+      <header className="app-header" style={{
         background: 'rgba(9, 13, 22, 0.95)',
         backdropFilter: 'blur(20px)',
         borderBottom: '1px solid var(--border-subtle)',
@@ -2193,35 +2193,26 @@ export function App() {
             </div>
           </div>
 
-          {/* Linha 2: Navegação Horizontal Scrollable (Sem Quebra de Linhas) */}
-          <nav className="nav-scrollable" style={{
+          {/* Linha 2: Navegação Horizontal Responsiva (Sem Quebras ou Informações Cortadas) */}
+          <nav className="header-nav-container" style={{
             background: 'rgba(15, 23, 42, 0.95)',
-            padding: '4px',
+            padding: '4px 6px',
             borderRadius: '12px',
-            border: '1px solid var(--border-subtle)',
-            width: '100%'
+            border: '1px solid var(--border-subtle)'
           }}>
             {isUserAdmin && (
               <button
                 onClick={() => setActiveTab('admin')}
+                className="header-tab-btn"
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '7px 12px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontSize: '0.8rem',
-                  fontWeight: 700,
-                  whiteSpace: 'nowrap',
-                  flexShrink: 0,
                   background: activeTab === 'admin' ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'transparent',
-                  color: activeTab === 'admin' ? '#000' : '#f59e0b'
+                  color: activeTab === 'admin' ? '#000' : '#f59e0b',
+                  fontWeight: 700
                 }}
               >
                 <Crown size={14} />
-                <span>Painel Admin</span>
+                <span className="hide-on-mobile">Painel </span>
+                <span>Admin</span>
               </button>
             )}
 
@@ -2229,18 +2220,8 @@ export function App() {
             {(currentUser.role === 'client' || isUserAdmin) && (
               <button
                 onClick={() => setActiveTab('client')}
+                className="header-tab-btn"
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '7px 12px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontSize: '0.8rem',
-                  fontWeight: 600,
-                  whiteSpace: 'nowrap',
-                  flexShrink: 0,
                   background: activeTab === 'client' ? 'var(--primary-gradient)' : 'transparent',
                   color: activeTab === 'client' ? '#fff' : 'var(--text-secondary)'
                 }}
@@ -2257,18 +2238,8 @@ export function App() {
                   setActiveTab('driver');
                   setShowDriverProfileEdit(false);
                 }}
+                className="header-tab-btn"
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '7px 12px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontSize: '0.8rem',
-                  fontWeight: 600,
-                  whiteSpace: 'nowrap',
-                  flexShrink: 0,
                   background: activeTab === 'driver' ? 'linear-gradient(135deg, #10b981, #059669)' : 'transparent',
                   color: activeTab === 'driver' ? '#fff' : 'var(--text-secondary)'
                 }}
@@ -2289,18 +2260,8 @@ export function App() {
 
             <button
               onClick={() => setActiveTab('mobile')}
+              className="header-tab-btn"
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '7px 12px',
-                borderRadius: '8px',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: '0.8rem',
-                fontWeight: 600,
-                whiteSpace: 'nowrap',
-                flexShrink: 0,
                 background: activeTab === 'mobile' ? '#f59e0b' : 'transparent',
                 color: activeTab === 'mobile' ? '#000' : 'var(--text-secondary)'
               }}
@@ -2310,27 +2271,19 @@ export function App() {
             </button>
 
             {/* Saldo Discreto do Passageiro */}
-            {clientWallet && (currentUser.role === 'client' || isUserAdmin) && (
+            {clientWallet && (currentUser.role === 'client' || (isUserAdmin && activeTab === 'client')) && (
               <div
+                className="header-saldo-badge"
                 style={{
-                  marginLeft: 'auto',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '5px 11px',
-                  borderRadius: '8px',
                   background: clientWallet.balance >= 0 ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
-                  border: `1px solid ${clientWallet.balance >= 0 ? 'rgba(16, 185, 129, 0.35)' : 'rgba(239, 68, 68, 0.35)'}`,
-                  flexShrink: 0,
-                  whiteSpace: 'nowrap',
-                  alignSelf: 'center'
+                  border: `1px solid ${clientWallet.balance >= 0 ? 'rgba(16, 185, 129, 0.35)' : 'rgba(239, 68, 68, 0.35)'}`
                 }}
                 title="Saldo em créditos disponível na carteira"
               >
-                <span style={{ fontSize: '0.72rem', color: clientWallet.balance >= 0 ? '#a7f3d0' : '#fca5a5', fontWeight: 600 }}>
+                <span className="saldo-label" style={{ fontSize: '0.72rem', color: clientWallet.balance >= 0 ? '#a7f3d0' : '#fca5a5', fontWeight: 600 }}>
                   Saldo
                 </span>
-                <strong style={{ fontSize: '0.82rem', color: clientWallet.balance >= 0 ? '#10b981' : '#ef4444', fontWeight: 800 }}>
+                <strong className="saldo-value" style={{ fontSize: '0.82rem', color: clientWallet.balance >= 0 ? '#10b981' : '#ef4444', fontWeight: 800 }}>
                   {formatCurrency(clientWallet.balance)}
                 </strong>
               </div>
@@ -7331,7 +7284,7 @@ export function App() {
               <div className="icon-wrapper">
                 <Radio size={19} className={clientSubTab === 'nearby_radar' ? 'animate-pulse' : ''} />
               </div>
-              <span>Radar GPS</span>
+              <span>Radar</span>
             </button>
 
             <button
@@ -7374,7 +7327,7 @@ export function App() {
               <div className="icon-wrapper">
                 <UserCheck size={19} />
               </div>
-              <span>Meus Dados</span>
+              <span>Perfil</span>
             </button>
           </nav>
         </>
