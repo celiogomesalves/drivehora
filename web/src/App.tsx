@@ -348,6 +348,15 @@ export function App() {
     }));
   };
 
+  const [expandedClientRideIds, setExpandedClientRideIds] = useState<Record<string, boolean>>({});
+
+  const toggleClientRideExpand = (rideId: string) => {
+    setExpandedClientRideIds(prev => ({
+      ...prev,
+      [rideId]: !prev[rideId]
+    }));
+  };
+
   // Verificação de Sessão Única Concorrente (Supabase Realtime + Polling a cada 5s com Grace Period)
   useEffect(() => {
     if (!currentUser?.id) return;
@@ -4845,94 +4854,263 @@ export function App() {
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                             {filteredClientRides.map(r => {
                               const rideTime = r.createdAt || (r as any).created_at ? new Date(r.createdAt || (r as any).created_at) : null;
+                              const isExpanded = !!expandedClientRideIds[r.id];
+                              const assignedDriver = allDriversList.find(d => d.userId === r.driverId || d.id === r.driverId);
+                              const amenities = safeAmenitiesArray(r.requiredAmenities);
+
                               return (
-                                <div key={r.id} style={{
-                                  background: 'rgba(15, 23, 42, 0.85)',
-                                  border: '1px solid var(--border-subtle)',
-                                  borderRadius: '14px',
-                                  padding: '16px',
-                                  display: 'flex',
-                                  justifyContent: 'space-between',
-                                  alignItems: 'center',
-                                  flexWrap: 'wrap',
-                                  gap: '12px'
-                                }}>
-                                  <div style={{ flex: 1, minWidth: '220px' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
-                                      <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>{r.origin} ➔ {r.destination}</span>
-                                      <span style={{
-                                        fontSize: '0.7rem',
-                                        fontWeight: 700,
-                                        padding: '2px 8px',
-                                        borderRadius: '10px',
-                                        background: r.status === 'finished' ? 'rgba(16, 185, 129, 0.15)' : r.status === 'in_progress' ? 'rgba(59, 130, 246, 0.15)' : (r.status === 'accepted' || r.status === 'to_pickup') ? 'rgba(245, 158, 11, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                                        color: r.status === 'finished' ? '#10b981' : r.status === 'in_progress' ? '#3b82f6' : (r.status === 'accepted' || r.status === 'to_pickup') ? '#f59e0b' : '#ef4444'
-                                      }}>
-                                        {r.status === 'finished' ? 'CONCLUÍDA' : r.status === 'in_progress' ? 'EM ANDAMENTO' : r.status === 'to_pickup' ? 'A CAMINHO' : r.status === 'accepted' ? 'CONFIRMADA' : r.status === 'searching' ? 'BUSCANDO' : 'CANCELADA'}
-                                      </span>
-                                    </div>
-                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                                      Motorista: <strong>{r.driverName || 'Aguardando'}</strong> • Horas: <strong>{r.hours}h</strong> ({formatCurrency(r.hourlyRate)}/h)
-                                    </div>
-                                    {rideTime && (
-                                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '3px' }}>
-                                        Data: {rideTime.toLocaleDateString('pt-BR')} às {rideTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                <div
+                                  key={r.id}
+                                  style={{
+                                    background: 'rgba(15, 23, 42, 0.85)',
+                                    border: isExpanded ? '1px solid rgba(99, 102, 241, 0.4)' : '1px solid var(--border-subtle)',
+                                    borderRadius: '14px',
+                                    overflow: 'hidden',
+                                    transition: 'all 0.2s ease-in-out'
+                                  }}
+                                >
+                                  {/* Cabeçalho do Card (Sempre Visível, Clicável para Expandir/Recolher) */}
+                                  <div
+                                    onClick={() => toggleClientRideExpand(r.id)}
+                                    style={{
+                                      padding: '14px 16px',
+                                      display: 'flex',
+                                      justifyContent: 'space-between',
+                                      alignItems: 'center',
+                                      cursor: 'pointer',
+                                      userSelect: 'none',
+                                      gap: '12px'
+                                    }}
+                                    title={isExpanded ? 'Clique para recolher detalhes' : 'Clique para ver detalhes completos'}
+                                  >
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                                        <span style={{
+                                          fontWeight: 700,
+                                          fontSize: '0.9rem',
+                                          color: '#fff',
+                                          whiteSpace: 'nowrap',
+                                          overflow: 'hidden',
+                                          textOverflow: 'ellipsis',
+                                          maxWidth: '220px'
+                                        }}>
+                                          {r.origin?.split(',')[0] || r.origin} ➔ {r.destination?.split(',')[0] || r.destination}
+                                        </span>
+                                        <span style={{
+                                          fontSize: '0.68rem',
+                                          fontWeight: 700,
+                                          padding: '2px 8px',
+                                          borderRadius: '10px',
+                                          background: r.status === 'finished' ? 'rgba(16, 185, 129, 0.15)' : r.status === 'in_progress' ? 'rgba(59, 130, 246, 0.15)' : (r.status === 'accepted' || r.status === 'to_pickup') ? 'rgba(245, 158, 11, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                                          color: r.status === 'finished' ? '#10b981' : r.status === 'in_progress' ? '#3b82f6' : (r.status === 'accepted' || r.status === 'to_pickup') ? '#f59e0b' : '#ef4444'
+                                        }}>
+                                          {r.status === 'finished' ? 'CONCLUÍDA' : r.status === 'in_progress' ? 'EM ANDAMENTO' : r.status === 'to_pickup' ? 'A CAMINHO' : r.status === 'accepted' ? 'CONFIRMADA' : r.status === 'searching' ? 'BUSCANDO' : 'CANCELADA'}
+                                        </span>
                                       </div>
-                                    )}
-                                  </div>
-
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
-                                    <div style={{ textAlign: 'right' }}>
-                                      <div style={{ fontWeight: 800, color: '#fff', fontSize: '1.05rem' }}>{formatCurrency(r.total)}</div>
-                                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>ID: #{r.id.slice(-6)}</span>
+                                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                        <span>Motorista: <strong>{r.driverName || assignedDriver?.driverName || assignedDriver?.fullName || 'Aguardando'}</strong></span>
+                                        {rideTime && (
+                                          <>
+                                            <span>•</span>
+                                            <span>{rideTime.toLocaleDateString('pt-BR')} às {rideTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                                          </>
+                                        )}
+                                      </div>
                                     </div>
 
-                                    {/* Botão de Reportar Problema com a Corrida */}
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setSelectedRideForReport(r);
-                                        setIsReportModalOpen(true);
-                                      }}
-                                      className="btn-outline"
-                                      style={{
-                                        padding: '7px 12px',
-                                        fontSize: '0.78rem',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '6px',
-                                        borderRadius: '10px',
-                                        color: '#f87171',
-                                        borderColor: 'rgba(239, 68, 68, 0.35)',
-                                        background: 'rgba(239, 68, 68, 0.08)'
-                                      }}
-                                      title="Reportar problema com esta corrida (objeto esquecido, conduta, cobrança...)"
-                                    >
-                                      <AlertTriangle size={14} color="#ef4444" />
-                                      <span>Reportar</span>
-                                    </button>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+                                      <div style={{ textAlign: 'right' }}>
+                                        <div style={{ fontWeight: 800, color: '#fff', fontSize: '1rem', whiteSpace: 'nowrap' }}>
+                                          {formatCurrency(r.total)}
+                                        </div>
+                                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                                          {r.hours}h ({formatCurrency(r.hourlyRate)}/h)
+                                        </div>
+                                      </div>
 
-                                    {/* Botão de Arquivar para manter a tela limpa */}
-                                    <button
-                                      type="button"
-                                      onClick={() => handleArchiveRide(r.id)}
-                                      className="btn-outline"
-                                      style={{
-                                        padding: '7px 12px',
-                                        fontSize: '0.78rem',
+                                      <div style={{
+                                        width: '28px',
+                                        height: '28px',
+                                        borderRadius: '50%',
+                                        background: isExpanded ? 'rgba(99, 102, 241, 0.2)' : 'rgba(255, 255, 255, 0.05)',
                                         display: 'flex',
                                         alignItems: 'center',
-                                        gap: '6px',
-                                        borderRadius: '10px',
-                                        color: '#cbd5e1',
-                                        background: 'rgba(255, 255, 255, 0.05)'
-                                      }}
-                                      title="Arquivar corrida para limpar a visualização"
-                                    >
-                                      <Archive size={14} color="#a5b4fc" />
-                                      <span>Arquivar</span>
-                                    </button>
+                                        justifyContent: 'center',
+                                        color: isExpanded ? '#818cf8' : 'var(--text-secondary)',
+                                        transition: 'transform 0.2s'
+                                      }}>
+                                        {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                                      </div>
+                                    </div>
                                   </div>
+
+                                  {/* Corpo Expandido com Detalhamento Completo */}
+                                  {isExpanded && (
+                                    <div style={{
+                                      padding: '14px 16px 16px',
+                                      borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                                      background: 'rgba(10, 15, 30, 0.6)',
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      gap: '12px'
+                                    }}>
+                                      {/* Grid de Detalhes da Corrida */}
+                                      <div style={{
+                                        display: 'grid',
+                                        gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+                                        gap: '8px',
+                                        background: 'rgba(15, 23, 42, 0.6)',
+                                        padding: '12px',
+                                        borderRadius: '10px',
+                                        border: '1px solid var(--border-subtle)'
+                                      }}>
+                                        <div>
+                                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>Total Pago:</span>
+                                          <strong style={{ fontSize: '0.95rem', color: '#10b981' }}>{formatCurrency(r.total)}</strong>
+                                        </div>
+                                        <div>
+                                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>Horas Contratadas:</span>
+                                          <strong style={{ fontSize: '0.9rem', color: '#fff' }}>{r.hours}h de serviço</strong>
+                                        </div>
+                                        <div>
+                                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>Valor Hora:</span>
+                                          <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{formatCurrency(r.hourlyRate)}/h</span>
+                                        </div>
+                                        <div>
+                                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>Forma de Pagamento:</span>
+                                          <span style={{ fontSize: '0.8rem', color: '#818cf8', fontWeight: 600 }}>
+                                            {r.paymentMethod === 'credit_card' ? '💳 Cartão de Crédito' : r.paymentMethod === 'cash' ? '💵 Dinheiro ao Motorista' : r.paymentMethod === 'pix' ? '🔑 Pix Direto' : '💳 Plataforma'}
+                                          </span>
+                                        </div>
+                                      </div>
+
+                                      {/* Endereços Completos */}
+                                      <div style={{ fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
+                                          <span style={{ color: '#10b981', fontWeight: 700, flexShrink: 0 }}>🟢 Embarque:</span>
+                                          <span style={{ color: 'var(--text-secondary)' }}>{r.origin}</span>
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
+                                          <span style={{ color: '#ef4444', fontWeight: 700, flexShrink: 0 }}>🔴 Destino:</span>
+                                          <span style={{ color: 'var(--text-secondary)' }}>{r.destination}</span>
+                                        </div>
+                                      </div>
+
+                                      {/* Informações do Motorista e Veículo (se atribuído) */}
+                                      {(assignedDriver || r.driverName) && (
+                                        <div style={{
+                                          background: 'rgba(255, 255, 255, 0.03)',
+                                          border: '1px solid var(--border-subtle)',
+                                          borderRadius: '10px',
+                                          padding: '10px 12px',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'space-between',
+                                          flexWrap: 'wrap',
+                                          gap: '8px'
+                                        }}>
+                                          <div>
+                                            <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#fff' }}>
+                                              Motorista: {r.driverName || assignedDriver?.driverName || assignedDriver?.fullName}
+                                            </div>
+                                            {assignedDriver?.vehicleBrand && (
+                                              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                                                🚗 {assignedDriver.vehicleBrand} {assignedDriver.vehicleModel} • Placa {assignedDriver.vehiclePlate} {assignedDriver.vehicleColor ? `• ${assignedDriver.vehicleColor}` : ''}
+                                              </div>
+                                            )}
+                                          </div>
+                                          {assignedDriver?.phone && (
+                                            <div style={{ fontSize: '0.75rem', color: '#a7f3d0' }}>
+                                              📞 {assignedDriver.phone}
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+
+                                      {/* Comodidades Requisitadas */}
+                                      {amenities.length > 0 && (
+                                        <div>
+                                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Comodidades Solicitadas:</span>
+                                          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                                            {amenities.map(am => (
+                                              <span
+                                                key={am}
+                                                style={{
+                                                  fontSize: '0.7rem',
+                                                  padding: '2px 8px',
+                                                  borderRadius: '6px',
+                                                  background: am === 'acessibilidade_pcd' ? 'rgba(59, 130, 246, 0.25)' : 'rgba(255, 255, 255, 0.08)',
+                                                  color: am === 'acessibilidade_pcd' ? '#93c5fd' : '#cbd5e1',
+                                                  border: am === 'acessibilidade_pcd' ? '1px solid #3b82f6' : '1px solid var(--border-subtle)',
+                                                  fontWeight: 600
+                                                }}
+                                              >
+                                                {am === 'acessibilidade_pcd' ? '♿ Adaptado PCD' :
+                                                 am === 'ar_condicionado' ? '❄️ Ar-condicionado' :
+                                                 am === 'porta_malas_grande' ? '🧳 Porta-malas G' :
+                                                 am === 'pet_friendly' ? '🐾 Pet Friendly' :
+                                                 am === 'cadeirinha_bebe' ? '👶 Cadeirinha' : am}
+                                              </span>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Rodapé do Card Expandido com ID e Botões de Ação */}
+                                      <div style={{
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        paddingTop: '8px',
+                                        borderTop: '1px solid rgba(255, 255, 255, 0.05)',
+                                        flexWrap: 'wrap',
+                                        gap: '8px'
+                                      }}>
+                                        <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                                          ID: #{r.id.slice(-8).toUpperCase()}
+                                        </span>
+
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setSelectedRideForReport(r);
+                                              setIsReportModalOpen(true);
+                                            }}
+                                            className="btn-outline"
+                                            style={{
+                                              fontSize: '0.72rem',
+                                              padding: '5px 12px',
+                                              borderRadius: '8px',
+                                              borderColor: 'rgba(239, 68, 68, 0.4)',
+                                              color: '#f87171'
+                                            }}
+                                          >
+                                            ⚠️ Reportar Problema
+                                          </button>
+
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleArchiveRide(r.id);
+                                            }}
+                                            className="btn-outline"
+                                            style={{
+                                              fontSize: '0.72rem',
+                                              padding: '5px 12px',
+                                              borderRadius: '8px',
+                                              color: '#cbd5e1'
+                                            }}
+                                            title="Arquivar corrida para limpar a visualização principal"
+                                          >
+                                            📁 Arquivar
+                                          </button>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                               );
                             })}
@@ -4960,119 +5138,288 @@ export function App() {
 
                             {archivedHistoryRides.map(r => {
                               const rideTime = r.createdAt || (r as any).created_at ? new Date(r.createdAt || (r as any).created_at) : null;
+                              const isExpanded = !!expandedClientRideIds[r.id];
+                              const assignedDriver = allDriversList.find(d => d.userId === r.driverId || d.id === r.driverId);
+                              const amenities = safeAmenitiesArray(r.requiredAmenities);
+
                               return (
-                                <div key={r.id} style={{
-                                  background: 'rgba(15, 23, 42, 0.85)',
-                                  border: '1px solid rgba(245, 158, 11, 0.25)',
-                                  borderRadius: '14px',
-                                  padding: '16px',
-                                  display: 'flex',
-                                  justifyContent: 'space-between',
-                                  alignItems: 'center',
-                                  flexWrap: 'wrap',
-                                  gap: '12px'
-                                }}>
-                                  <div style={{ flex: 1, minWidth: '220px' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
-                                      <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>{r.origin} ➔ {r.destination}</span>
-                                      <span style={{
-                                        fontSize: '0.68rem',
-                                        fontWeight: 800,
-                                        padding: '2px 8px',
-                                        borderRadius: '8px',
-                                        background: 'rgba(245, 158, 11, 0.2)',
-                                        color: '#f59e0b',
-                                        border: '1px solid rgba(245, 158, 11, 0.35)',
-                                        letterSpacing: '0.04em'
-                                      }}>
-                                        ARQUIVADA
-                                      </span>
-                                    </div>
-                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                                      Motorista: <strong>{r.driverName || 'Sem motorista'}</strong> • Horas: <strong>{r.hours}h</strong> ({formatCurrency(r.hourlyRate)}/h)
-                                    </div>
-                                    {rideTime && (
-                                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '3px' }}>
-                                        Data: {rideTime.toLocaleDateString('pt-BR')} às {rideTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                <div
+                                  key={r.id}
+                                  style={{
+                                    background: 'rgba(15, 23, 42, 0.85)',
+                                    border: isExpanded ? '1px solid rgba(245, 158, 11, 0.4)' : '1px solid rgba(245, 158, 11, 0.25)',
+                                    borderRadius: '14px',
+                                    overflow: 'hidden',
+                                    transition: 'all 0.2s ease-in-out'
+                                  }}
+                                >
+                                  {/* Cabeçalho do Card (Sempre Visível, Clicável para Expandir/Recolher) */}
+                                  <div
+                                    onClick={() => toggleClientRideExpand(r.id)}
+                                    style={{
+                                      padding: '14px 16px',
+                                      display: 'flex',
+                                      justifyContent: 'space-between',
+                                      alignItems: 'center',
+                                      cursor: 'pointer',
+                                      userSelect: 'none',
+                                      gap: '12px'
+                                    }}
+                                    title={isExpanded ? 'Clique para recolher detalhes' : 'Clique para ver detalhes completos'}
+                                  >
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                                        <span style={{
+                                          fontWeight: 700,
+                                          fontSize: '0.9rem',
+                                          color: '#fff',
+                                          whiteSpace: 'nowrap',
+                                          overflow: 'hidden',
+                                          textOverflow: 'ellipsis',
+                                          maxWidth: '220px'
+                                        }}>
+                                          {r.origin?.split(',')[0] || r.origin} ➔ {r.destination?.split(',')[0] || r.destination}
+                                        </span>
+                                        <span style={{
+                                          fontSize: '0.68rem',
+                                          fontWeight: 800,
+                                          padding: '2px 8px',
+                                          borderRadius: '8px',
+                                          background: 'rgba(245, 158, 11, 0.2)',
+                                          color: '#f59e0b',
+                                          border: '1px solid rgba(245, 158, 11, 0.35)',
+                                          letterSpacing: '0.04em'
+                                        }}>
+                                          ARQUIVADA
+                                        </span>
                                       </div>
-                                    )}
-                                  </div>
-
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                                    <div style={{ textAlign: 'right', marginRight: '6px' }}>
-                                      <div style={{ fontWeight: 800, color: '#fff', fontSize: '1.05rem' }}>{formatCurrency(r.total)}</div>
-                                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>ID: #{r.id.slice(-6)}</span>
+                                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                        <span>Motorista: <strong>{r.driverName || assignedDriver?.driverName || assignedDriver?.fullName || 'Sem motorista'}</strong></span>
+                                        {rideTime && (
+                                          <>
+                                            <span>•</span>
+                                            <span>{rideTime.toLocaleDateString('pt-BR')} às {rideTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                                          </>
+                                        )}
+                                      </div>
                                     </div>
 
-                                    {/* Botão de Reportar Problema */}
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setSelectedRideForReport(r);
-                                        setIsReportModalOpen(true);
-                                      }}
-                                      className="btn-outline"
-                                      style={{
-                                        padding: '7px 12px',
-                                        fontSize: '0.78rem',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '6px',
-                                        borderRadius: '10px',
-                                        color: '#f87171',
-                                        borderColor: 'rgba(239, 68, 68, 0.35)',
-                                        background: 'rgba(239, 68, 68, 0.08)'
-                                      }}
-                                      title="Reportar problema com esta corrida"
-                                    >
-                                      <AlertTriangle size={14} color="#ef4444" />
-                                      <span>Reportar</span>
-                                    </button>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+                                      <div style={{ textAlign: 'right' }}>
+                                        <div style={{ fontWeight: 800, color: '#fff', fontSize: '1rem', whiteSpace: 'nowrap' }}>
+                                          {formatCurrency(r.total)}
+                                        </div>
+                                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                                          {r.hours}h ({formatCurrency(r.hourlyRate)}/h)
+                                        </div>
+                                      </div>
 
-                                    {/* Botão de Restaurar */}
-                                    <button
-                                      type="button"
-                                      onClick={() => handleUnarchiveRide(r.id)}
-                                      className="btn-outline"
-                                      style={{
-                                        padding: '7px 12px',
-                                        fontSize: '0.78rem',
+                                      <div style={{
+                                        width: '28px',
+                                        height: '28px',
+                                        borderRadius: '50%',
+                                        background: isExpanded ? 'rgba(245, 158, 11, 0.2)' : 'rgba(255, 255, 255, 0.05)',
                                         display: 'flex',
                                         alignItems: 'center',
-                                        gap: '6px',
-                                        borderRadius: '10px',
-                                        color: '#10b981',
-                                        borderColor: 'rgba(16, 185, 129, 0.4)'
-                                      }}
-                                      title="Restaurar para a lista de histórico principal"
-                                    >
-                                      <ArchiveRestore size={14} />
-                                      <span>Restaurar</span>
-                                    </button>
-
-                                    {/* Botão de Excluir Definitivamente com Confirmação */}
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeleteArchivedRide(r.id)}
-                                      style={{
-                                        padding: '7px 12px',
-                                        fontSize: '0.78rem',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '6px',
-                                        borderRadius: '10px',
-                                        background: 'rgba(239, 68, 68, 0.15)',
-                                        border: '1px solid rgba(239, 68, 68, 0.4)',
-                                        color: '#ef4444',
-                                        cursor: 'pointer',
-                                        fontWeight: 700
-                                      }}
-                                      title="Excluir permanentemente do sistema (não poderá ser desfeito)"
-                                    >
-                                      <Trash2 size={14} />
-                                      <span>Excluir</span>
-                                    </button>
+                                        justifyContent: 'center',
+                                        color: isExpanded ? '#f59e0b' : 'var(--text-secondary)',
+                                        transition: 'transform 0.2s'
+                                      }}>
+                                        {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                                      </div>
+                                    </div>
                                   </div>
+
+                                  {/* Corpo Expandido com Detalhamento Completo */}
+                                  {isExpanded && (
+                                    <div style={{
+                                      padding: '14px 16px 16px',
+                                      borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                                      background: 'rgba(10, 15, 30, 0.6)',
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      gap: '12px'
+                                    }}>
+                                      {/* Grid de Detalhes da Corrida */}
+                                      <div style={{
+                                        display: 'grid',
+                                        gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+                                        gap: '8px',
+                                        background: 'rgba(15, 23, 42, 0.6)',
+                                        padding: '12px',
+                                        borderRadius: '10px',
+                                        border: '1px solid var(--border-subtle)'
+                                      }}>
+                                        <div>
+                                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>Total Pago:</span>
+                                          <strong style={{ fontSize: '0.95rem', color: '#10b981' }}>{formatCurrency(r.total)}</strong>
+                                        </div>
+                                        <div>
+                                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>Horas Contratadas:</span>
+                                          <strong style={{ fontSize: '0.9rem', color: '#fff' }}>{r.hours}h de serviço</strong>
+                                        </div>
+                                        <div>
+                                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>Valor Hora:</span>
+                                          <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{formatCurrency(r.hourlyRate)}/h</span>
+                                        </div>
+                                        <div>
+                                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>Forma de Pagamento:</span>
+                                          <span style={{ fontSize: '0.8rem', color: '#818cf8', fontWeight: 600 }}>
+                                            {r.paymentMethod === 'credit_card' ? '💳 Cartão de Crédito' : r.paymentMethod === 'cash' ? '💵 Dinheiro ao Motorista' : r.paymentMethod === 'pix' ? '🔑 Pix Direto' : '💳 Plataforma'}
+                                          </span>
+                                        </div>
+                                      </div>
+
+                                      {/* Endereços Completos */}
+                                      <div style={{ fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
+                                          <span style={{ color: '#10b981', fontWeight: 700, flexShrink: 0 }}>🟢 Embarque:</span>
+                                          <span style={{ color: 'var(--text-secondary)' }}>{r.origin}</span>
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
+                                          <span style={{ color: '#ef4444', fontWeight: 700, flexShrink: 0 }}>🔴 Destino:</span>
+                                          <span style={{ color: 'var(--text-secondary)' }}>{r.destination}</span>
+                                        </div>
+                                      </div>
+
+                                      {/* Informações do Motorista e Veículo (se atribuído) */}
+                                      {(assignedDriver || r.driverName) && (
+                                        <div style={{
+                                          background: 'rgba(255, 255, 255, 0.03)',
+                                          border: '1px solid var(--border-subtle)',
+                                          borderRadius: '10px',
+                                          padding: '10px 12px',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'space-between',
+                                          flexWrap: 'wrap',
+                                          gap: '8px'
+                                        }}>
+                                          <div>
+                                            <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#fff' }}>
+                                              Motorista: {r.driverName || assignedDriver?.driverName || assignedDriver?.fullName}
+                                            </div>
+                                            {assignedDriver?.vehicleBrand && (
+                                              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                                                🚗 {assignedDriver.vehicleBrand} {assignedDriver.vehicleModel} • Placa {assignedDriver.vehiclePlate} {assignedDriver.vehicleColor ? `• ${assignedDriver.vehicleColor}` : ''}
+                                              </div>
+                                            )}
+                                          </div>
+                                          {assignedDriver?.phone && (
+                                            <div style={{ fontSize: '0.75rem', color: '#a7f3d0' }}>
+                                              📞 {assignedDriver.phone}
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+
+                                      {/* Comodidades Requisitadas */}
+                                      {amenities.length > 0 && (
+                                        <div>
+                                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Comodidades Solicitadas:</span>
+                                          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                                            {amenities.map(am => (
+                                              <span
+                                                key={am}
+                                                style={{
+                                                  fontSize: '0.7rem',
+                                                  padding: '2px 8px',
+                                                  borderRadius: '6px',
+                                                  background: am === 'acessibilidade_pcd' ? 'rgba(59, 130, 246, 0.25)' : 'rgba(255, 255, 255, 0.08)',
+                                                  color: am === 'acessibilidade_pcd' ? '#93c5fd' : '#cbd5e1',
+                                                  border: am === 'acessibilidade_pcd' ? '1px solid #3b82f6' : '1px solid var(--border-subtle)',
+                                                  fontWeight: 600
+                                                }}
+                                              >
+                                                {am === 'acessibilidade_pcd' ? '♿ Adaptado PCD' :
+                                                 am === 'ar_condicionado' ? '❄️ Ar-condicionado' :
+                                                 am === 'porta_malas_grande' ? '🧳 Porta-malas G' :
+                                                 am === 'pet_friendly' ? '🐾 Pet Friendly' :
+                                                 am === 'cadeirinha_bebe' ? '👶 Cadeirinha' : am}
+                                              </span>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Rodapé do Card Expandido com ID e Botões de Ação */}
+                                      <div style={{
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        paddingTop: '8px',
+                                        borderTop: '1px solid rgba(255, 255, 255, 0.05)',
+                                        flexWrap: 'wrap',
+                                        gap: '8px'
+                                      }}>
+                                        <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                                          ID: #{r.id.slice(-8).toUpperCase()}
+                                        </span>
+
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setSelectedRideForReport(r);
+                                              setIsReportModalOpen(true);
+                                            }}
+                                            className="btn-outline"
+                                            style={{
+                                              fontSize: '0.72rem',
+                                              padding: '5px 12px',
+                                              borderRadius: '8px',
+                                              borderColor: 'rgba(239, 68, 68, 0.4)',
+                                              color: '#f87171'
+                                            }}
+                                          >
+                                            ⚠️ Reportar Problema
+                                          </button>
+
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleUnarchiveRide(r.id);
+                                            }}
+                                            className="btn-outline"
+                                            style={{
+                                              fontSize: '0.72rem',
+                                              padding: '5px 12px',
+                                              borderRadius: '8px',
+                                              borderColor: 'rgba(16, 185, 129, 0.4)',
+                                              color: '#10b981'
+                                            }}
+                                            title="Restaurar para o histórico principal"
+                                          >
+                                            <ArchiveRestore size={13} style={{ marginRight: '4px', verticalAlign: 'middle' }} />
+                                            <span>Restaurar</span>
+                                          </button>
+
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleDeleteArchivedRide(r.id);
+                                            }}
+                                            className="btn-outline"
+                                            style={{
+                                              fontSize: '0.72rem',
+                                              padding: '5px 12px',
+                                              borderRadius: '8px',
+                                              background: 'rgba(239, 68, 68, 0.15)',
+                                              borderColor: 'rgba(239, 68, 68, 0.4)',
+                                              color: '#ef4444'
+                                            }}
+                                            title="Excluir permanentemente"
+                                          >
+                                            <Trash2 size={13} style={{ marginRight: '4px', verticalAlign: 'middle' }} />
+                                            <span>Excluir</span>
+                                          </button>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                               );
                             })}
@@ -6812,6 +7159,7 @@ export function App() {
           ride={selectedRideForReport}
           currentUser={currentUser}
           isOpen={isReportModalOpen}
+          reporterRole={activeTab === 'driver' ? 'driver' : 'client'}
           onClose={() => {
             setIsReportModalOpen(false);
             setSelectedRideForReport(null);

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AlertTriangle, X, ShieldAlert, Car, DollarSign, Package, AlertCircle, CheckCircle2, UserX } from 'lucide-react';
+import { AlertTriangle, X, ShieldAlert, Car, DollarSign, Package, AlertCircle, CheckCircle2, UserX, MapPin, Users } from 'lucide-react';
 import type { UserProfile } from '../types/auth';
 import { dbCreateRideReport, type RideReport, type DbRide } from '../services/dbService';
 
@@ -9,9 +9,11 @@ interface ReportIssueModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  reporterRole?: 'client' | 'driver';
 }
 
-const ISSUE_CATEGORIES = [
+// Categorias exclusivas para quando o PASSAGEIRO relata um problema
+const CLIENT_ISSUE_CATEGORIES = [
   {
     id: 'lost_item',
     label: 'Esqueci um objeto no veículo',
@@ -35,29 +37,89 @@ const ISSUE_CATEGORIES = [
   },
   {
     id: 'vehicle_condition',
-    label: 'Problema com o Veículo',
-    desc: 'Veículo ou placa diferente do aplicativo, ar-condicionado recusado ou falta de limpeza.',
+    label: 'Problema com o Veículo ou Comodidades',
+    desc: 'Veículo/placa diferente do aplicativo, falta de limpeza, ar-condicionado ou acessibilidade recusada.',
     icon: Car,
     color: '#a855f7'
   },
   {
     id: 'route_billing',
     label: 'Divergência de Horas ou Cobrança',
-    desc: 'Cobrança incorreta, discordância sobre o tempo contratado ou rota divergente.',
+    desc: 'Cobrança indevida, discordância sobre o tempo contratado ou rota divergente.',
     icon: DollarSign,
     color: '#10b981'
   },
   {
     id: 'cancellation_issue',
-    label: 'Não Comparecimento ou Cancelamento Abusivo',
-    desc: 'Motorista solicitou cancelamento indevido ou não compareceu ao ponto de partida.',
+    label: 'Motorista não compareceu ou cancelamento indevido',
+    desc: 'Motorista não compareceu ao ponto de partida ou solicitou cancelamento indevido.',
     icon: AlertCircle,
     color: '#ec4899'
   },
   {
-    id: 'other',
+    id: 'client_other',
     label: 'Outro Problema',
     desc: 'Qualquer outra situação não listada acima que demande intervenção da moderação.',
+    icon: AlertTriangle,
+    color: '#94a3b8'
+  }
+] as const;
+
+// Categorias exclusivas para quando o MOTORISTA relata um problema
+const DRIVER_ISSUE_CATEGORIES = [
+  {
+    id: 'passenger_no_show',
+    label: 'Passageiro não compareceu (No-Show)',
+    desc: 'Aguardei no ponto de embarque após o tempo regulamentar e o passageiro não compareceu nem atendeu.',
+    icon: UserX,
+    color: '#ef4444'
+  },
+  {
+    id: 'passenger_misconduct',
+    label: 'Conduta ou Agressividade do Passageiro',
+    desc: 'Desrespeito verbal, agressividade, desacato ou passageiro alterado/embriagado.',
+    icon: ShieldAlert,
+    color: '#f59e0b'
+  },
+  {
+    id: 'vehicle_damage_dirt',
+    label: 'Sujeira ou Dano ao Veículo',
+    desc: 'Passageiro derramou alimentos/bebidas, sujou o estofamento ou causou dano físico ao carro.',
+    icon: Car,
+    color: '#ec4899'
+  },
+  {
+    id: 'item_found_in_car',
+    label: 'Encontrei um objeto esquecido no carro',
+    desc: 'Localizei um celular, bolsa, carteira ou documento deixado para trás e desejo registrar a devolução.',
+    icon: Package,
+    color: '#38bdf8'
+  },
+  {
+    id: 'payment_fraud',
+    label: 'Problema no Pagamento / Recusa de Pagar',
+    desc: 'Passageiro se recusou a pagar o valor em dinheiro, exigiu desconto indevido ou tentou fraude.',
+    icon: DollarSign,
+    color: '#10b981'
+  },
+  {
+    id: 'excess_passengers_luggage',
+    label: 'Excesso de Passageiros ou Bagagem Imprópria',
+    desc: 'Tentativa de embarcar mais pessoas que a lotação legal ou bagagens perigosas/incompatíveis.',
+    icon: Users,
+    color: '#a855f7'
+  },
+  {
+    id: 'dangerous_area_route',
+    label: 'Local de Embarque/Destino em Área de Risco',
+    desc: 'Ponto final em local inacessível, intransitável ou com risco grave à integridade física do condutor.',
+    icon: MapPin,
+    color: '#f97316'
+  },
+  {
+    id: 'driver_other',
+    label: 'Outra Ocorrência Operacional',
+    desc: 'Qualquer outro incidente durante a prestação do serviço que necessite de suporte.',
     icon: AlertTriangle,
     color: '#94a3b8'
   }
@@ -68,16 +130,22 @@ export const ReportIssueModal: React.FC<ReportIssueModalProps> = ({
   currentUser,
   isOpen,
   onClose,
-  onSuccess
+  onSuccess,
+  reporterRole
 }) => {
-  const [selectedCategory, setSelectedCategory] = useState<string>('lost_item');
+  const isDriver = reporterRole 
+    ? reporterRole === 'driver' 
+    : (currentUser.role === 'driver' || ride.driverId === currentUser.id);
+
+  const categories = isDriver ? DRIVER_ISSUE_CATEGORIES : CLIENT_ISSUE_CATEGORIES;
+  const [selectedCategory, setSelectedCategory] = useState<string>(categories[0].id);
   const [description, setDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedSuccess, setSubmittedSuccess] = useState(false);
 
   if (!isOpen) return null;
 
-  const currentCategoryObj = ISSUE_CATEGORIES.find(c => c.id === selectedCategory) || ISSUE_CATEGORIES[0];
+  const currentCategoryObj = categories.find(c => c.id === selectedCategory) || categories[0];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,12 +157,12 @@ export const ReportIssueModal: React.FC<ReportIssueModalProps> = ({
         id: `rep_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
         rideId: ride.id,
         reporterId: currentUser.id,
-        reporterName: currentUser.fullName || 'Passageiro',
-        reporterRole: currentUser.role === 'driver' ? 'driver' : 'client',
+        reporterName: currentUser.fullName || (isDriver ? 'Motorista Parceiro' : 'Passageiro'),
+        reporterRole: isDriver ? 'driver' : 'client',
         reporterPhone: currentUser.phone,
         reporterEmail: currentUser.email,
         driverId: ride.driverId,
-        driverName: ride.driverName || 'Motorista',
+        driverName: ride.driverName || 'Motorista Parceiro',
         driverVehicle: (ride as any).vehicleModel || (ride as any).driverVehicle,
         driverPlate: (ride as any).driverPlate,
         category: selectedCategory as any,
@@ -147,10 +215,14 @@ export const ReportIssueModal: React.FC<ReportIssueModalProps> = ({
           <div>
             <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <AlertTriangle size={20} color="#ef4444" />
-              <span>Reportar Problema com a Corrida</span>
+              <span>{isDriver ? 'Reportar Ocorrência (Motorista)' : 'Reportar Problema com a Corrida'}</span>
             </h3>
             <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '3px' }}>
-              Corrida #{ride.id.slice(-6)} • Motorista: <strong>{ride.driverName || 'Parceiro'}</strong>
+              Corrida #{ride.id.slice(-6).toUpperCase()} • {isDriver ? (
+                <>Passageiro: <strong>{ride.clientName || 'Passageiro'}</strong></>
+              ) : (
+                <>Motorista: <strong>{ride.driverName || 'Parceiro'}</strong></>
+              )}
             </p>
           </div>
           <button
@@ -196,10 +268,10 @@ export const ReportIssueModal: React.FC<ReportIssueModalProps> = ({
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div>
               <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#e2e8f0', display: 'block', marginBottom: '8px' }}>
-                Qual foi o problema ocorrido?
+                {isDriver ? 'Qual ocorrência deseja registrar?' : 'Qual foi o problema ocorrido?'}
               </label>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {ISSUE_CATEGORIES.map(cat => {
+                {categories.map(cat => {
                   const Icon = cat.icon;
                   const isSelected = selectedCategory === cat.id;
                   return (
@@ -258,7 +330,9 @@ export const ReportIssueModal: React.FC<ReportIssueModalProps> = ({
               <textarea
                 rows={4}
                 required
-                placeholder="Ex: Esqueci uma mochila preta no banco de trás contendo meus documentos... ou Descreva a atitude inadequada do motorista..."
+                placeholder={isDriver
+                  ? "Ex: Aguardei no ponto de embarque por 15 minutos e o passageiro não apareceu... ou O passageiro sujou o banco de trás..."
+                  : "Ex: Esqueci uma mochila preta no banco de trás contendo meus documentos... ou Descreva a atitude inadequada do motorista..."}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 className="input-field"
