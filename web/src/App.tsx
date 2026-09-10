@@ -20,6 +20,8 @@ import { NearbyDriversMap } from './components/NearbyDriversMap';
 import { LiveRideTrackerMap } from './components/LiveRideTrackerMap';
 import { DriverProfileModal } from './components/DriverProfileModal';
 import { FavoriteDriversList } from './components/FavoriteDriversList';
+import { ReportIssueModal } from './components/ReportIssueModal';
+import { ClientProfileManager } from './components/ClientProfileManager';
 import { getCurrentPosition, reverseGeocode, searchAddressPlaces } from './services/gpsService';
 import { formatCurrency, formatCurrencyInput, parseCurrencyInput } from './utils/formatters';
 import { 
@@ -185,8 +187,8 @@ export function App() {
   const [isRequesting, setIsRequesting] = useState(false);
   const [isLocatingGPS, setIsLocatingGPS] = useState(false);
 
-  // Cliente: Sub-aba (Solicitar Corrida, Radar, Favoritos VIP ou Histórico de Corridas)
-  const [clientSubTab, setClientSubTab] = useState<'request' | 'nearby_radar' | 'favorites' | 'history'>('request');
+  // Cliente: Sub-aba (Solicitar Corrida, Radar, Favoritos VIP, Histórico ou Meus Dados/CPF)
+  const [clientSubTab, setClientSubTab] = useState<'request' | 'nearby_radar' | 'favorites' | 'history' | 'profile'>('request');
   const [clientDateFilter, setClientDateFilter] = useState<'all' | 'today' | 'week' | '15days' | '30days' | 'custom'>('week');
   const [clientCustomDate, setClientCustomDate] = useState<string>('');
   const [selectedDriverForProfile, setSelectedDriverForProfile] = useState<DriverPublicProfile | null>(null);
@@ -194,6 +196,10 @@ export function App() {
   const [selectedDirectDriver, setSelectedDirectDriver] = useState<DriverPublicProfile | null>(null);
   const [now, setNow] = useState(Date.now());
   const [dismissedCancellationId, setDismissedCancellationId] = useState<string | null>(null);
+
+  // Modal de Reportar Problema com Corrida
+  const [selectedRideForReport, setSelectedRideForReport] = useState<DbRide | null>(null);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
   // Meio de Pagamento Selecionado pelo Passageiro
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethodType>('pix');
@@ -826,6 +832,18 @@ export function App() {
         'warning',
         'Sistema em Manutenção Momentânea'
       );
+      return;
+    }
+
+    // Exigência cadastral do passageiro (CPF obrigatório para emissão de gateway de pagamento)
+    const cleanCpf = (clientProfile?.cpf || '').replace(/\D/g, '');
+    if (!clientProfile || cleanCpf.length !== 11) {
+      showAlert(
+        'Para sua segurança e conformidade com os gateways de pagamento (Pix/Cartão), é obrigatório completar seu cadastro informando seu CPF antes de solicitar corridas.',
+        'warning',
+        'Cadastro Pendente'
+      );
+      setClientSubTab('profile');
       return;
     }
 
@@ -1866,7 +1884,32 @@ export function App() {
                     <Clock size={18} />
                     <span>Histórico de Corridas</span>
                   </button>
+
+                  <button
+                    onClick={() => setClientSubTab('profile')}
+                    className={clientSubTab === 'profile' ? 'btn-primary' : 'btn-outline'}
+                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', fontSize: '0.9rem', borderRadius: '14px' }}
+                  >
+                    <UserCheck size={18} />
+                    <span>Meus Dados & CPF</span>
+                    {(!clientProfile?.cpf || clientProfile.cpf.replace(/\D/g, '').length !== 11) && (
+                      <span style={{ background: '#ef4444', color: '#fff', fontSize: '0.68rem', padding: '2px 8px', borderRadius: '10px', fontWeight: 800 }}>
+                        Completar
+                      </span>
+                    )}
+                  </button>
                 </div>
+
+                {clientSubTab === 'profile' && currentUser && (
+                  <ClientProfileManager
+                    user={currentUser}
+                    initialProfile={clientProfile}
+                    onSaveSuccess={(updated) => {
+                      setClientProfile(updated);
+                      showToast('Dados cadastrais atualizados com sucesso!', 'success');
+                    }}
+                  />
+                )}
 
                 {clientSubTab === 'nearby_radar' && (
                   <NearbyDriversMap 
@@ -3069,6 +3112,31 @@ export function App() {
                                       <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>ID: #{r.id.slice(-6)}</span>
                                     </div>
 
+                                    {/* Botão de Reportar Problema com a Corrida */}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedRideForReport(r);
+                                        setIsReportModalOpen(true);
+                                      }}
+                                      className="btn-outline"
+                                      style={{
+                                        padding: '7px 12px',
+                                        fontSize: '0.78rem',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        borderRadius: '10px',
+                                        color: '#f87171',
+                                        borderColor: 'rgba(239, 68, 68, 0.35)',
+                                        background: 'rgba(239, 68, 68, 0.08)'
+                                      }}
+                                      title="Reportar problema com esta corrida (objeto esquecido, conduta, cobrança...)"
+                                    >
+                                      <AlertTriangle size={14} color="#ef4444" />
+                                      <span>Reportar</span>
+                                    </button>
+
                                     {/* Botão de Arquivar para manter a tela limpa */}
                                     <button
                                       type="button"
@@ -3160,6 +3228,31 @@ export function App() {
                                       <div style={{ fontWeight: 800, color: '#fff', fontSize: '1.05rem' }}>{formatCurrency(r.total)}</div>
                                       <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>ID: #{r.id.slice(-6)}</span>
                                     </div>
+
+                                    {/* Botão de Reportar Problema */}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedRideForReport(r);
+                                        setIsReportModalOpen(true);
+                                      }}
+                                      className="btn-outline"
+                                      style={{
+                                        padding: '7px 12px',
+                                        fontSize: '0.78rem',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        borderRadius: '10px',
+                                        color: '#f87171',
+                                        borderColor: 'rgba(239, 68, 68, 0.35)',
+                                        background: 'rgba(239, 68, 68, 0.08)'
+                                      }}
+                                      title="Reportar problema com esta corrida"
+                                    >
+                                      <AlertTriangle size={14} color="#ef4444" />
+                                      <span>Reportar</span>
+                                    </button>
 
                                     {/* Botão de Restaurar */}
                                     <button
@@ -4305,8 +4398,39 @@ export function App() {
               </div>
               <span>Histórico</span>
             </button>
+
+            <button
+              onClick={() => {
+                setClientSubTab('profile');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className={`mobile-nav-item ${clientSubTab === 'profile' ? 'active' : ''}`}
+            >
+              <div className="icon-wrapper">
+                <UserCheck size={19} />
+              </div>
+              <span>Meus Dados</span>
+            </button>
           </nav>
         </>
+      )}
+
+      {/* Modal de Reportar Problema com a Corrida */}
+      {selectedRideForReport && currentUser && (
+        <ReportIssueModal
+          ride={selectedRideForReport}
+          currentUser={currentUser}
+          isOpen={isReportModalOpen}
+          onClose={() => {
+            setIsReportModalOpen(false);
+            setSelectedRideForReport(null);
+          }}
+          onSuccess={() => {
+            setIsReportModalOpen(false);
+            setSelectedRideForReport(null);
+            showToast('Ocorrência registrada! Nossa equipe analisará o ocorrido.', 'success');
+          }}
+        />
       )}
     </div>
   );

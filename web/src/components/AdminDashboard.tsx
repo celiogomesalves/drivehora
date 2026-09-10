@@ -5,10 +5,10 @@ import {
   XCircle, Clock, RefreshCw, 
   TrendingUp, Database, Image, AlertTriangle, Eye, X, Check,
   Settings, Bell, CreditCard, Sliders, Send, Save, Trash2,
-  Calendar, Filter, Globe, Key, Radio, Power
+  Calendar, Filter, Globe, Key, Radio, Power, MessageSquare
 } from 'lucide-react';
 import { formatCurrency, formatCurrencyInput, parseCurrencyInput, formatPhone, formatCpf, formatPlate } from '../utils/formatters';
-import { dbGetAllDrivers, dbGetAllClients, dbAdminUpdateDriverStatus, dbAdminDeleteDriver, dbAdminToggleDriverOnline, type DbRide } from '../services/dbService';
+import { dbGetAllDrivers, dbGetAllClients, dbAdminUpdateDriverStatus, dbAdminDeleteDriver, dbAdminToggleDriverOnline, dbGetRideReports, dbUpdateRideReportStatus, type DbRide, type RideReport } from '../services/dbService';
 import { getSupabase } from '../supabase';
 import { getSystemSettings, saveSystemSettings, fetchSystemSettingsFromDb, type SystemSettings } from '../services/settingsService';
 import { testGatewayConnection, type GatewayHealthResult } from '../services/paymentGatewayService';
@@ -39,9 +39,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   supabaseConnected 
 }) => {
   const { showAlert, showConfirm, showToast } = useSystemDialog();
-  const [activeSubTab, setActiveSubTab] = useState<'overview' | 'drivers' | 'clients' | 'rides' | 'settings'>('overview');
+  const [activeSubTab, setActiveSubTab] = useState<'overview' | 'drivers' | 'clients' | 'rides' | 'reports' | 'settings'>('overview');
   const [drivers, setDrivers] = useState<DriverProfile[]>([]);
   const [clients, setClients] = useState<ClientProfile[]>([]);
+  const [reports, setReports] = useState<RideReport[]>([]);
+  const [reportFilter, setReportFilter] = useState<'all' | 'pending' | 'in_review' | 'resolved'>('all');
+  const [reportSearch, setReportSearch] = useState('');
+  const [editingReportNoteId, setEditingReportNoteId] = useState<string | null>(null);
+  const [tempReportNote, setTempReportNote] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [driverFilter, setDriverFilter] = useState<'all' | 'online' | 'offline' | 'under_review' | 'approved' | 'rejected' | 'pending_docs'>('all');
   const [previewDoc, setPreviewDoc] = useState<{ title: string; url: string } | null>(null);
@@ -117,12 +122,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const loadAdminData = async () => {
-    const [driverList, clientList] = await Promise.all([
+    const [driverList, clientList, reportsList] = await Promise.all([
       dbGetAllDrivers(),
-      dbGetAllClients()
+      dbGetAllClients(),
+      dbGetRideReports()
     ]);
     setDrivers(driverList);
     setClients(clientList);
+    setReports(reportsList);
   };
 
   useEffect(() => {
@@ -414,6 +421,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           }}
         >
           Corridas ({rides.length})
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('reports')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '8px 16px',
+            borderRadius: '10px',
+            border: 'none',
+            cursor: 'pointer',
+            fontWeight: 700,
+            fontSize: '0.85rem',
+            background: activeSubTab === 'reports' ? 'linear-gradient(135deg, #ef4444, #b91c1c)' : 'transparent',
+            color: activeSubTab === 'reports' ? '#fff' : '#f87171'
+          }}
+        >
+          <AlertTriangle size={15} />
+          <span>Ocorrências ({reports.length})</span>
+          {reports.filter(r => r.status === 'pending').length > 0 && (
+            <span style={{ background: '#ef4444', color: '#fff', fontSize: '0.7rem', padding: '1px 6px', borderRadius: '10px', fontWeight: 800 }}>
+              {reports.filter(r => r.status === 'pending').length} pendente{reports.filter(r => r.status === 'pending').length > 1 ? 's' : ''}
+            </span>
+          )}
         </button>
 
         <button
@@ -1343,6 +1375,415 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <div style={{ fontWeight: 800, color: '#fff' }}>Total: {formatCurrency(r.total)}</div>
                         <div style={{ fontSize: '0.75rem', color: '#818cf8' }}>Plataforma (15%): {formatCurrency(r.commission)}</div>
                         <div style={{ fontSize: '0.75rem', color: '#10b981' }}>Motorista (85%): {formatCurrency(r.driverNet)}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* SUB-ABA 4.5: OCORRÊNCIAS & PROBLEMAS REPORTADOS (CENTRAL DE MODERAÇÃO) */}
+      {activeSubTab === 'reports' && (() => {
+        const pendingCount = reports.filter(r => r.status === 'pending').length;
+        const inReviewCount = reports.filter(r => r.status === 'in_review').length;
+        const resolvedCount = reports.filter(r => r.status === 'resolved').length;
+
+        const filteredReports = reports.filter(r => {
+          if (reportFilter !== 'all' && r.status !== reportFilter) return false;
+          if (reportSearch.trim()) {
+            const query = reportSearch.toLowerCase();
+            return (
+              r.reporterName?.toLowerCase().includes(query) ||
+              r.driverName?.toLowerCase().includes(query) ||
+              r.categoryLabel?.toLowerCase().includes(query) ||
+              r.description?.toLowerCase().includes(query) ||
+              r.id.toLowerCase().includes(query) ||
+              r.rideId.toLowerCase().includes(query)
+            );
+          }
+          return true;
+        });
+
+        const handleUpdateReport = async (reportId: string, status: 'pending' | 'in_review' | 'resolved', notes?: string) => {
+          const ok = await dbUpdateRideReportStatus(reportId, status, notes);
+          if (ok) {
+            setReports(prev => prev.map(rep => rep.id === reportId ? { ...rep, status, adminNotes: notes !== undefined ? notes : rep.adminNotes } : rep));
+            showToast(`Ocorrência atualizada para status: ${status === 'resolved' ? 'Resolvida' : status === 'in_review' ? 'Em Análise' : 'Pendente'}`, 'success');
+          } else {
+            showToast('Erro ao atualizar ocorrência.', 'error');
+          }
+        };
+
+        return (
+          <div className="glass-panel" style={{ padding: '24px' }}>
+            {/* Header da Central de Ocorrências */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px', marginBottom: '20px' }}>
+              <div>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <AlertTriangle size={22} color="#ef4444" />
+                  <span>Central de Ocorrências & Denúncias de Corridas</span>
+                </h3>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                  Auditoria de queixas enviadas por usuários: esquecimento de objetos, segurança, conduta e divergências.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => dbGetRideReports().then(setReports)}
+                className="btn-outline"
+                style={{ padding: '8px 14px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <RefreshCw size={14} />
+                <span>Atualizar</span>
+              </button>
+            </div>
+
+            {/* Cards de Métricas / Resumo */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '20px' }}>
+              <div style={{ padding: '14px 18px', borderRadius: '14px', background: 'rgba(255, 255, 255, 0.04)', border: '1px solid var(--border-subtle)' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Total de Registros</span>
+                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#fff', marginTop: '4px' }}>{reports.length}</div>
+              </div>
+
+              <div style={{ padding: '14px 18px', borderRadius: '14px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
+                <span style={{ fontSize: '0.75rem', color: '#fca5a5' }}>🚨 Pendentes de Ação</span>
+                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#ef4444', marginTop: '4px' }}>{pendingCount}</div>
+              </div>
+
+              <div style={{ padding: '14px 18px', borderRadius: '14px', background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.3)' }}>
+                <span style={{ fontSize: '0.75rem', color: '#fde68a' }}>⏳ Em Análise / Contato</span>
+                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#f59e0b', marginTop: '4px' }}>{inReviewCount}</div>
+              </div>
+
+              <div style={{ padding: '14px 18px', borderRadius: '14px', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                <span style={{ fontSize: '0.75rem', color: '#a7f3d0' }}>✅ Casos Resolvidos</span>
+                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#10b981', marginTop: '4px' }}>{resolvedCount}</div>
+              </div>
+            </div>
+
+            {/* Filtros e Busca */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                {[
+                  { key: 'all', label: `Todas (${reports.length})` },
+                  { key: 'pending', label: `🚨 Pendentes (${pendingCount})` },
+                  { key: 'in_review', label: `⏳ Em Análise (${inReviewCount})` },
+                  { key: 'resolved', label: `✅ Resolvidas (${resolvedCount})` }
+                ].map(f => (
+                  <button
+                    key={f.key}
+                    type="button"
+                    onClick={() => setReportFilter(f.key as any)}
+                    style={{
+                      padding: '7px 14px',
+                      borderRadius: '10px',
+                      fontSize: '0.8rem',
+                      fontWeight: 700,
+                      border: '1px solid var(--border-subtle)',
+                      background: reportFilter === f.key ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
+                      color: reportFilter === f.key ? '#fff' : 'var(--text-secondary)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+
+              <div style={{ position: 'relative', minWidth: '240px' }}>
+                <input
+                  type="text"
+                  placeholder="Buscar ocorrência..."
+                  value={reportSearch}
+                  onChange={(e) => setReportSearch(e.target.value)}
+                  className="input-field"
+                  style={{ width: '100%', fontSize: '0.85rem', padding: '8px 12px' }}
+                />
+              </div>
+            </div>
+
+            {/* Lista de Ocorrências */}
+            {filteredReports.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '50px 20px', color: 'var(--text-muted)' }}>
+                <ShieldCheck size={48} color="#10b981" style={{ margin: '0 auto 12px', opacity: 0.6 }} />
+                <p style={{ fontSize: '1rem', fontWeight: 700, color: '#fff' }}>Nenhuma ocorrência encontrada</p>
+                <p style={{ fontSize: '0.8rem', marginTop: '4px' }}>
+                  {reportFilter !== 'all' ? 'Não há registros com este filtro.' : 'Excelente! Nenhum problema reportado até o momento.'}
+                </p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {filteredReports.map(rep => {
+                  const repTime = new Date(rep.createdAt);
+                  const isPending = rep.status === 'pending';
+                  const isInReview = rep.status === 'in_review';
+
+                  // Motorista associado
+                  const driverObj = drivers.find(d => d.id === rep.driverId || d.userId === rep.driverId);
+                  const driverCleanPhone = (rep.driverPhone || driverObj?.phone || '').replace(/\D/g, '');
+                  const clientCleanPhone = (rep.reporterPhone || '').replace(/\D/g, '');
+
+                  return (
+                    <div
+                      key={rep.id}
+                      style={{
+                        padding: '18px',
+                        borderRadius: '16px',
+                        background: 'rgba(255, 255, 255, 0.03)',
+                        border: `1px solid ${isPending ? 'rgba(239, 68, 68, 0.4)' : isInReview ? 'rgba(245, 158, 11, 0.4)' : 'rgba(16, 185, 129, 0.3)'}`,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '12px'
+                      }}
+                    >
+                      {/* Topo do Card */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <span style={{
+                            fontSize: '0.74rem',
+                            padding: '4px 10px',
+                            borderRadius: '8px',
+                            fontWeight: 800,
+                            background: isPending ? 'rgba(239, 68, 68, 0.18)' : isInReview ? 'rgba(245, 158, 11, 0.18)' : 'rgba(16, 185, 129, 0.18)',
+                            color: isPending ? '#ef4444' : isInReview ? '#f59e0b' : '#10b981',
+                            border: `1px solid ${isPending ? 'rgba(239, 68, 68, 0.4)' : isInReview ? 'rgba(245, 158, 11, 0.4)' : 'rgba(16, 185, 129, 0.4)'}`
+                          }}>
+                            {isPending ? '🚨 PENDENTE' : isInReview ? '⏳ EM ANÁLISE' : '✅ RESOLVIDA'}
+                          </span>
+
+                          <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#fff' }}>
+                            {rep.categoryLabel}
+                          </span>
+
+                          <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                            Protocolo: #{rep.id.slice(-8)}
+                          </span>
+                        </div>
+
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                          {repTime.toLocaleDateString('pt-BR')} às {repTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      </div>
+
+                      {/* Descrição do Problema Relatado */}
+                      <div style={{
+                        padding: '12px 14px',
+                        borderRadius: '10px',
+                        background: 'rgba(15, 23, 42, 0.7)',
+                        border: '1px solid var(--border-subtle)',
+                        fontSize: '0.85rem',
+                        color: '#e2e8f0',
+                        lineHeight: 1.5
+                      }}>
+                        <strong style={{ color: '#94a3b8', fontSize: '0.75rem', display: 'block', marginBottom: '4px' }}>
+                          Relato enviado pelo passageiro:
+                        </strong>
+                        "{rep.description}"
+                      </div>
+
+                      {/* Dados das Partes Envolvidas */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '10px' }}>
+                        {/* Passageiro */}
+                        <div style={{ padding: '10px 12px', borderRadius: '10px', background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>
+                            Passageiro que Reportou
+                          </div>
+                          <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#fff', marginTop: '2px' }}>
+                            {rep.reporterName}
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '2px' }}>
+                            {rep.reporterPhone || 'Telefone não informado'} • {rep.reporterEmail || ''}
+                          </div>
+                          {clientCleanPhone && (
+                            <a
+                              href={`https://wa.me/55${clientCleanPhone}?text=Olá%20${encodeURIComponent(rep.reporterName)},%20sou%20da%20equipe%20de%20suporte%20da%20DriveHora%20sobre%20sua%20ocorrência%20${rep.id.slice(-6)}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                fontSize: '0.74rem',
+                                color: '#22c55e',
+                                marginTop: '6px',
+                                textDecoration: 'none',
+                                fontWeight: 700
+                              }}
+                            >
+                              <MessageSquare size={13} />
+                              <span>Falar com Passageiro no WhatsApp</span>
+                            </a>
+                          )}
+                        </div>
+
+                        {/* Motorista */}
+                        <div style={{ padding: '10px 12px', borderRadius: '10px', background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>
+                            Motorista Envolvido
+                          </div>
+                          <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#fff', marginTop: '2px' }}>
+                            {rep.driverName || 'Motorista Parceiro'}
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '2px' }}>
+                            {rep.driverVehicle || driverObj?.vehicleModel || 'Veículo cadastrado'} {rep.driverPlate ? `• Placa: ${rep.driverPlate}` : driverObj?.vehiclePlate ? `• Placa: ${driverObj.vehiclePlate}` : ''}
+                          </div>
+                          {driverCleanPhone && (
+                            <a
+                              href={`https://wa.me/55${driverCleanPhone}?text=Olá%20${encodeURIComponent(rep.driverName || '')},%20sou%20da%20moderação%20da%20DriveHora%20sobre%20a%20corrida%20${rep.rideId.slice(-6)}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                fontSize: '0.74rem',
+                                color: '#38bdf8',
+                                marginTop: '6px',
+                                textDecoration: 'none',
+                                fontWeight: 700
+                              }}
+                            >
+                              <MessageSquare size={13} />
+                              <span>Falar com Motorista no WhatsApp</span>
+                            </a>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Anotações Internas do Administrador */}
+                      <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '10px 12px', borderRadius: '10px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                          <span style={{ fontSize: '0.72rem', color: '#cbd5e1', fontWeight: 700 }}>
+                            📝 Parecer / Notas Internas da Moderação:
+                          </span>
+                          {editingReportNoteId !== rep.id && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingReportNoteId(rep.id);
+                                setTempReportNote(rep.adminNotes || '');
+                              }}
+                              className="btn-outline"
+                              style={{ padding: '3px 8px', fontSize: '0.7rem' }}
+                            >
+                              {rep.adminNotes ? 'Editar Parecer' : '+ Adicionar Parecer'}
+                            </button>
+                          )}
+                        </div>
+
+                        {editingReportNoteId === rep.id ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
+                            <textarea
+                              rows={2}
+                              value={tempReportNote}
+                              onChange={(e) => setTempReportNote(e.target.value)}
+                              placeholder="Ex: Motorista advertido verbalmente. Objeto devolvido no ponto de apoio. Passageiro orientado."
+                              className="input-field"
+                              style={{ width: '100%', fontSize: '0.8rem' }}
+                            />
+                            <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                              <button
+                                type="button"
+                                onClick={() => setEditingReportNoteId(null)}
+                                className="btn-outline"
+                                style={{ padding: '4px 10px', fontSize: '0.72rem' }}
+                              >
+                                Cancelar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleUpdateReport(rep.id, rep.status, tempReportNote);
+                                  setEditingReportNoteId(null);
+                                }}
+                                className="btn-primary"
+                                style={{ padding: '4px 12px', fontSize: '0.72rem' }}
+                              >
+                                Salvar Parecer
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: '0.78rem', color: rep.adminNotes ? '#cbd5e1' : 'var(--text-muted)', fontStyle: rep.adminNotes ? 'normal' : 'italic' }}>
+                            {rep.adminNotes || 'Nenhum parecer ou anotação interna registrada ainda.'}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Barra de Ações Moderativas */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', paddingTop: '6px', borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>Mudar Status:</span>
+                          {rep.status !== 'pending' && (
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateReport(rep.id, 'pending')}
+                              className="btn-outline"
+                              style={{ padding: '5px 10px', fontSize: '0.72rem', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.3)' }}
+                            >
+                              Marcar Pendente
+                            </button>
+                          )}
+                          {rep.status !== 'in_review' && (
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateReport(rep.id, 'in_review')}
+                              className="btn-outline"
+                              style={{ padding: '5px 10px', fontSize: '0.72rem', color: '#f59e0b', borderColor: 'rgba(245, 158, 11, 0.3)' }}
+                            >
+                              Marcar Em Análise
+                            </button>
+                          )}
+                          {rep.status !== 'resolved' && (
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateReport(rep.id, 'resolved')}
+                              className="btn-primary"
+                              style={{ padding: '5px 12px', fontSize: '0.72rem', background: '#10b981', borderColor: '#10b981' }}
+                            >
+                              ✓ Marcar como Resolvida
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Ação Emergencial no Motorista */}
+                        {driverObj && (
+                          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                            {driverObj.isOnline ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  showConfirm(
+                                    `Deseja desconectar o motorista ${driverObj.fullName} preventivamente devido a esta ocorrência?`,
+                                    () => handleAdminToggleDriverOnline(driverObj, false)
+                                  );
+                                }}
+                                className="btn-outline"
+                                style={{
+                                  padding: '5px 10px',
+                                  fontSize: '0.72rem',
+                                  color: '#ef4444',
+                                  borderColor: 'rgba(239, 68, 68, 0.4)',
+                                  background: 'rgba(239, 68, 68, 0.08)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}
+                              >
+                                <Power size={12} />
+                                <span>Desconectar Motorista</span>
+                              </button>
+                            ) : (
+                              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                                Motorista já está Offline
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   );

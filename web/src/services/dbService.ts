@@ -1141,3 +1141,142 @@ export const dbSaveUserDeviceToken = async (userId: string, token: string, role?
     return false;
   }
 };
+
+// 19. Sistema de Ocorrências e Problemas Reportados (Ride Reports)
+export interface RideReport {
+  id: string;
+  rideId: string;
+  reporterId: string;
+  reporterName: string;
+  reporterRole: 'client' | 'driver';
+  reporterPhone?: string;
+  reporterEmail?: string;
+  driverId?: string;
+  driverName?: string;
+  driverPhone?: string;
+  driverVehicle?: string;
+  driverPlate?: string;
+  category: 'lost_item' | 'driver_behavior' | 'vehicle_condition' | 'route_billing' | 'safety' | 'cancellation_issue' | 'other';
+  categoryLabel: string;
+  description: string;
+  status: 'pending' | 'in_review' | 'resolved';
+  adminNotes?: string;
+  createdAt: number;
+  resolvedAt?: number;
+}
+
+const REPORTS_STORAGE_KEY = 'drivehora_ride_reports_v1';
+const DB_REPORTS_PROFILE_ID = 'app_global_ride_reports';
+
+export const dbGetRideReports = async (): Promise<RideReport[]> => {
+  let localReports: RideReport[] = [];
+  try {
+    const raw = localStorage.getItem(REPORTS_STORAGE_KEY);
+    if (raw) localReports = JSON.parse(raw);
+  } catch {}
+
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      const { data, error } = await sb
+        .from('profiles')
+        .select('active_session_token')
+        .eq('id', DB_REPORTS_PROFILE_ID)
+        .maybeSingle();
+
+      if (!error && data?.active_session_token) {
+        const remote: RideReport[] = JSON.parse(data.active_session_token);
+        // Mesclar com locais sem duplicar
+        const map = new Map<string, RideReport>();
+        remote.forEach(r => map.set(r.id, r));
+        localReports.forEach(r => { if (!map.has(r.id)) map.set(r.id, r); });
+        const merged = Array.from(map.values()).sort((a, b) => b.createdAt - a.createdAt);
+        try { localStorage.setItem(REPORTS_STORAGE_KEY, JSON.stringify(merged)); } catch {}
+        return merged;
+      }
+    } catch (e) {
+      console.warn('Erro ao buscar ocorrências no Supabase:', e);
+    }
+  }
+  return localReports;
+};
+
+export const dbCreateRideReport = async (report: RideReport): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const current = await dbGetRideReports();
+    const updated = [report, ...current.filter(r => r.id !== report.id)];
+
+    try {
+      localStorage.setItem(REPORTS_STORAGE_KEY, JSON.stringify(updated));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('drivehora_reports_updated', { detail: updated }));
+      }
+    } catch {}
+
+    const sb = getSupabase();
+    if (sb) {
+      try {
+        await sb.from('profiles').upsert({
+          id: DB_REPORTS_PROFILE_ID,
+          role: 'admin',
+          email: 'reports@drivehora.app',
+          phone: '00000000000',
+          full_name: 'DriveHora Central de Ocorrências',
+          active_session_token: JSON.stringify(updated),
+          updated_at: new Date().toISOString()
+        });
+      } catch (err) {
+        console.warn('Aviso: falha ao sincronizar ocorrência na nuvem:', err);
+      }
+    }
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Erro ao registrar ocorrência.' };
+  }
+};
+
+export const dbUpdateRideReportStatus = async (
+  reportId: string,
+  status: 'pending' | 'in_review' | 'resolved',
+  adminNotes?: string
+): Promise<boolean> => {
+  try {
+    const current = await dbGetRideReports();
+    const updated = current.map(r => {
+      if (r.id === reportId) {
+        return {
+          ...r,
+          status,
+          adminNotes: adminNotes !== undefined ? adminNotes : r.adminNotes,
+          resolvedAt: status === 'resolved' ? Date.now() : r.resolvedAt
+        };
+      }
+      return r;
+    });
+
+    try {
+      localStorage.setItem(REPORTS_STORAGE_KEY, JSON.stringify(updated));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('drivehora_reports_updated', { detail: updated }));
+      }
+    } catch {}
+
+    const sb = getSupabase();
+    if (sb) {
+      await sb.from('profiles').upsert({
+        id: DB_REPORTS_PROFILE_ID,
+        role: 'admin',
+        email: 'reports@drivehora.app',
+        phone: '00000000000',
+        full_name: 'DriveHora Central de Ocorrências',
+        active_session_token: JSON.stringify(updated),
+        updated_at: new Date().toISOString()
+      });
+    }
+    return true;
+  } catch (e) {
+    console.warn('Erro ao atualizar ocorrência:', e);
+    return false;
+  }
+};
+
