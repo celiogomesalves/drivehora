@@ -4691,14 +4691,8 @@ export function App() {
         color: 'var(--text-muted)',
         background: 'rgba(9, 13, 22, 0.9)'
       }}>
-        <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+        <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
           <span>© 2026 DriveHora — Todos os direitos reservados</span>
-          {isUserAdmin && (
-            <div style={{ display: 'flex', gap: '16px' }}>
-              <span>Regra: 15% Plataforma / 85% Motorista</span>
-              <span>Banco: <strong>{supabaseConnected ? 'Supabase Realtime' : 'Memória / Local'}</strong></span>
-            </div>
-          )}
         </div>
       </footer>
 
