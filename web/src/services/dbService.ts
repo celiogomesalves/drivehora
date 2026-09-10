@@ -656,16 +656,133 @@ export const dbCreateRide = async (ride: DbRide): Promise<{ success: boolean; er
   return { success: true };
 };
 
+const SUBSTATUS_STORAGE_KEY = 'drivehora_ride_substatus_map';
+const SUBSTATUS_PROFILE_ID = 'app_global_ride_substatus';
+
+export const dbGetRidesSubstatusMap = async (): Promise<Record<string, { substatus: string; updatedAt: number; cancellationReason?: string; cancelledBy?: string }>> => {
+  let map: Record<string, any> = {};
+  try {
+    const raw = localStorage.getItem(SUBSTATUS_STORAGE_KEY);
+    if (raw) map = JSON.parse(raw);
+  } catch {}
+
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      const { data, error } = await sb
+        .from('profiles')
+        .select('active_session_token')
+        .eq('id', SUBSTATUS_PROFILE_ID)
+        .maybeSingle();
+      if (!error && data?.active_session_token) {
+        const remote = JSON.parse(data.active_session_token);
+        map = { ...map, ...remote };
+        localStorage.setItem(SUBSTATUS_STORAGE_KEY, JSON.stringify(map));
+      }
+    } catch {}
+  }
+  return map;
+};
+
+export const dbSetRideSubstatus = async (
+  rideId: string,
+  substatus: string,
+  extra?: { cancellationReason?: string; cancelledBy?: string }
+): Promise<void> => {
+  try {
+    const map = await dbGetRidesSubstatusMap();
+    map[rideId] = {
+      substatus,
+      updatedAt: Date.now(),
+      ...extra
+    };
+    localStorage.setItem(SUBSTATUS_STORAGE_KEY, JSON.stringify(map));
+    window.dispatchEvent(new CustomEvent('drivehora_substatus_updated', { detail: map }));
+
+    const sb = getSupabase();
+    if (sb) {
+      await sb.from('profiles').upsert({
+        id: SUBSTATUS_PROFILE_ID,
+        role: 'admin',
+        email: 'substatus@drivehora.app',
+        phone: '00000000000',
+        full_name: 'DriveHora Ride Substatus',
+        active_session_token: JSON.stringify(map),
+        updated_at: new Date().toISOString()
+      });
+    }
+  } catch (e) {
+    console.warn('Erro ao persistir substatus:', e);
+  }
+};
+
+export const dbClearRideSubstatus = async (rideId: string): Promise<void> => {
+  try {
+    const map = await dbGetRidesSubstatusMap();
+    if (map[rideId]) {
+      delete map[rideId];
+      localStorage.setItem(SUBSTATUS_STORAGE_KEY, JSON.stringify(map));
+      window.dispatchEvent(new CustomEvent('drivehora_substatus_updated', { detail: map }));
+
+      const sb = getSupabase();
+      if (sb) {
+        await sb.from('profiles').upsert({
+          id: SUBSTATUS_PROFILE_ID,
+          role: 'admin',
+          email: 'substatus@drivehora.app',
+          phone: '00000000000',
+          full_name: 'DriveHora Ride Substatus',
+          active_session_token: JSON.stringify(map),
+          updated_at: new Date().toISOString()
+        });
+      }
+    }
+  } catch (e) {
+    console.warn('Erro ao limpar substatus:', e);
+  }
+};
+
+export const dbCreditDriverCancellationFee = async (driverId: string, feeAmount: number, _rideId: string): Promise<void> => {
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      const { data: driverData } = await sb
+        .from('drivers')
+        .select('id, total_earnings')
+        .or(`id.eq.${driverId},user_id.eq.${driverId}`)
+        .maybeSingle();
+
+      if (driverData) {
+        const newEarnings = Number(((Number(driverData.total_earnings) || 0) + feeAmount).toFixed(2));
+        await sb.from('drivers').update({ total_earnings: newEarnings }).eq('id', driverData.id);
+      }
+    } catch (e) {
+      console.warn('Erro ao creditar taxa de cancelamento ao motorista:', e);
+    }
+  }
+};
+
 // 7. Atualizar Status da Corrida
 export const dbUpdateRide = async (
   rideId: string,
   updates: Partial<DbRide>
 ): Promise<void> => {
+  const isExtendedSubstatus = updates.status === 'to_pickup' || updates.status === 'arrived_at_pickup';
+
+  if (isExtendedSubstatus && updates.status) {
+    await dbSetRideSubstatus(rideId, updates.status);
+  } else if (updates.status === 'in_progress' || updates.status === 'finished' || updates.status === 'cancelled') {
+    await dbClearRideSubstatus(rideId);
+  }
+
   const sb = getSupabase();
   if (sb) {
     try {
       const payload: any = {};
-      if (updates.status) payload.status = updates.status;
+      // Para o Supabase, se status for to_pickup ou arrived_at_pickup, gravamos 'accepted' para não violar a constraint rides_status_check
+      if (updates.status) {
+        payload.status = isExtendedSubstatus ? 'accepted' : updates.status;
+      }
       if (updates.driverId) payload.driver_id = updates.driverId;
       if (updates.acceptedAt) payload.accepted_at = new Date(updates.acceptedAt).toISOString();
       if (updates.startedAt) payload.started_at = new Date(updates.startedAt).toISOString();
@@ -676,12 +793,10 @@ export const dbUpdateRide = async (
 
       let res = await sb.from('rides').update(payload).eq('id', rideId);
       // Fallback: se a constraint de status no Supabase não aceitar status estendido
-      if (res?.error && res.error.code === '23514' && (updates.status === 'to_pickup' || updates.status === 'arrived_at_pickup')) {
-        console.warn('Constraint de status estendido, aplicando fallback compatível:', res.error.message);
+      if (res?.error && res.error.code === '23514' && isExtendedSubstatus) {
         payload.status = 'accepted';
         await sb.from('rides').update(payload).eq('id', rideId);
       }
-      return;
     } catch (e) {
       console.warn('Erro ao atualizar corrida no Supabase:', e);
     }
@@ -708,11 +823,16 @@ export const dbCancelRide = async (
   reason?: string,
   cancelledBy: 'client' | 'driver' | 'admin' | 'system' = 'client'
 ): Promise<void> => {
+  // Limpa substatus e registra motivo
+  await dbClearRideSubstatus(rideId);
+  if (reason) {
+    await dbSetRideSubstatus(rideId, 'cancelled', { cancellationReason: reason, cancelledBy });
+  }
+
   const sb = getSupabase();
   if (sb) {
     try {
       const updatePayload: any = { status: 'cancelled' };
-      // Tenta gravar motivo se a coluna existir, com fallback seguro
       let res = await sb.from('rides').update({
         ...updatePayload,
         cancellation_reason: reason || null
@@ -721,7 +841,6 @@ export const dbCancelRide = async (
       if (res?.error && res.error.code === 'PGRST204') {
         await sb.from('rides').update(updatePayload).eq('id', rideId);
       }
-      return;
     } catch (e) {
       console.warn('Erro ao cancelar corrida no Supabase:', e);
     }

@@ -36,6 +36,7 @@ import {
   dbGetClientProfile, dbGetDriverProfile, dbGetAllDrivers,
   dbCreateRide, dbUpdateRide, dbCancelRide, dbAcknowledgeRide, dbUpdateDriverOnlineStatus, dbUpdateDriverLocation,
   dbGetFavoriteDriverIds, dbToggleFavoriteDriver, dbSaveUserDeviceToken, dbCheckUserSession,
+  dbCreditDriverCancellationFee,
   type DbRide 
 } from './services/dbService';
 import { requestWebPushToken, onForegroundMessage } from './services/firebase';
@@ -771,12 +772,19 @@ export function App() {
       try {
         const [ridesRes, profilesRes] = await Promise.all([
           sb.from('rides').select('*').order('created_at', { ascending: false }).limit(50),
-          sb.from('profiles').select('id, full_name, email')
+          sb.from('profiles').select('id, full_name, email, active_session_token')
         ]);
 
         if (!ridesRes.error && ridesRes.data) {
           const profilesMap = new Map<string, string>();
+          let substatusMap: Record<string, { substatus: string; updatedAt: number; cancellationReason?: string; cancelledBy?: string }> = {};
+
           (profilesRes.data || []).forEach((p: any) => {
+            if (p.id === 'app_global_ride_substatus' && p.active_session_token) {
+              try {
+                substatusMap = JSON.parse(p.active_session_token);
+              } catch {}
+            }
             let name = p.full_name;
             if (name && name.includes('@')) {
               const userPart = name.split('@')[0];
@@ -786,34 +794,49 @@ export function App() {
             if (p.email && name) profilesMap.set(p.email.toLowerCase().trim(), name);
           });
 
-          const formatted: DbRide[] = ridesRes.data.map((d: any) => ({
-            id: d.id,
-            clientId: d.client_id,
-            clientName: profilesMap.get(d.client_id) || d.client_name || 'Passageiro',
-            driverId: d.driver_id,
-            driverName: profilesMap.get(d.driver_id) || d.driver_name || (d.driver_id ? 'Motorista Parceiro' : undefined),
-            origin: d.origin,
-            destination: d.destination,
-            originLat: d.origin_lat !== undefined && d.origin_lat !== null ? Number(d.origin_lat) : d.originLat,
-            originLng: d.origin_lng !== undefined && d.origin_lng !== null ? Number(d.origin_lng) : d.originLng,
-            destLat: d.dest_lat !== undefined && d.dest_lat !== null ? Number(d.dest_lat) : d.destLat,
-            destLng: d.dest_lng !== undefined && d.dest_lng !== null ? Number(d.dest_lng) : d.destLng,
-            hours: Number(d.hours),
-            hourlyRate: Number(d.hourly_rate),
-            total: Number(d.total),
-            commission: Number(d.commission),
-            driverNet: Number(d.driver_net),
-            status: d.status,
-            paymentMethod: d.payment_method || d.paymentMethod,
-            paymentStatus: d.payment_status || d.paymentStatus,
-            cancellationReason: d.cancellation_reason || d.cancellationReason,
-            cancelledBy: d.cancelled_by || d.cancelledBy,
-            driverAcknowledgedAt: d.driver_acknowledged_at ? new Date(d.driver_acknowledged_at).getTime() : undefined,
-            createdAt: new Date(d.created_at).getTime(),
-            acceptedAt: d.accepted_at ? new Date(d.accepted_at).getTime() : undefined,
-            startedAt: d.started_at ? new Date(d.started_at).getTime() : undefined,
-            finishedAt: d.finished_at ? new Date(d.finished_at).getTime() : undefined
-          }));
+          // Fallback para substatus no localStorage se necessário
+          if (!substatusMap || Object.keys(substatusMap).length === 0) {
+            try {
+              const local = localStorage.getItem('drivehora_rides_substatus_map');
+              if (local) substatusMap = JSON.parse(local);
+            } catch {}
+          }
+
+          const formatted: DbRide[] = ridesRes.data.map((d: any) => {
+            const sub = substatusMap[d.id];
+            const effectiveStatus = (d.status === 'accepted' && sub?.substatus && (sub.substatus === 'to_pickup' || sub.substatus === 'arrived_at_pickup'))
+              ? (sub.substatus as any)
+              : d.status;
+
+            return {
+              id: d.id,
+              clientId: d.client_id,
+              clientName: profilesMap.get(d.client_id) || d.client_name || 'Passageiro',
+              driverId: d.driver_id,
+              driverName: profilesMap.get(d.driver_id) || d.driver_name || (d.driver_id ? 'Motorista Parceiro' : undefined),
+              origin: d.origin,
+              destination: d.destination,
+              originLat: d.origin_lat !== undefined && d.origin_lat !== null ? Number(d.origin_lat) : d.originLat,
+              originLng: d.origin_lng !== undefined && d.origin_lng !== null ? Number(d.origin_lng) : d.originLng,
+              destLat: d.dest_lat !== undefined && d.dest_lat !== null ? Number(d.dest_lat) : d.destLat,
+              destLng: d.dest_lng !== undefined && d.dest_lng !== null ? Number(d.dest_lng) : d.destLng,
+              hours: Number(d.hours),
+              hourlyRate: Number(d.hourly_rate),
+              total: Number(d.total),
+              commission: Number(d.commission),
+              driverNet: Number(d.driver_net),
+              status: effectiveStatus,
+              paymentMethod: d.payment_method || d.paymentMethod,
+              paymentStatus: d.payment_status || d.paymentStatus,
+              cancellationReason: sub?.cancellationReason || d.cancellation_reason || d.cancellationReason,
+              cancelledBy: (sub?.cancelledBy as any) || d.cancelled_by || d.cancelledBy,
+              driverAcknowledgedAt: d.driver_acknowledged_at ? new Date(d.driver_acknowledged_at).getTime() : undefined,
+              createdAt: new Date(d.created_at).getTime(),
+              acceptedAt: d.accepted_at ? new Date(d.accepted_at).getTime() : undefined,
+              startedAt: d.started_at ? new Date(d.started_at).getTime() : undefined,
+              finishedAt: d.finished_at ? new Date(d.finished_at).getTime() : undefined
+            };
+          });
           setRides(formatted);
           const finished = formatted.filter(r => r.status === 'finished');
           const sum = finished.reduce((acc, cur) => acc + (cur.driverNet || 0), 0);
@@ -830,10 +853,26 @@ export function App() {
       const res = await fetch('/api/rides');
       if (res.ok) {
         const data = await res.json();
-        const mapped = data.map((d: any) => ({
-          ...d,
-          driverAcknowledgedAt: d.driverAcknowledgedAt ? Number(d.driverAcknowledgedAt) : (d.driver_acknowledged_at ? new Date(d.driver_acknowledged_at).getTime() : undefined)
-        }));
+        let substatusMap: Record<string, any> = {};
+        try {
+          const local = localStorage.getItem('drivehora_rides_substatus_map');
+          if (local) substatusMap = JSON.parse(local);
+        } catch {}
+
+        const mapped = data.map((d: any) => {
+          const sub = substatusMap[d.id];
+          const effectiveStatus = (d.status === 'accepted' && sub?.substatus && (sub.substatus === 'to_pickup' || sub.substatus === 'arrived_at_pickup'))
+            ? sub.substatus
+            : d.status;
+
+          return {
+            ...d,
+            status: effectiveStatus,
+            cancellationReason: sub?.cancellationReason || d.cancellationReason,
+            cancelledBy: sub?.cancelledBy || d.cancelledBy,
+            driverAcknowledgedAt: d.driverAcknowledgedAt ? Number(d.driverAcknowledgedAt) : (d.driver_acknowledged_at ? new Date(d.driver_acknowledged_at).getTime() : undefined)
+          };
+        });
         setRides(mapped);
         const finished = mapped.filter((r: DbRide) => r.status === 'finished');
         const sum = finished.reduce((acc: number, cur: DbRide) => acc + (cur.driverNet || 0), 0);
@@ -852,15 +891,15 @@ export function App() {
       setClientOriginCoords({ lat: coords.latitude, lng: coords.longitude });
       const address = await reverseGeocode(coords);
       setOrigin(address);
-    } catch (error) {
-      console.warn('Erro ao obter GPS:', error);
-      showAlert('Não foi possível obter sua localização GPS. Verifique a permissão de localização do seu aparelho ou navegador.', 'warning', 'Acesso ao GPS');
+      showToast('Localização atual obtida com sucesso!', 'success');
+    } catch (err: any) {
+      showAlert('Não foi possível obter sua localização GPS precisa.', 'error', 'Erro de Localização');
     } finally {
       setIsLocatingGPS(false);
     }
   };
 
-  // Inicializar e configurar Realtime do Supabase
+  // Carregar dados na inicialização e subscrever a eventos em tempo real
   useEffect(() => {
     const bootstrap = async () => {
       await initGlobalSupabaseConfig();
@@ -878,12 +917,20 @@ export function App() {
 
     if (sb) {
       channel = sb
-        .channel('public:rides')
+        .channel('public:rides_and_substatus')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'rides' }, () => {
+          fetchRides();
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles', filter: 'id=eq.app_global_ride_substatus' }, () => {
           fetchRides();
         })
         .subscribe();
     }
+
+    const handleSubstatusEvent = () => {
+      fetchRides();
+    };
+    window.addEventListener('drivehora_substatus_updated', handleSubstatusEvent);
 
     const interval = setInterval(() => {
       fetchRides();
@@ -891,6 +938,7 @@ export function App() {
 
     return () => {
       clearInterval(interval);
+      window.removeEventListener('drivehora_substatus_updated', handleSubstatusEvent);
       if (channel && sb) sb.removeChannel(channel);
     };
   }, [supabaseConnected]);
@@ -1095,24 +1143,148 @@ export function App() {
     setIsRequesting(false);
   };
 
-  // Cancelar corrida pelo passageiro (com validação de até 5 minutos após aceite)
+  // Cancelar corrida pelo passageiro
+  // Regra de Negócio:
+  // 1) Se em busca ('searching'): cancelamento 100% gratuito e reembolso integral para a carteira (se pago online).
+  // 2) Se aceita/a caminho/no local (não iniciada):
+  //    - Até 5 minutos (<= 300s): cancelamento gratuito e reembolso integral em créditos.
+  //    - Após 5 minutos (> 300s): taxa fixa de R$ 15,00 transferida 100% ao motorista (sem descontos da plataforma).
+  //      - Se pago online: taxa é descontada do valor já pago antes do ressarcimento. Se houver saldo restante, vira crédito. Se não houver saldo suficiente, entra como débito.
+  //      - Se em dinheiro / não pago: taxa de R$ 15,00 vira débito na conta do passageiro, bloqueando novas corridas até regularização.
+  // 3) Se já iniciada ('in_progress' ou 'finished'): não pode ser cancelada pelo passageiro.
   const handleCancelRideByClient = (rideId: string) => {
-    showConfirm(
-      'Deseja realmente cancelar esta solicitação de corrida?',
-      async () => {
-        await dbCancelRide(rideId);
-        setCurrentRideId(null);
-        fetchRides();
-        showToast('Solicitação cancelada com sucesso.', 'info');
-      },
-      undefined,
-      {
-        title: 'Cancelar Corrida',
-        confirmLabel: 'Sim, Cancelar Corrida',
-        cancelLabel: 'Manter Corrida',
-        type: 'confirm'
+    const targetRide = rides.find(r => r.id === rideId);
+    if (!targetRide) return;
+
+    if (targetRide.status === 'in_progress' || targetRide.status === 'finished') {
+      showAlert(
+        'Esta corrida já foi iniciada pelo motorista e não pode mais ser cancelada pelo passageiro.',
+        'warning',
+        'Corrida em Andamento'
+      );
+      return;
+    }
+
+    const CANCELLATION_FEE = 15.0;
+    const isSearching = targetRide.status === 'searching';
+    const acceptedTs = targetRide.acceptedAt || targetRide.createdAt || Date.now();
+    const elapsedSeconds = Math.floor((Date.now() - acceptedTs) / 1000);
+    const isWithinFreePeriod = isSearching || elapsedSeconds <= 300;
+
+    if (isWithinFreePeriod) {
+      showConfirm(
+        isSearching
+          ? 'Deseja realmente cancelar a busca pelo motorista? Nenhum valor será cobrado.'
+          : `Você está dentro do prazo de 5 minutos de cancelamento gratuito. Deseja realmente cancelar a chamada sem nenhum custo?${targetRide.paymentMethod !== 'cash' ? ' O valor pago será estornado integralmente para sua carteira.' : ''}`,
+        async () => {
+          await dbCancelRide(rideId, isSearching ? 'Cancelado pelo passageiro durante a busca' : 'Cancelado pelo passageiro (dentro do prazo de 5 minutos)', 'client');
+          if (targetRide.paymentMethod !== 'cash' && targetRide.clientId && targetRide.total > 0) {
+            try {
+              await addWalletCredit(
+                targetRide.clientId,
+                targetRide.total,
+                `Estorno de corrida #${targetRide.id.slice(-6)} cancelada gratuitamente`,
+                targetRide.id
+              );
+              if (currentUser?.id) getUserWallet(currentUser.id).then(setClientWallet);
+            } catch (err) {
+              console.warn('Erro ao reembolsar passageiro:', err);
+            }
+          }
+          setCurrentRideId(null);
+          fetchRides();
+          showToast('Corrida cancelada gratuitamente com sucesso.', 'info');
+        },
+        undefined,
+        {
+          title: 'Cancelar Corrida (Gratuito)',
+          confirmLabel: 'Confirmar Cancelamento',
+          cancelLabel: 'Voltar',
+          type: 'confirm'
+        }
+      );
+    } else {
+      // Cancelamento APÓS 5 minutos -> Taxa de R$ 15,00 repassada 100% ao motorista
+      let feeExplanation = '';
+      if (targetRide.paymentMethod !== 'cash') {
+        if (targetRide.total >= CANCELLATION_FEE) {
+          const refundAmount = targetRide.total - CANCELLATION_FEE;
+          feeExplanation = `O prazo gratuito de 5 minutos expirou. Será aplicada a taxa de cancelamento de ${formatCurrency(CANCELLATION_FEE)}, repassada integralmente ao motorista. O restante do valor pago (${formatCurrency(refundAmount)}) será estornado como crédito em sua carteira.`;
+        } else {
+          const deficit = CANCELLATION_FEE - targetRide.total;
+          feeExplanation = `O prazo gratuito de 5 minutos expirou. A taxa de cancelamento é de ${formatCurrency(CANCELLATION_FEE)} (repassada ao motorista). O valor não coberto de ${formatCurrency(deficit)} entrará como débito na sua conta.`;
+        }
+      } else {
+        feeExplanation = `O prazo gratuito de 5 minutos expirou. Como o pagamento foi definido em Dinheiro, a taxa de cancelamento de ${formatCurrency(CANCELLATION_FEE)} será repassada integralmente ao motorista e lançada como débito na sua conta de passageiro (bloqueando novas solicitações até quitação).`;
       }
-    );
+
+      showConfirm(
+        `${feeExplanation}\n\nDeseja confirmar o cancelamento?`,
+        async () => {
+          // 1. Creditar 100% da taxa ao motorista (sem descontos)
+          if (targetRide.driverId) {
+            try {
+              await dbCreditDriverCancellationFee(targetRide.driverId, CANCELLATION_FEE, targetRide.id);
+            } catch (err) {
+              console.warn('Erro ao creditar taxa ao motorista:', err);
+            }
+          }
+
+          // 2. Processar estorno ou débito na carteira do passageiro
+          if (targetRide.clientId) {
+            try {
+              if (targetRide.paymentMethod !== 'cash') {
+                if (targetRide.total >= CANCELLATION_FEE) {
+                  const refund = targetRide.total - CANCELLATION_FEE;
+                  if (refund > 0) {
+                    await addWalletCredit(
+                      targetRide.clientId,
+                      refund,
+                      `Reembolso de corrida #${targetRide.id.slice(-6)} cancelada após 5 min (descontada taxa de R$ 15,00 do motorista)`,
+                      targetRide.id
+                    );
+                  }
+                } else {
+                  const deficit = CANCELLATION_FEE - targetRide.total;
+                  if (deficit > 0) {
+                    await addWalletDebit(
+                      targetRide.clientId,
+                      deficit,
+                      `Débito residual de taxa de cancelamento após 5 min (#${targetRide.id.slice(-6)})`,
+                      targetRide.id
+                    );
+                  }
+                }
+              } else {
+                // Em dinheiro: taxa de R$ 15 entra como débito
+                await addWalletDebit(
+                  targetRide.clientId,
+                  CANCELLATION_FEE,
+                  `Taxa de cancelamento após 5 min repassada ao motorista (#${targetRide.id.slice(-6)})`,
+                  targetRide.id
+                );
+              }
+              if (currentUser?.id) getUserWallet(currentUser.id).then(setClientWallet);
+            } catch (err) {
+              console.warn('Erro ao processar carteira do passageiro:', err);
+            }
+          }
+
+          // 3. Cancelar no banco com justificativa
+          await dbCancelRide(rideId, 'Cancelado pelo passageiro (após 5 minutos - taxa de R$ 15,00 repassada ao motorista)', 'client');
+          setCurrentRideId(null);
+          fetchRides();
+          showToast(`Corrida cancelada. Taxa de ${formatCurrency(CANCELLATION_FEE)} repassada ao motorista.`, 'warning');
+        },
+        undefined,
+        {
+          title: 'Cancelar Corrida com Taxa',
+          confirmLabel: `Sim, Cancelar e Pagar ${formatCurrency(CANCELLATION_FEE)}`,
+          cancelLabel: 'Manter Corrida',
+          type: 'confirm'
+        }
+      );
+    }
   };
 
   // Ações do Motorista
@@ -2372,62 +2544,10 @@ export function App() {
                       </div>
                     )}
 
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }}>
-                      {/* Coluna da Esquerda: Se possui corrida ativa, bloqueia nova solicitação */}
-                      {activeClientRide ? (
-                        <div className="glass-panel" style={{ padding: '28px', border: '1px solid rgba(99, 102, 241, 0.4)', background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(15, 23, 42, 0.85) 100%)' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '18px' }}>
-                            <div style={{
-                              width: '46px',
-                              height: '46px',
-                              borderRadius: '14px',
-                              background: '#6366f1',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              color: '#fff',
-                              boxShadow: '0 8px 16px rgba(99, 102, 241, 0.3)'
-                            }}>
-                              <Car size={24} />
-                            </div>
-                            <div>
-                              <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#fff' }}>
-                                Corrida #{activeClientRide.id.slice(-6)} em Andamento
-                              </div>
-                              <div style={{ fontSize: '0.82rem', color: '#a5b4fc', marginTop: '2px' }}>
-                                Atendimento ativo pelo parceiro
-                              </div>
-                            </div>
-                          </div>
-
-                          <div style={{ background: 'rgba(15, 23, 42, 0.6)', borderRadius: '14px', padding: '16px', marginBottom: '18px', border: '1px solid rgba(255,255,255,0.08)' }}>
-                            <p style={{ fontSize: '0.88rem', color: '#cbd5e1', lineHeight: 1.6, margin: 0 }}>
-                              Para sua segurança e organização operacional, o sistema permite <strong>apenas uma solicitação de corrida por vez</strong>. Novas solicitações de viagem estarão disponíveis assim que este atendimento for concluído ou cancelado.
-                            </p>
-                          </div>
-
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.84rem' }}>
-                              <span style={{ color: '#94a3b8' }}>Status do atendimento:</span>
-                              <span style={{ fontWeight: 700, color: '#6ee7b7' }}>
-                                {activeClientRide.status === 'searching' ? 'Procurando motoristas' :
-                                 activeClientRide.status === 'accepted' ? 'Motorista confirmado' :
-                                 activeClientRide.status === 'to_pickup' ? 'Motorista a caminho' :
-                                 activeClientRide.status === 'arrived_at_pickup' ? 'Motorista no embarque' :
-                                 'Corrida em andamento'}
-                              </span>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.84rem' }}>
-                              <span style={{ color: '#94a3b8' }}>Tempo contratado:</span>
-                              <span style={{ fontWeight: 700, color: '#fff' }}>{activeClientRide.hours} Horas</span>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.84rem' }}>
-                              <span style={{ color: '#94a3b8' }}>Valor total:</span>
-                              <span style={{ fontWeight: 700, color: '#818cf8' }}>{formatCurrency(activeClientRide.total)}</span>
-                            </div>
-                          </div>
-                        </div>
-                      ) : clientWallet && clientWallet.balance < 0 ? (
+                    <div style={{ display: 'grid', gridTemplateColumns: activeClientRide ? '1fr' : 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px', maxWidth: activeClientRide ? '840px' : undefined, margin: activeClientRide ? '0 auto' : undefined, width: '100%' }}>
+                      {/* Coluna da Esquerda: Ocultada quando há corrida ativa para manter a tela limpa e focada no trajeto */}
+                      {!activeClientRide && (
+                        clientWallet && clientWallet.balance < 0 ? (
                         <div className="glass-panel" style={{ padding: '36px 24px', border: '1px solid rgba(239, 68, 68, 0.4)', background: 'rgba(239, 68, 68, 0.05)', textAlign: 'center' }}>
                           <div style={{
                             width: '64px',
@@ -2993,7 +3113,7 @@ export function App() {
                     </button>
                   </form>
                 </div>
-              )}
+              ))}
 
                 {/* Status em Tempo Real da Corrida do Cliente */}
                 <div id="active-ride-tracking-section" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -3123,38 +3243,44 @@ export function App() {
                         </div>
                       )}
 
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px', gap: '10px' }}>
                         <div>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Status da Solicitação</span>
-                          <h3 style={{ fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600 }}>Status da Solicitação</span>
+                          <h3 style={{ fontSize: '0.96rem', display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', lineHeight: 1.35, flexWrap: 'wrap' }}>
                             {activeClientRide.status === 'searching' && (
                               <>
-                                <span className="animate-pulse-soft" style={{ color: '#818cf8' }}>📡</span>
-                                <span>Procurando motorista...</span>
+                                <span className="animate-pulse-soft" style={{ color: '#818cf8', fontSize: '1.1rem' }}>📡</span>
+                                <span style={{ fontSize: '0.95rem', fontWeight: 700 }}>Procurando motorista...</span>
                               </>
                             )}
                             {activeClientRide.status === 'accepted' && (
                               <>
-                                <CheckCircle2 color="#f59e0b" size={20} />
-                                <span>Motorista ({activeClientRide.driverName || 'Parceiro'}) Confirmado! Aguardando Saída</span>
+                                <CheckCircle2 color="#f59e0b" size={18} style={{ flexShrink: 0 }} />
+                                <span style={{ fontSize: '0.95rem', fontWeight: 700 }}>Motorista ({activeClientRide.driverName || 'Parceiro'}) Confirmado! Aguardando Saída</span>
                               </>
                             )}
                             {activeClientRide.status === 'to_pickup' && (
                               <>
-                                <Car color="#f59e0b" size={20} className="animate-car" />
-                                <span>Motorista a Caminho do Embarque!</span>
+                                <Car color="#f59e0b" size={18} className="animate-car" style={{ flexShrink: 0 }} />
+                                <span style={{ fontSize: '0.95rem', fontWeight: 700 }}>Motorista a Caminho do Embarque!</span>
+                              </>
+                            )}
+                            {activeClientRide.status === 'arrived_at_pickup' && (
+                              <>
+                                <MapPin color="#10b981" size={18} style={{ flexShrink: 0 }} />
+                                <span style={{ fontSize: '0.95rem', fontWeight: 700 }}>Motorista no Ponto de Embarque!</span>
                               </>
                             )}
                             {activeClientRide.status === 'in_progress' && (
                               <>
-                                <Car color="#3b82f6" size={20} className="animate-car" />
-                                <span>Corrida em Andamento ({activeClientRide.hours}h)</span>
+                                <Car color="#3b82f6" size={18} className="animate-car" style={{ flexShrink: 0 }} />
+                                <span style={{ fontSize: '0.95rem', fontWeight: 700 }}>Corrida em Andamento ({activeClientRide.hours}h)</span>
                               </>
                             )}
                             {activeClientRide.status === 'finished' && (
                               <>
-                                <CheckCircle2 color="#10b981" size={20} />
-                                <span>Corrida Concluída!</span>
+                                <CheckCircle2 color="#10b981" size={18} style={{ flexShrink: 0 }} />
+                                <span style={{ fontSize: '0.95rem', fontWeight: 700 }}>Corrida Concluída!</span>
                               </>
                             )}
                           </h3>
@@ -3165,7 +3291,8 @@ export function App() {
                           padding: '4px 10px',
                           borderRadius: '12px',
                           background: 'rgba(255, 255, 255, 0.08)',
-                          color: 'var(--text-secondary)'
+                          color: 'var(--text-secondary)',
+                          flexShrink: 0
                         }}>
                           ID: #{activeClientRide.id.slice(-6)}
                         </span>
@@ -3174,18 +3301,18 @@ export function App() {
                       {/* Informações da Viagem */}
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', margin: '20px 0' }}>
                         <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                          <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#6366f1', marginTop: '5px' }}></div>
+                          <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#6366f1', marginTop: '5px', flexShrink: 0 }}></div>
                           <div>
-                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Partida</div>
-                            <div style={{ fontSize: '0.9rem', fontWeight: 600 }}>{activeClientRide.origin}</div>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Partida</div>
+                            <div style={{ fontSize: '0.88rem', fontWeight: 600 }}>{activeClientRide.origin}</div>
                           </div>
                         </div>
 
                         <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                          <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: '#10b981', marginTop: '5px' }}></div>
+                          <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: '#10b981', marginTop: '5px', flexShrink: 0 }}></div>
                           <div>
-                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Destino</div>
-                            <div style={{ fontSize: '0.9rem', fontWeight: 600 }}>{activeClientRide.destination}</div>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Destino</div>
+                            <div style={{ fontSize: '0.88rem', fontWeight: 600 }}>{activeClientRide.destination}</div>
                           </div>
                         </div>
                       </div>
@@ -3234,7 +3361,7 @@ export function App() {
                             }}
                           >
                             <Ban size={16} />
-                            <span>Cancelar Solicitação</span>
+                            <span>Cancelar Solicitação (Sem custo)</span>
                           </button>
                         </div>
                       )}
@@ -3273,12 +3400,12 @@ export function App() {
                           }}>
                             <div>
                               <div style={{ fontSize: '0.75rem', color: canCancelAccepted ? '#f59e0b' : '#ef4444', fontWeight: 700 }}>
-                                {canCancelAccepted ? '⏱️ PRAZO DE CANCELAMENTO GRATUITO' : '⚠️ PRAZO DE CANCELAMENTO EXPIRADO'}
+                                {canCancelAccepted ? '⏱️ PRAZO DE CANCELAMENTO GRATUITO' : '⚠️ CANCELAMENTO COM TAXA (R$ 15,00)'}
                               </div>
                               <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
                                 {canCancelAccepted 
                                   ? 'Você tem até 5 minutos após o aceite para cancelar a chamada gratuitamente.' 
-                                  : 'O prazo de 5 minutos expirou.'}
+                                  : 'Cancelamentos após 5 minutos têm taxa de R$ 15,00 repassada 100% ao motorista.'}
                               </div>
                             </div>
                             {canCancelAccepted && (
@@ -3288,27 +3415,30 @@ export function App() {
                             )}
                           </div>
 
-                          {canCancelAccepted && (
-                            <button
-                              type="button"
-                              onClick={() => handleCancelRideByClient(activeClientRide.id)}
-                              className="btn-outline"
-                              style={{
-                                width: '100%',
-                                padding: '12px',
-                                color: '#ef4444',
-                                borderColor: 'rgba(239, 68, 68, 0.4)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '8px',
-                                fontWeight: 700
-                              }}
-                            >
-                              <Ban size={16} />
-                              <span>Cancelar Corrida ({formattedCountdown} restantes)</span>
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleCancelRideByClient(activeClientRide.id)}
+                            className="btn-outline"
+                            style={{
+                              width: '100%',
+                              padding: '12px',
+                              color: '#ef4444',
+                              borderColor: 'rgba(239, 68, 68, 0.4)',
+                              background: canCancelAccepted ? 'transparent' : 'rgba(239, 68, 68, 0.08)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '8px',
+                              fontWeight: 700
+                            }}
+                          >
+                            <Ban size={16} />
+                            <span>
+                              {canCancelAccepted 
+                                ? `Cancelar Corrida (Gratuito • ${formattedCountdown} restantes)` 
+                                : 'Cancelar Corrida (Taxa de R$ 15,00 para o Motorista)'}
+                            </span>
+                          </button>
                         </div>
                       )}
 
@@ -3328,12 +3458,12 @@ export function App() {
                           }}>
                             <div>
                               <div style={{ fontSize: '0.75rem', color: canCancelAccepted ? '#f59e0b' : '#ef4444', fontWeight: 700 }}>
-                                {canCancelAccepted ? '⏱️ PRAZO DE CANCELAMENTO GRATUITO' : '⚠️ MOTORISTA JÁ EM DESLOCAMENTO'}
+                                {canCancelAccepted ? '⏱️ PRAZO DE CANCELAMENTO GRATUITO' : '⚠️ MOTORISTA EM DESLOCAMENTO (TAXA R$ 15,00)'}
                               </div>
                               <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
                                 {canCancelAccepted 
                                   ? 'Você tem até 5 minutos após o aceite para cancelar a chamada gratuitamente.' 
-                                  : 'O prazo de cancelamento gratuito expirou. O motorista está a caminho do seu local.'}
+                                  : 'O prazo de 5 minutos expirou. O cancelamento terá taxa de R$ 15,00 repassada 100% ao motorista.'}
                               </div>
                             </div>
                             {canCancelAccepted && (
@@ -3343,27 +3473,108 @@ export function App() {
                             )}
                           </div>
 
-                          {canCancelAccepted && (
-                            <button
-                              type="button"
-                              onClick={() => handleCancelRideByClient(activeClientRide.id)}
-                              className="btn-outline"
-                              style={{
-                                width: '100%',
-                                padding: '12px',
-                                color: '#ef4444',
-                                borderColor: 'rgba(239, 68, 68, 0.4)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '8px',
-                                fontWeight: 700
-                              }}
-                            >
-                              <Ban size={16} />
-                              <span>Cancelar Corrida ({formattedCountdown} restantes)</span>
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleCancelRideByClient(activeClientRide.id)}
+                            className="btn-outline"
+                            style={{
+                              width: '100%',
+                              padding: '12px',
+                              color: '#ef4444',
+                              borderColor: 'rgba(239, 68, 68, 0.4)',
+                              background: canCancelAccepted ? 'transparent' : 'rgba(239, 68, 68, 0.08)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '8px',
+                              fontWeight: 700
+                            }}
+                          >
+                            <Ban size={16} />
+                            <span>
+                              {canCancelAccepted 
+                                ? `Cancelar Corrida (Gratuito • ${formattedCountdown} restantes)` 
+                                : 'Cancelar Corrida (Taxa de R$ 15,00 para o Motorista)'}
+                            </span>
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Fase 2.5: Motorista no Local de Embarque */}
+                      {activeClientRide.status === 'arrived_at_pickup' && (
+                        <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                          <LiveRideTrackerMap ride={activeClientRide} />
+
+                          <div style={{
+                            background: 'rgba(16, 185, 129, 0.12)',
+                            border: '1px solid rgba(16, 185, 129, 0.4)',
+                            borderRadius: '14px',
+                            padding: '16px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '14px'
+                          }}>
+                            <div style={{ fontSize: '28px' }}>📍</div>
+                            <div>
+                              <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#6ee7b7' }}>
+                                Motorista Chegou ao Ponto de Embarque!
+                              </h4>
+                              <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: '#cbd5e1', lineHeight: 1.4 }}>
+                                O motorista parceiro chegou ao seu endereço e está aguardando você. Dirija-se ao veículo para iniciar a viagem.
+                              </p>
+                            </div>
+                          </div>
+
+                          <div style={{
+                            background: canCancelAccepted ? 'rgba(245, 158, 11, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                            border: `1px solid ${canCancelAccepted ? 'rgba(245, 158, 11, 0.4)' : 'rgba(239, 68, 68, 0.4)'}`,
+                            borderRadius: '12px',
+                            padding: '14px',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center'
+                          }}>
+                            <div>
+                              <div style={{ fontSize: '0.75rem', color: canCancelAccepted ? '#f59e0b' : '#ef4444', fontWeight: 700 }}>
+                                {canCancelAccepted ? '⏱️ PRAZO DE CANCELAMENTO GRATUITO' : '⚠️ CANCELAMENTO COM TAXA (R$ 15,00)'}
+                              </div>
+                              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                                {canCancelAccepted 
+                                  ? 'Você tem até 5 minutos após o aceite para cancelar a chamada gratuitamente.' 
+                                  : 'Cancelamentos após 5 minutos têm taxa de R$ 15,00 repassada 100% ao motorista.'}
+                              </div>
+                            </div>
+                            {canCancelAccepted && (
+                              <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#f59e0b', fontFamily: 'monospace' }}>
+                                {formattedCountdown}
+                              </div>
+                            )}
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleCancelRideByClient(activeClientRide.id)}
+                            className="btn-outline"
+                            style={{
+                              width: '100%',
+                              padding: '12px',
+                              color: '#ef4444',
+                              borderColor: 'rgba(239, 68, 68, 0.4)',
+                              background: canCancelAccepted ? 'transparent' : 'rgba(239, 68, 68, 0.08)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '8px',
+                              fontWeight: 700
+                            }}
+                          >
+                            <Ban size={16} />
+                            <span>
+                              {canCancelAccepted 
+                                ? `Cancelar Corrida (Gratuito • ${formattedCountdown} restantes)` 
+                                : 'Cancelar Corrida (Taxa de R$ 15,00 para o Motorista)'}
+                            </span>
+                          </button>
                         </div>
                       )}
 
