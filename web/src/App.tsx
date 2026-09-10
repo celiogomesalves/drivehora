@@ -3675,7 +3675,7 @@ export function App() {
               />
             ) : showDriverProfileEdit ? (
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <div className="hide-on-mobile" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                   <button onClick={() => setShowDriverProfileEdit(false)} className="btn-outline">
                     ⬅️ Voltar ao Painel do Motorista
                   </button>

@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { UserProfile, DriverProfile, DriverVerificationStatus } from '../types/auth';
-import { isSuperAdminEmail } from '../types/auth';
 import { 
   ShieldCheck, Camera, CheckCircle2, 
   UploadCloud, Check, AlertCircle, Eye, Database, Edit3, X,
@@ -139,6 +138,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
   });
   const [isSavingPayPrefs, setIsSavingPayPrefs] = useState(false);
   const [payPrefsSavedNotice, setPayPrefsSavedNotice] = useState(false);
+  const [amenitiesSavedNotice, setAmenitiesSavedNotice] = useState(false);
 
   const handleSavePaymentPrefs = async (showNotice = true) => {
     setIsSavingPayPrefs(true);
@@ -156,6 +156,30 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
       console.error('Erro ao salvar preferências de pagamento:', err);
     } finally {
       setIsSavingPayPrefs(false);
+    }
+  };
+
+  const handleSaveAmenities = async (showNotice = true) => {
+    setErrorMessage(null);
+    if (!bio.trim() || bio.trim().length < 15) {
+      setErrorMessage('Por favor, escreva uma breve descrição sobre seu perfil profissional (mínimo 15 caracteres).');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const res = await saveToDatabase(verificationStatus);
+      setIsSaving(false);
+      if (res.success) {
+        if (showNotice) {
+          setAmenitiesSavedNotice(true);
+          setTimeout(() => setAmenitiesSavedNotice(false), 3000);
+        }
+      } else {
+        setErrorMessage(`Erro ao salvar comodidades: ${res.error}`);
+      }
+    } catch (err: any) {
+      setIsSaving(false);
+      setErrorMessage(`Erro ao salvar: ${err.message || 'Falha de comunicação'}`);
     }
   };
   
@@ -220,7 +244,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
   const [changeRequestText, setChangeRequestText] = useState('');
   const [changeRequestSent, setChangeRequestSent] = useState(false);
 
-  const isApproved = verificationStatus === 'approved' && !user.isAdmin && user.role !== 'admin' && !isSuperAdminEmail(user.email);
+  const isApproved = verificationStatus === 'approved';
 
   // Sincronizar dados quando o perfil do motorista carregar do banco de dados
   useEffect(() => {
@@ -613,7 +637,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
                 ✅ Cadastro Aprovado e Protegido
               </p>
               <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '2px 0 0' }}>
-                Seus dados são bloqueados após a aprovação. Para alterações, solicite ao administrador.
+                Dados do veículo e documentos são protegidos após a homologação. Você pode navegar livremente pelas abas e editar comodidades e formas de recebimento.
               </p>
             </div>
           </div>
@@ -635,7 +659,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
         </div>
       )}
 
-      {/* HEADER DE ETAPAS — GRADE RESPONSIVA (nunca oculta abas) */}
+      {/* HEADER DE ETAPAS — GRADE RESPONSIVA (todas as abas navegáveis diretamente) */}
       <div className="glass-panel" style={{ padding: '12px 16px' }}>
         <div style={{
           display: 'grid',
@@ -651,14 +675,13 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
             { num: 6, label: 'Homologação', short: 'Homologação' }
           ].map(s => {
             const isActive = step === s.num;
-            const isDone = step > s.num || isApproved;
-            const canClick = step > s.num || verificationStatus === 'under_review' || isApproved || s.num === 4;
+            const isDone = isApproved || step > s.num;
 
             return (
               <button
                 key={s.num}
                 type="button"
-                onClick={() => { if (canClick) setStep(s.num); }}
+                onClick={() => setStep(s.num)}
                 style={{
                   display: 'flex',
                   flexDirection: 'column',
@@ -676,7 +699,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
                   color: isActive ? '#fff' : isDone ? '#10b981' : 'var(--text-muted)',
                   fontSize: '0.7rem',
                   fontWeight: 700,
-                  cursor: canClick ? 'pointer' : 'default',
+                  cursor: 'pointer',
                   transition: 'all 0.2s',
                   textAlign: 'center',
                   minWidth: 0
@@ -833,7 +856,19 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
               💡 <strong>Requisito Legal:</strong> Sua CNH deve conter a observação <em>"Exerce Atividade Remunerada" (EAR)</em> para prestação de serviços como motorista parceiro.
             </div>
 
-            {!isApproved && (
+            {isApproved ? (
+              <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => setStep(2)}
+                  className="btn-primary"
+                  style={{ flex: 1, padding: '14px', fontSize: '0.95rem' }}
+                >
+                  <span>Avançar para Dados do Veículo</span>
+                  <ArrowRight size={18} />
+                </button>
+              </div>
+            ) : (
               <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
                 <button
                   type="button"
@@ -870,7 +905,21 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
             </p>
           </div>
 
-          <form onSubmit={handleStep2Submit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {isApproved && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '10px',
+              padding: '12px 16px', borderRadius: '10px',
+              background: 'rgba(234, 179, 8, 0.1)', border: '1px solid rgba(234, 179, 8, 0.3)',
+              color: '#eab308', fontSize: '0.85rem', marginBottom: '16px'
+            }}>
+              <Lock size={18} style={{ flexShrink: 0 }} />
+              <span>
+                <strong>Dados do Veículo Homologados:</strong> Veículo e categoria aprovados pela plataforma não podem ser alterados diretamente. Para solicitar alteração da sua frota, utilize o botão de solicitação no topo.
+              </span>
+            </div>
+          )}
+
+          <form onSubmit={isApproved ? (e) => { e.preventDefault(); setStep(3); } : handleStep2Submit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             
             {/* Seletor de Categoria com Cards Visuais */}
             <div className="input-group">
@@ -882,13 +931,14 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
                   return (
                     <div
                       key={cat.id}
-                      onClick={() => setVehicleCategory(cat.id)}
+                      onClick={isApproved ? undefined : () => setVehicleCategory(cat.id)}
                       style={{
                         padding: '14px',
                         borderRadius: '12px',
                         border: isSelected ? '2px solid #6366f1' : '1px solid var(--border-subtle)',
                         background: isSelected ? 'rgba(99, 102, 241, 0.18)' : 'rgba(15, 23, 42, 0.6)',
-                        cursor: 'pointer',
+                        cursor: isApproved ? 'default' : 'pointer',
+                        opacity: isApproved && !isSelected ? 0.5 : 1,
                         transition: 'all 0.2s',
                         display: 'flex',
                         flexDirection: 'column',
@@ -917,6 +967,8 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
                   onChange={(e) => setVehicleBrand(e.target.value)}
                   placeholder="Ex: Toyota, Honda, Hyundai"
                   required
+                  disabled={isApproved}
+                  style={isApproved ? { opacity: 0.6, cursor: 'not-allowed' } : {}}
                 />
               </div>
 
@@ -929,6 +981,8 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
                   onChange={(e) => setVehicleModel(e.target.value)}
                   placeholder="Ex: Corolla XEi, Civic, Creta"
                   required
+                  disabled={isApproved}
+                  style={isApproved ? { opacity: 0.6, cursor: 'not-allowed' } : {}}
                 />
               </div>
             </div>
@@ -940,6 +994,8 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
                   className="select-field"
                   value={vehicleYear}
                   onChange={(e) => setVehicleYear(e.target.value)}
+                  disabled={isApproved}
+                  style={isApproved ? { opacity: 0.6, cursor: 'not-allowed' } : {}}
                 >
                   {availableYears.map(y => (
                     <option key={y} value={y}>{y}</option>
@@ -957,6 +1013,8 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
                   placeholder="ABC-1234 ou ABC1D23"
                   maxLength={8}
                   required
+                  disabled={isApproved}
+                  style={isApproved ? { opacity: 0.6, cursor: 'not-allowed' } : {}}
                 />
               </div>
 
@@ -966,6 +1024,8 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
                   className="select-field"
                   value={vehicleColor}
                   onChange={(e) => setVehicleColor(e.target.value)}
+                  disabled={isApproved}
+                  style={isApproved ? { opacity: 0.6, cursor: 'not-allowed' } : {}}
                 >
                   <option value="Preto">Preto</option>
                   <option value="Prata">Prata</option>
@@ -978,33 +1038,55 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
-              <button
-                type="button"
-                onClick={() => setStep(1)}
-                className="btn-outline"
-                style={{ flex: 1, padding: '14px', fontSize: '0.9rem' }}
-              >
-                <ArrowLeft size={16} /> Voltar
-              </button>
-              <button
-                type="button"
-                onClick={handleDirectSave}
-                disabled={isSaving}
-                className="btn-outline"
-                style={{ flex: 1, padding: '14px', fontSize: '0.9rem' }}
-              >
-                {isSaving ? 'Salvando...' : '💾 Salvar'}
-              </button>
-              <button
-                type="submit"
-                className="btn-primary"
-                style={{ flex: 2, padding: '14px', fontSize: '0.95rem' }}
-              >
-                <span>Avançar para Comodidades</span>
-                <ArrowRight size={18} />
-              </button>
-            </div>
+            {isApproved ? (
+              <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => setStep(1)}
+                  className="btn-outline"
+                  style={{ flex: 1, padding: '14px', fontSize: '0.9rem' }}
+                >
+                  <ArrowLeft size={16} /> Voltar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStep(3)}
+                  className="btn-primary"
+                  style={{ flex: 2, padding: '14px', fontSize: '0.95rem' }}
+                >
+                  <span>Avançar para Comodidades</span>
+                  <ArrowRight size={18} />
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => setStep(1)}
+                  className="btn-outline"
+                  style={{ flex: 1, padding: '14px', fontSize: '0.9rem' }}
+                >
+                  <ArrowLeft size={16} /> Voltar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDirectSave}
+                  disabled={isSaving}
+                  className="btn-outline"
+                  style={{ flex: 1, padding: '14px', fontSize: '0.9rem' }}
+                >
+                  {isSaving ? 'Salvando...' : '💾 Salvar'}
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  style={{ flex: 2, padding: '14px', fontSize: '0.95rem' }}
+                >
+                  <span>Avançar para Comodidades</span>
+                  <ArrowRight size={18} />
+                </button>
+              </div>
+            )}
           </form>
         </div>
       )}
@@ -1020,6 +1102,26 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
               Destaque os diferenciais do seu atendimento para atrair mais clientes VIPs.
             </p>
           </div>
+
+          {isApproved && (
+            <div style={{
+              background: 'rgba(16, 185, 129, 0.1)',
+              border: '1px solid rgba(16, 185, 129, 0.25)',
+              borderRadius: '12px',
+              padding: '12px 16px',
+              marginBottom: '18px',
+              fontSize: '0.8rem',
+              color: '#a7f3d0',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px'
+            }}>
+              <Sparkles size={18} color="#10b981" style={{ flexShrink: 0 }} />
+              <span>
+                <strong>Edição Livre:</strong> Você pode atualizar suas comodidades e apresentação a qualquer momento para personalizar seu atendimento aos passageiros.
+              </span>
+            </div>
+          )}
 
           <form onSubmit={handleStep3Submit} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
             
@@ -1082,7 +1184,25 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
               </span>
             </div>
 
-            <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
+            {amenitiesSavedNotice && (
+              <div style={{
+                background: 'rgba(16, 185, 129, 0.2)',
+                border: '1px solid #10b981',
+                borderRadius: '10px',
+                padding: '10px 14px',
+                color: '#10b981',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <CheckCircle2 size={16} />
+                Comodidades e perfil salvos com sucesso!
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '10px', marginTop: '6px', flexWrap: 'wrap' }}>
               <button
                 type="button"
                 onClick={() => setStep(2)}
@@ -1092,11 +1212,20 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
                 <ArrowLeft size={16} /> Voltar
               </button>
               <button
+                type="button"
+                onClick={() => handleSaveAmenities(true)}
+                disabled={isSaving}
+                className="btn-outline"
+                style={{ flex: 1, padding: '14px', fontSize: '0.9rem', borderColor: '#10b981', color: '#10b981' }}
+              >
+                <Save size={16} /> {isSaving ? 'Salvando...' : 'Salvar Alterações'}
+              </button>
+              <button
                 type="submit"
                 className="btn-primary"
                 style={{ flex: 2, padding: '14px', fontSize: '0.95rem' }}
               >
-                <span>Avançar para Formas de Recebimento</span>
+                <span>Avançar para Recebimento</span>
                 <ArrowRight size={18} />
               </button>
             </div>
@@ -1320,6 +1449,20 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
             </p>
           </div>
 
+          {isApproved && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '10px',
+              padding: '12px 16px', borderRadius: '10px',
+              background: 'rgba(234, 179, 8, 0.1)', border: '1px solid rgba(234, 179, 8, 0.3)',
+              color: '#eab308', fontSize: '0.85rem'
+            }}>
+              <Lock size={18} style={{ flexShrink: 0 }} />
+              <span>
+                <strong>Documentos Homologados e Protegidos:</strong> Seus documentos foram validados e aprovados pelo administrador e não podem ser alterados ou substituídos diretamente. Caso precise atualizar CNH ou CRLV, solicite alteração ao suporte/administrador.
+              </span>
+            </div>
+          )}
+
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             
             {/* 1. Foto da CNH */}
@@ -1356,18 +1499,20 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
                     className="btn-outline"
                     style={{ fontSize: '0.75rem', padding: '6px 12px' }}
                   >
-                    <Eye size={13} /> Ver
+                    <Eye size={13} /> Ver Documento
                   </button>
                 )}
-                <label className="btn-primary" style={{ fontSize: '0.75rem', padding: '8px 14px', cursor: 'pointer' }}>
-                  <UploadCloud size={14} /> {cnhUrl ? 'Trocar Foto' : 'Anexar CNH'}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => handleFileUpload(e, setCnhFileName, setCnhUrl)}
-                    style={{ display: 'none' }}
-                  />
-                </label>
+                {!isApproved && (
+                  <label className="btn-primary" style={{ fontSize: '0.75rem', padding: '8px 14px', cursor: 'pointer' }}>
+                    <UploadCloud size={14} /> {cnhUrl ? 'Trocar Foto' : 'Anexar CNH'}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleFileUpload(e, setCnhFileName, setCnhUrl)}
+                      style={{ display: 'none' }}
+                    />
+                  </label>
+                )}
               </div>
             </div>
 
@@ -1405,18 +1550,20 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
                     className="btn-outline"
                     style={{ fontSize: '0.75rem', padding: '6px 12px' }}
                   >
-                    <Eye size={13} /> Ver
+                    <Eye size={13} /> Ver Documento
                   </button>
                 )}
-                <label className="btn-primary" style={{ fontSize: '0.75rem', padding: '8px 14px', cursor: 'pointer' }}>
-                  <UploadCloud size={14} /> {crlvUrl ? 'Trocar Doc' : 'Anexar CRLV'}
-                  <input
-                    type="file"
-                    accept="image/*,.pdf"
-                    onChange={(e) => handleFileUpload(e, setCrlvFileName, setCrlvUrl)}
-                    style={{ display: 'none' }}
-                  />
-                </label>
+                {!isApproved && (
+                  <label className="btn-primary" style={{ fontSize: '0.75rem', padding: '8px 14px', cursor: 'pointer' }}>
+                    <UploadCloud size={14} /> {crlvUrl ? 'Trocar Doc' : 'Anexar CRLV'}
+                    <input
+                      type="file"
+                      accept="image/*,.pdf"
+                      onChange={(e) => handleFileUpload(e, setCrlvFileName, setCrlvUrl)}
+                      style={{ display: 'none' }}
+                    />
+                  </label>
+                )}
               </div>
             </div>
 
@@ -1457,7 +1604,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
                     </button>
                   )}
 
-                  {!isCameraOpen && (
+                  {!isApproved && !isCameraOpen && (
                     <button
                       type="button"
                       onClick={startLiveCamera}
@@ -1468,20 +1615,22 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
                     </button>
                   )}
 
-                  <label className="btn-primary" style={{ fontSize: '0.75rem', padding: '8px 14px', cursor: 'pointer' }}>
-                    <UploadCloud size={14} /> {selfieUrl ? 'Trocar Foto' : 'Carregar dos Arquivos'}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => handleFileUpload(e, setSelfieFileName, setSelfieUrl)}
-                      style={{ display: 'none' }}
-                    />
-                  </label>
+                  {!isApproved && (
+                    <label className="btn-primary" style={{ fontSize: '0.75rem', padding: '8px 14px', cursor: 'pointer' }}>
+                      <UploadCloud size={14} /> {selfieUrl ? 'Trocar Foto' : 'Carregar dos Arquivos'}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => handleFileUpload(e, setSelfieFileName, setSelfieUrl)}
+                        style={{ display: 'none' }}
+                      />
+                    </label>
+                  )}
                 </div>
               </div>
 
               {/* Prévia da Câmera ao Vivo */}
-              {isCameraOpen && (
+              {!isApproved && isCameraOpen && (
                 <div style={{
                   background: '#000',
                   borderRadius: '12px',
@@ -1531,21 +1680,33 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
             >
               <ArrowLeft size={16} /> Voltar
             </button>
-            <button
-              type="button"
-              onClick={handleStep5Submit}
-              disabled={isSaving || !cnhUrl || !crlvUrl || !selfieUrl}
-              className="btn-success"
-              style={{
-                flex: 2,
-                padding: '14px',
-                fontSize: '0.95rem',
-                opacity: (!cnhUrl || !crlvUrl || !selfieUrl) ? 0.6 : 1
-              }}
-            >
-              <CheckCircle2 size={18} />
-              <span>{isSaving ? 'Enviando ao Banco...' : 'Enviar Documentos para Homologação'}</span>
-            </button>
+            {isApproved ? (
+              <button
+                type="button"
+                onClick={() => setStep(6)}
+                className="btn-primary"
+                style={{ flex: 2, padding: '14px', fontSize: '0.95rem' }}
+              >
+                <span>Avançar para Status de Homologação</span>
+                <ArrowRight size={18} />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleStep5Submit}
+                disabled={isSaving || !cnhUrl || !crlvUrl || !selfieUrl}
+                className="btn-success"
+                style={{
+                  flex: 2,
+                  padding: '14px',
+                  fontSize: '0.95rem',
+                  opacity: (!cnhUrl || !crlvUrl || !selfieUrl) ? 0.6 : 1
+                }}
+              >
+                <CheckCircle2 size={18} />
+                <span>{isSaving ? 'Enviando ao Banco...' : 'Enviar Documentos para Homologação'}</span>
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -1623,7 +1784,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
               className="btn-outline"
               style={{ flex: 1, padding: '12px' }}
             >
-              <Edit3 size={15} /> Editar Dados
+              <Edit3 size={15} /> {isApproved ? 'Ver Cadastro / Comodidades' : 'Editar Dados'}
             </button>
 
             {verificationStatus === 'approved' ? (
