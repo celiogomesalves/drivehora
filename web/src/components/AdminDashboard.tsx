@@ -5,7 +5,8 @@ import {
   XCircle, Clock, RefreshCw, 
   TrendingUp, Database, Image, AlertTriangle, Eye, X, Check,
   Settings, Bell, CreditCard, Sliders, Send, Save, Trash2,
-  Calendar, Filter, Globe, Key, Radio, Power, MessageSquare, Edit3
+  Calendar, Filter, Globe, Key, Radio, Power, MessageSquare, Edit3,
+  EyeOff
 } from 'lucide-react';
 import { formatCurrency, formatCurrencyInput, parseCurrencyInput, formatPhone, formatCpf, formatPlate } from '../utils/formatters';
 import { 
@@ -13,6 +14,8 @@ import {
   dbGetAllClients, 
   dbAdminUpdateDriverStatus, 
   dbAdminDeleteDriver, 
+  dbAdminDeleteClient,
+  dbAdminRestoreClient,
   dbAdminToggleDriverOnline,
   dbAdminUpdateDriverProfile,
   dbAdminUpdateClientProfile,
@@ -43,12 +46,14 @@ interface AdminDashboardProps {
   rides: DbRide[];
   onOpenSupabaseConfig: () => void;
   supabaseConnected: boolean;
+  onReloadRides?: () => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ 
   rides, 
   onOpenSupabaseConfig, 
-  supabaseConnected 
+  supabaseConnected,
+  onReloadRides
 }) => {
   const { showAlert, showConfirm, showToast } = useSystemDialog();
   const [activeSubTab, setActiveSubTab] = useState<'overview' | 'drivers' | 'clients' | 'rides' | 'reports' | 'settings'>('overview');
@@ -120,6 +125,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     state: ''
   });
   const [isSavingClientEdit, setIsSavingClientEdit] = useState(false);
+
+  // Estados para Exclusão e Gerenciamento de Passageiros pelo Admin
+  const [clientToDelete, setClientToDelete] = useState<ClientProfile | null>(null);
+  const [clientDeleteMode, setClientDeleteMode] = useState<'partial' | 'definitive'>('partial');
+  const [isDeletingClient, setIsDeletingClient] = useState(false);
+  const [clientTabFilter, setClientTabFilter] = useState<'active' | 'hidden'>('active');
+  const [clientSearchQuery, setClientSearchQuery] = useState('');
 
   // Filtros de Data para Auditoria de Corridas (Padrão: Esta semana)
   const [rideDateFilter, setRideDateFilter] = useState<'all' | 'today' | 'week' | '15days' | '30days' | 'custom'>('week');
@@ -410,6 +422,40 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       await loadAdminData();
     } else {
       showAlert(`Erro ao salvar passageiro: ${res.error}`, 'error');
+    }
+  };
+
+  // Handlers para Exclusão e Restauração de Clientes/Passageiros
+  const handleDeleteClientConfirm = async () => {
+    if (!clientToDelete) return;
+    setIsDeletingClient(true);
+    const res = await dbAdminDeleteClient(clientToDelete.id, clientToDelete.userId, clientDeleteMode);
+    setIsDeletingClient(false);
+
+    if (res.success) {
+      if (clientDeleteMode === 'partial') {
+        showToast(`Passageiro "${clientToDelete.fullName || 'Passageiro'}" ocultado da lista. As corridas e faturamento permanecem preservados no sistema!`, 'info');
+      } else {
+        showToast(`Passageiro "${clientToDelete.fullName || 'Passageiro'}" e todas as suas informações foram excluídos definitivamente do sistema!`, 'warning');
+        if (onReloadRides) onReloadRides();
+      }
+      setClientToDelete(null);
+      if (editingClient && editingClient.id === clientToDelete.id) {
+        setEditingClient(null);
+      }
+      await loadAdminData();
+    } else {
+      showAlert(`Erro ao processar exclusão: ${res.error || 'Falha de comunicação'}`, 'error');
+    }
+  };
+
+  const handleRestoreClient = async (c: ClientProfile) => {
+    const res = await dbAdminRestoreClient(c.id, c.userId);
+    if (res.success) {
+      showToast(`Passageiro "${c.fullName || 'Passageiro'}" reativado na lista principal com sucesso!`, 'success');
+      await loadAdminData();
+    } else {
+      showAlert(`Erro ao reativar passageiro: ${res.error}`, 'error');
     }
   };
 
@@ -1194,97 +1240,273 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       )}
 
       {/* SUB-ABA 3: CLIENTES */}
-      {activeSubTab === 'clients' && (
-        <div className="glass-panel" style={{ padding: '24px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <h3 style={{ fontSize: '1.2rem', fontWeight: 700 }}>Clientes / Passageiros Cadastrados ({clients.length})</h3>
-            <button
-              onClick={() => loadAdminData()}
-              className="btn-outline"
-              style={{ fontSize: '0.8rem', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '6px' }}
-            >
-              <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} /> Atualizar
-            </button>
+      {activeSubTab === 'clients' && (() => {
+        const activeClients = clients.filter(c => !c.isHidden);
+        const hiddenClients = clients.filter(c => c.isHidden);
+        const currentList = clientTabFilter === 'active' ? activeClients : hiddenClients;
+
+        const filteredList = currentList.filter(c => {
+          if (!clientSearchQuery.trim()) return true;
+          const q = clientSearchQuery.trim().toLowerCase();
+          return (
+            (c.fullName || '').toLowerCase().includes(q) ||
+            (c.email || '').toLowerCase().includes(q) ||
+            (c.phone || '').includes(q) ||
+            (c.cpf || '').includes(q) ||
+            (c.city || '').toLowerCase().includes(q)
+          );
+        });
+
+        return (
+          <div className="glass-panel" style={{ padding: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+              <div>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: 700, margin: 0 }}>
+                  Clientes / Passageiros ({clients.length})
+                </h3>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                  Gerencie, edite ou exclua passageiros cadastrados na plataforma.
+                </span>
+              </div>
+              <button
+                onClick={() => loadAdminData()}
+                className="btn-outline"
+                style={{ fontSize: '0.8rem', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} /> Atualizar
+              </button>
+            </div>
+
+            {/* Filtro de Abas (Ativos vs Ocultos) + Busca */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => setClientTabFilter('active')}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '10px',
+                    border: clientTabFilter === 'active' ? '1px solid #6366f1' : '1px solid var(--border-subtle)',
+                    background: clientTabFilter === 'active' ? 'rgba(99, 102, 241, 0.2)' : 'rgba(255, 255, 255, 0.03)',
+                    color: clientTabFilter === 'active' ? '#fff' : 'var(--text-secondary)',
+                    fontSize: '0.85rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <Users size={14} /> Ativos ({activeClients.length})
+                </button>
+                <button
+                  onClick={() => setClientTabFilter('hidden')}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '10px',
+                    border: clientTabFilter === 'hidden' ? '1px solid #eab308' : '1px solid var(--border-subtle)',
+                    background: clientTabFilter === 'hidden' ? 'rgba(234, 179, 8, 0.2)' : 'rgba(255, 255, 255, 0.03)',
+                    color: clientTabFilter === 'hidden' ? '#fde047' : 'var(--text-secondary)',
+                    fontSize: '0.85rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <EyeOff size={14} /> Ocultos / Excluídos Parcialmente ({hiddenClients.length})
+                </button>
+              </div>
+
+              <div style={{ minWidth: '240px', flex: 1, maxWidth: '380px' }}>
+                <input
+                  type="text"
+                  className="input-field"
+                  placeholder="Buscar por nome, email, CPF ou telefone..."
+                  value={clientSearchQuery}
+                  onChange={(e) => setClientSearchQuery(e.target.value)}
+                  style={{ width: '100%', padding: '8px 12px', fontSize: '0.85rem' }}
+                />
+              </div>
+            </div>
+
+            {clientTabFilter === 'hidden' && (
+              <div style={{
+                background: 'rgba(234, 179, 8, 0.1)',
+                border: '1px solid rgba(234, 179, 8, 0.3)',
+                borderRadius: '12px',
+                padding: '12px 16px',
+                marginBottom: '16px',
+                fontSize: '0.82rem',
+                color: '#fde047',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px'
+              }}>
+                <EyeOff size={18} style={{ flexShrink: 0 }} />
+                <span>
+                  <strong>Passageiros Ocultos (Exclusão Parcial):</strong> Estes passageiros não aparecem na lista ativa principal, mas <strong>todas as suas corridas, valores financeiros e relatórios continuam 100% contabilizados</strong> no sistema. Você pode reativá-los ou fazer a exclusão definitiva a qualquer momento.
+                </span>
+              </div>
+            )}
+
+            {filteredList.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+                {clientTabFilter === 'active' ? (
+                  <>
+                    <Users size={40} style={{ margin: '0 auto 10px', opacity: 0.5 }} />
+                    <p>{clientSearchQuery ? 'Nenhum passageiro encontrado para esta busca.' : 'Nenhum passageiro ativo cadastrado.'}</p>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 size={40} style={{ margin: '0 auto 10px', opacity: 0.5, color: '#10b981' }} />
+                    <p>Nenhum passageiro ocultado no momento.</p>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {filteredList.map(c => (
+                  <div key={c.id} style={{
+                    background: c.isHidden ? 'rgba(234, 179, 8, 0.05)' : 'rgba(15, 23, 42, 0.85)',
+                    border: c.isHidden ? '1px solid rgba(234, 179, 8, 0.3)' : '1px solid var(--border-subtle)',
+                    borderRadius: '14px',
+                    padding: '18px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <strong style={{ fontSize: '1.05rem', color: '#fff' }}>
+                          {c.fullName || 'Passageiro DriveHora'}
+                        </strong>
+                        {c.email && (
+                          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                            • {c.email}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        {c.isHidden ? (
+                          <span style={{
+                            fontSize: '0.75rem',
+                            padding: '3px 8px',
+                            borderRadius: '6px',
+                            background: 'rgba(234, 179, 8, 0.2)',
+                            color: '#fde047',
+                            fontWeight: 700
+                          }}>
+                            🟡 Oculto da Lista
+                          </span>
+                        ) : (
+                          <span style={{
+                            fontSize: '0.75rem',
+                            padding: '3px 8px',
+                            borderRadius: '6px',
+                            background: 'rgba(16, 185, 129, 0.15)',
+                            color: '#10b981',
+                            fontWeight: 700
+                          }}>
+                            {c.isProfileComplete ? 'Perfil Ativo ✅' : 'Cadastrado 👤'}
+                          </span>
+                        )}
+
+                        {c.isHidden ? (
+                          <>
+                            <button
+                              onClick={() => handleRestoreClient(c)}
+                              className="btn-outline"
+                              style={{
+                                padding: '5px 12px',
+                                fontSize: '0.75rem',
+                                color: '#10b981',
+                                borderColor: 'rgba(16, 185, 129, 0.4)',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}
+                              title="Reativar passageiro na lista principal"
+                            >
+                              <Check size={12} /> Reativar
+                            </button>
+                            <button
+                              onClick={() => { setClientToDelete(c); setClientDeleteMode('definitive'); }}
+                              className="btn-outline"
+                              style={{
+                                padding: '5px 10px',
+                                fontSize: '0.75rem',
+                                color: '#ef4444',
+                                borderColor: 'rgba(239, 68, 68, 0.4)',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}
+                              title="Excluir definitivamente todas as informações deste passageiro"
+                            >
+                              <Trash2 size={12} /> Excluir Definitivo
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => handleOpenEditClient(c)}
+                              className="btn-outline"
+                              style={{
+                                padding: '5px 12px',
+                                fontSize: '0.75rem',
+                                color: '#818cf8',
+                                borderColor: 'rgba(99, 102, 241, 0.3)',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}
+                              title="Editar dados cadastrais do passageiro"
+                            >
+                              <Edit3 size={12} /> Editar Cadastro
+                            </button>
+                            <button
+                              onClick={() => { setClientToDelete(c); setClientDeleteMode('partial'); }}
+                              className="btn-outline"
+                              style={{
+                                padding: '5px 10px',
+                                fontSize: '0.75rem',
+                                color: '#ef4444',
+                                borderColor: 'rgba(239, 68, 68, 0.35)',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}
+                              title="Opções de exclusão do passageiro (parcial ou definitiva)"
+                            >
+                              <Trash2 size={12} /> Excluir
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    <div style={{ fontSize: '0.85rem', color: '#cbd5e1', display: 'flex', flexWrap: 'wrap', gap: '14px' }}>
+                      <span>📞 Telefone: <strong>{formatPhone(c.phone) || 'Não informado'}</strong></span>
+                      {c.cpf && <span>🆔 CPF: <strong>{formatCpf(c.cpf)}</strong></span>}
+                    </div>
+
+                    {(c.street || c.city || c.neighborhood) && (
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                        📍 {c.street ? `${c.street}, ${c.number || 'S/N'}` : ''} 
+                        {c.complement ? ` (${c.complement})` : ''} 
+                        {c.neighborhood ? ` - ${c.neighborhood}` : ''} 
+                        {c.city ? ` - ${c.city}/${c.state}` : ''} 
+                        {c.cep ? ` • CEP: ${c.cep}` : ''}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-
-          {clients.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
-              <Users size={40} style={{ margin: '0 auto 10px', opacity: 0.5 }} />
-              <p>Nenhum cliente cadastrado ainda.</p>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {clients.map(c => (
-                <div key={c.id} style={{
-                  background: 'rgba(15, 23, 42, 0.85)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: '14px',
-                  padding: '18px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '8px'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <strong style={{ fontSize: '1.05rem', color: '#fff' }}>
-                        {c.fullName || 'Passageiro DriveHora'}
-                      </strong>
-                      {c.email && (
-                        <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                          • {c.email}
-                        </span>
-                      )}
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{
-                        fontSize: '0.75rem',
-                        padding: '3px 8px',
-                        borderRadius: '6px',
-                        background: 'rgba(16, 185, 129, 0.15)',
-                        color: '#10b981',
-                        fontWeight: 700
-                      }}>
-                        {c.isProfileComplete ? 'Perfil Ativo ✅' : 'Cadastrado 👤'}
-                      </span>
-                      <button
-                        onClick={() => handleOpenEditClient(c)}
-                        className="btn-outline"
-                        style={{
-                          padding: '4px 10px',
-                          fontSize: '0.75rem',
-                          color: '#818cf8',
-                          borderColor: 'rgba(99, 102, 241, 0.3)',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px'
-                        }}
-                        title="Editar dados cadastrais do passageiro"
-                      >
-                        <Edit3 size={12} /> Editar Cadastro
-                      </button>
-                    </div>
-                  </div>
-
-                  <div style={{ fontSize: '0.85rem', color: '#cbd5e1', display: 'flex', flexWrap: 'wrap', gap: '14px' }}>
-                    <span>📞 Telefone: <strong>{formatPhone(c.phone) || 'Não informado'}</strong></span>
-                    {c.cpf && <span>🆔 CPF: <strong>{formatCpf(c.cpf)}</strong></span>}
-                  </div>
-
-                  {(c.street || c.city || c.neighborhood) && (
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                      📍 {c.street ? `${c.street}, ${c.number || 'S/N'}` : ''} 
-                      {c.complement ? ` (${c.complement})` : ''} 
-                      {c.neighborhood ? ` - ${c.neighborhood}` : ''} 
-                      {c.city ? ` - ${c.city}/${c.state}` : ''} 
-                      {c.cep ? ` • CEP: ${c.cep}` : ''}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+        );
+      })()}
 
       {/* SUB-ABA 4: AUDITORIA DE CORRIDAS */}
       {activeSubTab === 'rides' && (() => {
@@ -3535,7 +3757,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: '10px', marginTop: '12px' }}>
+              <div style={{ display: 'flex', gap: '10px', marginTop: '12px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const c = editingClient;
+                    setEditingClient(null);
+                    setClientToDelete(c);
+                    setClientDeleteMode('partial');
+                  }}
+                  className="btn-outline"
+                  style={{
+                    padding: '12px 14px',
+                    borderColor: 'rgba(239, 68, 68, 0.4)',
+                    color: '#ef4444',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                  title="Opções de exclusão do passageiro"
+                >
+                  <Trash2 size={16} /> Excluir
+                </button>
                 <button
                   type="button"
                   onClick={() => setEditingClient(null)}
@@ -3555,6 +3798,224 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DE PASSAGEIRO (PARCIAL OU DEFINITIVA) */}
+      {clientToDelete && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.85)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: '#0f172a',
+            border: '1px solid ' + (clientDeleteMode === 'definitive' ? 'rgba(239, 68, 68, 0.5)' : 'rgba(234, 179, 8, 0.5)'),
+            borderRadius: '20px',
+            maxWidth: '540px',
+            width: '100%',
+            overflow: 'hidden',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.9)'
+          }}>
+            {/* Header */}
+            <div style={{
+              padding: '18px 20px',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+              background: clientDeleteMode === 'definitive' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(234, 179, 8, 0.1)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '50%',
+                  background: clientDeleteMode === 'definitive' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(234, 179, 8, 0.2)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: clientDeleteMode === 'definitive' ? '#ef4444' : '#eab308'
+                }}>
+                  {clientDeleteMode === 'definitive' ? <Trash2 size={20} /> : <EyeOff size={20} />}
+                </div>
+                <div>
+                  <h4 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#fff', margin: 0 }}>
+                    Excluir Passageiro
+                  </h4>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                    {clientToDelete.fullName || 'Passageiro'} ({clientToDelete.email || clientToDelete.phone || 'Sem contato'})
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => setClientToDelete(null)}
+                style={{ background: 'rgba(255, 255, 255, 0.1)', border: 'none', color: '#fff', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Conteúdo */}
+            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0 }}>
+                Selecione o tipo de exclusão que deseja aplicar para este passageiro:
+              </p>
+
+              {/* Opção 1: Exclusão Parcial */}
+              <div
+                onClick={() => setClientDeleteMode('partial')}
+                style={{
+                  border: clientDeleteMode === 'partial' ? '2px solid #eab308' : '1px solid var(--border-subtle)',
+                  background: clientDeleteMode === 'partial' ? 'rgba(234, 179, 8, 0.12)' : 'rgba(255, 255, 255, 0.02)',
+                  borderRadius: '14px',
+                  padding: '14px 16px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  display: 'flex',
+                  gap: '12px',
+                  alignItems: 'flex-start'
+                }}
+              >
+                <input
+                  type="radio"
+                  name="clientDeleteMode"
+                  checked={clientDeleteMode === 'partial'}
+                  onChange={() => setClientDeleteMode('partial')}
+                  style={{ marginTop: '3px', accentColor: '#eab308', cursor: 'pointer' }}
+                />
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                    <strong style={{ fontSize: '0.95rem', color: clientDeleteMode === 'partial' ? '#fde047' : '#fff' }}>
+                      🟡 Exclusão Parcial (Ocultar da Lista)
+                    </strong>
+                    <span style={{ fontSize: '0.65rem', padding: '2px 8px', borderRadius: '6px', background: 'rgba(16, 185, 129, 0.2)', color: '#10b981', fontWeight: 700 }}>
+                      Recomendado
+                    </span>
+                  </div>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4 }}>
+                    O passageiro é removido da lista ativa, mas o sistema <strong>continua contabilizando normalmente</strong> todo o histórico de corridas, relatórios gerais e valores financeiros. Poderá ser reativado pelo admin a qualquer momento.
+                  </p>
+                </div>
+              </div>
+
+              {/* Opção 2: Exclusão Definitiva */}
+              <div
+                onClick={() => setClientDeleteMode('definitive')}
+                style={{
+                  border: clientDeleteMode === 'definitive' ? '2px solid #ef4444' : '1px solid var(--border-subtle)',
+                  background: clientDeleteMode === 'definitive' ? 'rgba(239, 68, 68, 0.12)' : 'rgba(255, 255, 255, 0.02)',
+                  borderRadius: '14px',
+                  padding: '14px 16px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  display: 'flex',
+                  gap: '12px',
+                  alignItems: 'flex-start'
+                }}
+              >
+                <input
+                  type="radio"
+                  name="clientDeleteMode"
+                  checked={clientDeleteMode === 'definitive'}
+                  onChange={() => setClientDeleteMode('definitive')}
+                  style={{ marginTop: '3px', accentColor: '#ef4444', cursor: 'pointer' }}
+                />
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                    <strong style={{ fontSize: '0.95rem', color: clientDeleteMode === 'definitive' ? '#f87171' : '#fff' }}>
+                      🔴 Exclusão Definitiva (Purga Total)
+                    </strong>
+                    <span style={{ fontSize: '0.65rem', padding: '2px 8px', borderRadius: '6px', background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444', fontWeight: 700 }}>
+                      Ação Irreversível
+                    </span>
+                  </div>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4 }}>
+                    Apaga <strong>todas as informações existentes deste passageiro</strong>, inclusive seu cadastro, perfil, histórico de corridas, relatórios e dados financeiros. O passageiro terá que <strong>refazer o cadastro do zero</strong> como se nunca tivesse existido.
+                  </p>
+                </div>
+              </div>
+
+              {clientDeleteMode === 'definitive' && (
+                <div style={{
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  border: '1px solid rgba(239, 68, 68, 0.4)',
+                  borderRadius: '10px',
+                  padding: '10px 14px',
+                  fontSize: '0.78rem',
+                  color: '#f87171',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  <AlertTriangle size={18} style={{ flexShrink: 0 }} />
+                  <span>
+                    Atenção: Ao confirmar a exclusão definitiva, as corridas associadas a este passageiro também serão removidas dos relatórios e contabilidade.
+                  </span>
+                </div>
+              )}
+
+              {/* Botões do Rodapé */}
+              <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => setClientToDelete(null)}
+                  className="btn-outline"
+                  style={{ flex: 1, padding: '12px' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteClientConfirm}
+                  disabled={isDeletingClient}
+                  style={{
+                    flex: 2,
+                    padding: '12px',
+                    borderRadius: '10px',
+                    border: 'none',
+                    fontWeight: 700,
+                    fontSize: '0.9rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    color: '#fff',
+                    background: clientDeleteMode === 'definitive' 
+                      ? 'linear-gradient(135deg, #ef4444, #dc2626)' 
+                      : 'linear-gradient(135deg, #eab308, #ca8a04)'
+                  }}
+                >
+                  {isDeletingClient ? (
+                    <>
+                      <RefreshCw size={16} className="animate-spin" />
+                      <span>Processando...</span>
+                    </>
+                  ) : clientDeleteMode === 'definitive' ? (
+                    <>
+                      <Trash2 size={16} />
+                      <span>Excluir Definitivamente</span>
+                    </>
+                  ) : (
+                    <>
+                      <EyeOff size={16} />
+                      <span>Ocultar Passageiro</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

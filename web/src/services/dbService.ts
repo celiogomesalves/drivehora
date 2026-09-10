@@ -839,6 +839,7 @@ export const dbGetAllClients = async (): Promise<ClientProfile[]> => {
         if (d.id) driverMap.set(d.id, d);
       });
 
+      const hiddenIds = new Set(dbGetHiddenClientIds());
       const list: ClientProfile[] = [];
       const seenUserIds = new Set<string>();
 
@@ -858,6 +859,8 @@ export const dbGetAllClients = async (): Promise<ClientProfile[]> => {
           }
         }
 
+        const isHidden = Boolean(p.is_hidden || c?.is_hidden || hiddenIds.has(p.id) || (c?.id && hiddenIds.has(c.id)));
+
         list.push({
           id: c?.id || 'client_' + p.id,
           userId: p.id,
@@ -873,12 +876,14 @@ export const dbGetAllClients = async (): Promise<ClientProfile[]> => {
           city: c?.city || '',
           state: c?.state || '',
           isProfileComplete: Boolean(c?.is_profile_complete || (c?.cpf && c?.street)),
+          isHidden,
           createdAt: p.created_at || p.updated_at
         });
       });
 
       (clientsRes.data || []).forEach((c: any) => {
         if (!seenUserIds.has(c.user_id)) {
+          const isHidden = Boolean(c.is_hidden || hiddenIds.has(c.user_id) || hiddenIds.has(c.id));
           list.push({
             id: c.id,
             userId: c.user_id,
@@ -893,6 +898,7 @@ export const dbGetAllClients = async (): Promise<ClientProfile[]> => {
             city: c.city || '',
             state: c.state || '',
             isProfileComplete: true,
+            isHidden,
             createdAt: c.created_at
           });
         }
@@ -1107,6 +1113,150 @@ export const dbAdminDeleteDriver = async (
     localStorage.removeItem(`drivehora_driver_online_${targetUserId}`);
     localStorage.removeItem(`drivehora_driver_draft_${targetUserId}`);
   } catch (e) {}
+
+  return { success: true };
+};
+
+// 10.2 Gerenciamento de Passageiros Ocultos (Exclusão Parcial)
+export const dbGetHiddenClientIds = (): string[] => {
+  try {
+    const raw = localStorage.getItem('drivehora_hidden_client_ids');
+    if (!raw) return [];
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+};
+
+export const dbSetHiddenClientIds = (ids: string[]) => {
+  try {
+    localStorage.setItem('drivehora_hidden_client_ids', JSON.stringify(Array.from(new Set(ids))));
+  } catch {}
+};
+
+// 10.3 Excluir Passageiro / Cliente pelo Administrador (Parcial ou Definitiva)
+export const dbAdminDeleteClient = async (
+  clientId: string,
+  userId: string,
+  mode: 'partial' | 'definitive'
+): Promise<{ success: boolean; error?: string; deletedRidesCount?: number }> => {
+  const targetUserId = userId || (clientId.startsWith('client_') ? clientId.replace('client_', '') : clientId);
+  const sb = getSupabase();
+
+  if (mode === 'partial') {
+    // Modo Parcial: Oculta da listagem de passageiros, mas preserva 100% das corridas e financeiro
+    const currentHidden = dbGetHiddenClientIds();
+    const updatedHidden = Array.from(new Set([...currentHidden, targetUserId, clientId]));
+    dbSetHiddenClientIds(updatedHidden);
+
+    if (sb) {
+      try {
+        await Promise.allSettled([
+          sb.from('clients').update({ is_hidden: true }).or(`user_id.eq.${targetUserId},id.eq.${clientId}`),
+          sb.from('profiles').update({ is_hidden: true }).eq('id', targetUserId)
+        ]);
+      } catch (e) {
+        console.warn('Aviso ao registrar ocultação no Supabase (prosseguindo com registro local):', e);
+      }
+    }
+
+    return { success: true };
+  }
+
+  // Modo Definitivo: Purga completa de todos os dados do passageiro
+  let deletedRidesCount = 0;
+
+  if (sb) {
+    try {
+      // 1. Excluir todas as corridas deste passageiro (elimina do histórico, relatórios e financeiro)
+      const ridesRes: any = await sb
+        .from('rides')
+        .delete()
+        .or(`client_id.eq.${targetUserId},client_id.eq.${clientId}`);
+      if (ridesRes?.error) {
+        console.warn('Aviso ao expurgar corridas do Supabase:', ridesRes.error);
+      }
+
+      // 2. Excluir da tabela clients
+      const clientRes: any = await sb
+        .from('clients')
+        .delete()
+        .or(`user_id.eq.${targetUserId},id.eq.${clientId}`);
+      if (clientRes?.error) {
+        console.warn('Aviso ao excluir de clients no Supabase:', clientRes.error);
+      }
+
+      // 3. Excluir da tabela profiles
+      const profileRes: any = await sb
+        .from('profiles')
+        .delete()
+        .eq('id', targetUserId);
+      if (profileRes?.error) {
+        console.warn('Aviso ao excluir de profiles no Supabase:', profileRes.error);
+      }
+
+      // 4. Excluir relatórios / chamados criados por este passageiro se existirem
+      try {
+        await sb.from('issue_reports').delete().or(`reporter_id.eq.${targetUserId},reporter_id.eq.${clientId}`);
+      } catch (e) {}
+    } catch (e: any) {
+      console.warn('Erro durante purga definitiva no Supabase:', e);
+    }
+  }
+
+  // Limpar corridas do localStorage para consistência imediata
+  try {
+    const rawRides = localStorage.getItem('drivehora_rides');
+    if (rawRides) {
+      const parsedRides: any[] = JSON.parse(rawRides);
+      const remainingRides = parsedRides.filter(r => r.clientId !== targetUserId && r.clientId !== clientId);
+      deletedRidesCount = parsedRides.length - remainingRides.length;
+      localStorage.setItem('drivehora_rides', JSON.stringify(remainingRides));
+    }
+  } catch (e) {}
+
+  // Limpar perfis, rascunhos e sessões do passageiro no localStorage
+  try {
+    localStorage.removeItem(`drivehora_client_profile_${targetUserId}`);
+    localStorage.removeItem(`drivehora_client_draft_${targetUserId}`);
+
+    // Se o usuário logado atualmente no dispositivo for o passageiro expurgado, limpa
+    const savedUser = localStorage.getItem('drivehora_current_user');
+    if (savedUser) {
+      const parsedUser = JSON.parse(savedUser);
+      if (parsedUser.id === targetUserId || parsedUser.id === clientId) {
+        localStorage.removeItem('drivehora_current_user');
+      }
+    }
+
+    // Remover da lista de ocultos se estava nela
+    const currentHidden = dbGetHiddenClientIds().filter(id => id !== targetUserId && id !== clientId);
+    dbSetHiddenClientIds(currentHidden);
+  } catch (e) {}
+
+  return { success: true, deletedRidesCount };
+};
+
+// 10.4 Reativar Passageiro Ocultado pelo Admin
+export const dbAdminRestoreClient = async (
+  clientId: string,
+  userId: string
+): Promise<{ success: boolean; error?: string }> => {
+  const targetUserId = userId || (clientId.startsWith('client_') ? clientId.replace('client_', '') : clientId);
+  const currentHidden = dbGetHiddenClientIds().filter(id => id !== targetUserId && id !== clientId);
+  dbSetHiddenClientIds(currentHidden);
+
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      await Promise.allSettled([
+        sb.from('clients').update({ is_hidden: false }).or(`user_id.eq.${targetUserId},id.eq.${clientId}`),
+        sb.from('profiles').update({ is_hidden: false }).eq('id', targetUserId)
+      ]);
+    } catch (e) {
+      console.warn('Aviso ao reativar passageiro no Supabase:', e);
+    }
+  }
 
   return { success: true };
 };

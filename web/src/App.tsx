@@ -2063,6 +2063,7 @@ export function App() {
             rides={rides}
             onOpenSupabaseConfig={() => setShowConfigModal(true)}
             supabaseConnected={supabaseConnected}
+            onReloadRides={fetchRides}
           />
         )}
 

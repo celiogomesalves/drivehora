@@ -41,6 +41,10 @@ export interface ClientProfile {
   city: string;
   state: string;
   isProfileComplete: boolean;
+  isHidden?: boolean;
+  isDeleted?: boolean;
+  deletedAt?: string;
+  deletionType?: 'partial' | 'definitive';
   createdAt?: string;
 }
 
