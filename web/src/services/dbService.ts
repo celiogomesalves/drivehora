@@ -331,11 +331,9 @@ export const dbSaveClientProfile = async (
       console.warn('Erro ao salvar client no Supabase:', cRes.error);
     }
 
-    // 3. Se o usuário também for motorista cadastrado, sincronizar o nome, cpf e telefone na tabela drivers
+    // 3. Se o usuário também for motorista cadastrado, sincronizar cpf e telefone na tabela drivers
     try {
       await sb.from('drivers').update({
-        driver_name: resolvedFullName,
-        full_name: resolvedFullName,
         cpf: client.cpf,
         phone: resolvedPhone
       }).or(`user_id.eq.${client.userId},id.eq.driver_${client.userId}`);
@@ -464,11 +462,9 @@ export const dbSaveDriverProfile = async (
     const existingDriver = await sb.from('drivers').select('id').eq('user_id', driver.userId).maybeSingle();
     const targetDriverId = existingDriver?.data?.id || driver.id || ('driver_' + driver.userId);
 
-    const res: any = await withTimeout(sb.from('drivers').upsert({
+    const driverPayload: any = {
       id: targetDriverId,
       user_id: driver.userId,
-      driver_name: resolvedName,
-      full_name: resolvedName,
       cpf: driver.cpf ? driver.cpf.replace(/\D/g, '') : null,
       phone: resolvedPhone,
       cnh_number: driver.cnhNumber,
@@ -484,7 +480,28 @@ export const dbSaveDriverProfile = async (
       verification_status: driver.verificationStatus,
       rating: driver.rating,
       total_rides: driver.totalRides
-    }), 10000);
+    };
+
+    if (driver.amenities && driver.amenities.length > 0) {
+      driverPayload.amenities = driver.amenities;
+    }
+    if (driver.bio) {
+      driverPayload.bio = driver.bio;
+    }
+    if (driver.vehicleCategory) {
+      driverPayload.vehicle_category = driver.vehicleCategory;
+    }
+
+    let res: any = await withTimeout(sb.from('drivers').upsert(driverPayload), 10000);
+    if (res?.error && res.error.message?.includes('Could not find the')) {
+      console.warn('Campo estendido não existe no schema de drivers, tentando fallback seguro:', res.error);
+      delete driverPayload.amenities;
+      delete driverPayload.bio;
+      delete driverPayload.vehicle_category;
+      delete driverPayload.driver_name;
+      delete driverPayload.full_name;
+      res = await withTimeout(sb.from('drivers').upsert(driverPayload), 10000);
+    }
 
     // 3. Se houver registro em clients para este mesmo usuário, sincronizar CPF e Telefone também
     try {
@@ -495,8 +512,33 @@ export const dbSaveDriverProfile = async (
       }).eq('user_id', driver.userId);
     } catch (cErr) {}
 
-    // 4. Sincronizar cache local do usuário ativo
+    // 4. Sincronizar cache local com o perfil completo do motorista (incluindo comodidades, bio e veículo)
     try {
+      const fullDriverProfile: DriverProfile = {
+        ...driver,
+        id: targetDriverId,
+        fullName: resolvedName,
+        driverName: resolvedName,
+        phone: resolvedPhone,
+        amenities: driver.amenities || [],
+        bio: driver.bio || '',
+        vehicleCategory: driver.vehicleCategory || 'classico'
+      };
+      localStorage.setItem(`drivehora_driver_profile_${driver.userId}`, JSON.stringify(fullDriverProfile));
+      localStorage.setItem(`drivehora_driver_profile_${targetDriverId}`, JSON.stringify(fullDriverProfile));
+      localStorage.setItem(`drivehora_driver_draft_${driver.userId}`, JSON.stringify({
+        fullName: resolvedName,
+        phone: resolvedPhone,
+        amenities: driver.amenities || [],
+        bio: driver.bio || '',
+        vehicleBrand: driver.vehicleBrand,
+        vehicleModel: driver.vehicleModel,
+        vehicleYear: driver.vehicleYear,
+        vehiclePlate: driver.vehiclePlate,
+        vehicleColor: driver.vehicleColor,
+        vehicleCategory: driver.vehicleCategory || 'classico'
+      }));
+
       const savedUserStr = localStorage.getItem('drivehora_current_user');
       if (savedUserStr) {
         const u = JSON.parse(savedUserStr);
@@ -585,8 +627,28 @@ export const dbGetDriverProfile = async (userId: string, email?: string): Promis
           totalRides: Number(res.data.total_rides) || 0,
           isOnline: Boolean(res.data.is_online),
           currentLat: res.data.current_lat !== undefined && res.data.current_lat !== null ? Number(res.data.current_lat) : undefined,
-          currentLng: res.data.current_lng !== undefined && res.data.current_lng !== null ? Number(res.data.current_lng) : undefined
+          currentLng: res.data.current_lng !== undefined && res.data.current_lng !== null ? Number(res.data.current_lng) : undefined,
+          amenities: res.data.amenities || [],
+          bio: res.data.bio || '',
+          vehicleCategory: res.data.vehicle_category || 'classico'
         };
+
+        // Mesclar com cache local se bio, comodidades ou categoria vierem vazios do banco
+        try {
+          const localSaved = localStorage.getItem(`drivehora_driver_profile_${res.data.user_id}`) || localStorage.getItem(`drivehora_driver_profile_${userId}`);
+          if (localSaved) {
+            const parsed = JSON.parse(localSaved);
+            if (!profile.amenities || profile.amenities.length === 0) {
+              profile.amenities = parsed.amenities || [];
+            }
+            if (!profile.bio) {
+              profile.bio = parsed.bio || '';
+            }
+            if (!profile.vehicleCategory) {
+              profile.vehicleCategory = parsed.vehicleCategory || 'classico';
+            }
+          }
+        } catch (e) {}
 
         try {
           localStorage.setItem(`drivehora_driver_profile_${res.data.user_id}`, JSON.stringify(profile));
@@ -1092,7 +1154,22 @@ export const dbGetAllDrivers = async (): Promise<DriverProfile[]> => {
           totalRides: Number(d.total_rides) || 0,
           isOnline: isOnline,
           currentLat: d.current_lat ? Number(d.current_lat) : undefined,
-          currentLng: d.current_lng ? Number(d.current_lng) : undefined
+          currentLng: d.current_lng ? Number(d.current_lng) : undefined,
+          amenities: (() => {
+            let am = d.amenities || [];
+            if (!am.length) {
+              try {
+                const localSaved = localStorage.getItem(`drivehora_driver_profile_${d.user_id}`) || localStorage.getItem(`drivehora_driver_profile_${d.id}`);
+                if (localSaved) {
+                  const parsed = JSON.parse(localSaved);
+                  if (parsed.amenities) am = parsed.amenities;
+                }
+              } catch (e) {}
+            }
+            return am;
+          })(),
+          bio: d.bio || '',
+          vehicleCategory: d.vehicle_category || 'classico'
         };
       });
 
@@ -1219,10 +1296,6 @@ export const dbAdminUpdateDriverProfile = async (
 
       // 2. Atualizar drivers
       const updateData: any = {};
-      if (resolvedName) {
-        updateData.driver_name = resolvedName;
-        updateData.full_name = resolvedName;
-      }
       if (driver.cpf !== undefined) updateData.cpf = driver.cpf;
       if (driver.phone !== undefined) updateData.phone = driver.phone;
       if (driver.cnhNumber !== undefined) updateData.cnh_number = driver.cnhNumber;
@@ -1299,13 +1372,11 @@ export const dbAdminUpdateClientProfile = async (
       // Sincronizar na tabela drivers se for motorista
       try {
         const driverUpdate: any = {};
-        if (client.fullName) {
-          driverUpdate.driver_name = client.fullName;
-          driverUpdate.full_name = client.fullName;
-        }
         if (client.cpf) driverUpdate.cpf = client.cpf;
         if (client.phone) driverUpdate.phone = client.phone;
-        await sb.from('drivers').update(driverUpdate).eq('user_id', client.userId);
+        if (Object.keys(driverUpdate).length > 0) {
+          await sb.from('drivers').update(driverUpdate).eq('user_id', client.userId);
+        }
       } catch (e) {}
     }
 
