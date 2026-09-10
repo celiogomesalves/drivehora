@@ -508,14 +508,32 @@ export function App() {
     d => d.isOnline && (d.verificationStatus === 'approved' || isSuperAdminEmail(d.phone || ''))
   ).length;
 
+  // Normalizador de comodidades (compatibilidade entre IDs curtos e rótulos longos de onboarding)
+  const normalizeAmenity = (a: string): string => {
+    const s = (a || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+    if (s.includes('pcd') || s.includes('acessib') || s.includes('defic')) return 'acessibilidade_pcd';
+    if (s.includes('ar') || s.includes('clima') || s.includes('condicion')) return 'ar_condicionado';
+    if (s.includes('pet') || s.includes('anim')) return 'pet_friendly';
+    if (s.includes('mala') || s.includes('bagag')) return 'porta_malas';
+    if (s.includes('cadeir') || s.includes('bebe') || s.includes('infant')) return 'cadeirinha';
+    if (s.includes('wifi') || s.includes('wi-fi') || s.includes('internet')) return 'wifi';
+    return s;
+  };
+
+  const driverHasAllAmenities = (driverAmenities: string[] | undefined, requiredAmenities: string[] | undefined): boolean => {
+    if (!requiredAmenities || requiredAmenities.length === 0) return true;
+    const normalizedDriver = (driverAmenities || []).map(normalizeAmenity);
+    return requiredAmenities.every(req => normalizedDriver.includes(normalizeAmenity(req)));
+  };
+
   // Identificar solicitação de corrida pendente em busca de motorista
-  // Aplica filtro de comodidades: apenas motoristas com todas as comodidades exigidas recebem o chamado
+  // Administradores veem todas para fins de teste e gestão da plataforma
   const incomingRide = rides.find(r => {
     if (r.status !== 'searching') return false;
-    if (r.requiredAmenities && r.requiredAmenities.length > 0) {
-      const driverAmenities = driverProfile?.amenities || [];
-      const hasAll = r.requiredAmenities.every(req => driverAmenities.includes(req));
-      if (!hasAll) return false;
+    if (!isUserAdmin && r.requiredAmenities && r.requiredAmenities.length > 0) {
+      if (!driverHasAllAmenities(driverProfile?.amenities, r.requiredAmenities)) {
+        return false;
+      }
     }
     return true;
   });
@@ -856,7 +874,7 @@ export function App() {
               acceptedAt: d.accepted_at ? new Date(d.accepted_at).getTime() : undefined,
               startedAt: d.started_at ? new Date(d.started_at).getTime() : undefined,
               finishedAt: d.finished_at ? new Date(d.finished_at).getTime() : undefined,
-              isScheduled: Boolean((sub as any)?.isScheduled ?? d.is_scheduled ?? d.isScheduled),
+              isScheduled: Boolean((sub as any)?.isScheduled || d.ride_type === 'scheduled' || d.scheduled_for || d.is_scheduled || d.isScheduled),
               scheduledFor: (sub as any)?.scheduledFor || d.scheduled_for || d.scheduledFor,
               requiredAmenities: (sub as any)?.requiredAmenities || d.required_amenities || d.requiredAmenities || []
             };
@@ -879,7 +897,7 @@ export function App() {
         const data = await res.json();
         let substatusMap: Record<string, any> = {};
         try {
-          const local = localStorage.getItem('drivehora_rides_substatus_map');
+          const local = localStorage.getItem('drivehora_rides_substatus_map') || localStorage.getItem('drivehora_ride_substatus_map');
           if (local) substatusMap = JSON.parse(local);
         } catch {}
 
@@ -895,7 +913,7 @@ export function App() {
             cancellationReason: sub?.cancellationReason || d.cancellationReason,
             cancelledBy: sub?.cancelledBy || d.cancelledBy,
             driverAcknowledgedAt: d.driverAcknowledgedAt ? Number(d.driverAcknowledgedAt) : (d.driver_acknowledged_at ? new Date(d.driver_acknowledged_at).getTime() : undefined),
-            isScheduled: Boolean((sub as any)?.isScheduled ?? d.is_scheduled ?? d.isScheduled),
+            isScheduled: Boolean((sub as any)?.isScheduled || d.ride_type === 'scheduled' || d.scheduled_for || d.is_scheduled || d.isScheduled),
             scheduledFor: (sub as any)?.scheduledFor || d.scheduled_for || d.scheduledFor,
             requiredAmenities: (sub as any)?.requiredAmenities || d.required_amenities || d.requiredAmenities || []
           };
@@ -1523,10 +1541,11 @@ export function App() {
     null;
   const pendingRides = rides.filter(r => {
     if (r.status !== 'searching') return false;
-    if (r.requiredAmenities && r.requiredAmenities.length > 0) {
-      const driverAmenities = driverProfile?.amenities || [];
-      const hasAll = r.requiredAmenities.every(req => driverAmenities.includes(req));
-      if (!hasAll) return false;
+    // Administradores veem todas para testes e controle
+    if (!isUserAdmin && r.requiredAmenities && r.requiredAmenities.length > 0) {
+      if (!driverHasAllAmenities(driverProfile?.amenities, r.requiredAmenities)) {
+        return false;
+      }
     }
     return true;
   });
@@ -1573,7 +1592,13 @@ export function App() {
       if (pixModalData) return;
 
       // Não auto-cancelar corridas agendadas (sem tempo de cancelamento por timeout para motorista planejar agenda)
-      if (activeClientRide.isScheduled) return;
+      const isRideScheduled = Boolean(
+        activeClientRide.isScheduled || 
+        activeClientRide.scheduledFor || 
+        (activeClientRide as any).ride_type === 'scheduled' || 
+        (activeClientRide as any).rideType === 'scheduled'
+      );
+      if (isRideScheduled) return;
 
       // Caso 1: Passou de 10 minutos de busca
       if (searchElapsedSeconds >= MAX_SEARCH_DURATION_SECS) {
@@ -1586,8 +1611,8 @@ export function App() {
         return;
       }
 
-      // Caso 2: Nenhum motorista online e já buscou por pelo menos 15 segundos
-      if (allDriversList.length > 0 && onlineDriversCount === 0 && searchElapsedSeconds >= 15) {
+      // Caso 2: Nenhum motorista online e já buscou por pelo menos 45 segundos
+      if (allDriversList.length > 0 && onlineDriversCount === 0 && searchElapsedSeconds >= 45) {
         dbCancelRide(activeClientRide.id);
         setSearchCancellationReason({
           rideId: activeClientRide.id,

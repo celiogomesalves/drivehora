@@ -690,38 +690,31 @@ export const dbCreateRide = async (ride: DbRide): Promise<{ success: boolean; er
         total: Number(ride.total) || 50,
         commission: Number(ride.commission) || 7.5,
         driver_net: Number(ride.driverNet) || 42.5,
-        status: ride.status || 'searching'
+        status: ride.status || 'searching',
+        ride_type: ride.isScheduled ? 'scheduled' : 'standard',
+        scheduled_for: ride.scheduledFor || null
       };
       if (ride.originLat) payload.origin_lat = ride.originLat;
       if (ride.originLng) payload.origin_lng = ride.originLng;
       if (ride.destLat) payload.dest_lat = ride.destLat;
       if (ride.destLng) payload.dest_lng = ride.destLng;
-      if (ride.isScheduled) payload.is_scheduled = true;
-      if (ride.scheduledFor) payload.scheduled_for = ride.scheduledFor;
-      if (ride.requiredAmenities && ride.requiredAmenities.length > 0) payload.required_amenities = ride.requiredAmenities;
 
       let res = await sb.from('rides').insert([payload]);
       if (res?.error) {
-        console.warn('Tentativa de inserção com campos estendidos falhou, tentando fallback:', res.error);
-        // Fallback imediato: remove colunas adicionais caso o schema do Supabase ainda não as tenha
+        console.warn('Tentativa de inserção com coordenadas falhou, tentando fallback:', res.error);
         delete payload.origin_lat;
         delete payload.origin_lng;
         delete payload.dest_lat;
         delete payload.dest_lng;
-        delete payload.is_scheduled;
-        delete payload.scheduled_for;
-        delete payload.required_amenities;
         res = await sb.from('rides').insert([payload]);
       }
 
-      // Persiste metadados estendidos na ponte global em tempo real
-      if (ride.isScheduled || (ride.requiredAmenities && ride.requiredAmenities.length > 0)) {
-        await dbSetRideSubstatus(ride.id, ride.status || 'searching', {
-          isScheduled: ride.isScheduled,
-          scheduledFor: ride.scheduledFor,
-          requiredAmenities: ride.requiredAmenities
-        });
-      }
+      // Persiste metadados estendidos na ponte global em tempo real (substatus, comodidades, agendamento)
+      await dbSetRideSubstatus(ride.id, ride.status || 'searching', {
+        isScheduled: Boolean(ride.isScheduled),
+        scheduledFor: ride.scheduledFor,
+        requiredAmenities: ride.requiredAmenities || []
+      });
 
       if (res?.error) {
         console.warn('Erro ao inserir corrida no Supabase:', res.error);
@@ -744,13 +737,13 @@ export const dbCreateRide = async (ride: DbRide): Promise<{ success: boolean; er
   return { success: true };
 };
 
-const SUBSTATUS_STORAGE_KEY = 'drivehora_ride_substatus_map';
+const SUBSTATUS_STORAGE_KEY = 'drivehora_rides_substatus_map';
 const SUBSTATUS_PROFILE_ID = 'app_global_ride_substatus';
 
-export const dbGetRidesSubstatusMap = async (): Promise<Record<string, { substatus: string; updatedAt: number; cancellationReason?: string; cancelledBy?: string }>> => {
+export const dbGetRidesSubstatusMap = async (): Promise<Record<string, { substatus: string; updatedAt: number; cancellationReason?: string; cancelledBy?: string; isScheduled?: boolean; scheduledFor?: string; requiredAmenities?: string[] }>> => {
   let map: Record<string, any> = {};
   try {
-    const raw = localStorage.getItem(SUBSTATUS_STORAGE_KEY);
+    const raw = localStorage.getItem(SUBSTATUS_STORAGE_KEY) || localStorage.getItem('drivehora_ride_substatus_map');
     if (raw) map = JSON.parse(raw);
   } catch {}
 

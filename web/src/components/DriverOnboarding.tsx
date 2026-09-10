@@ -379,10 +379,15 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
     }
   };
 
-  const toggleAmenity = (label: string) => {
-    setSelectedAmenities(prev => 
-      prev.includes(label) ? prev.filter(a => a !== label) : [...prev, label]
-    );
+  const toggleAmenity = (amenity: { id: string; label: string }) => {
+    setSelectedAmenities(prev => {
+      const isSelected = prev.includes(amenity.label) || prev.includes(amenity.id);
+      if (isSelected) {
+        return prev.filter(a => a !== amenity.label && a !== amenity.id);
+      } else {
+        return [...prev, amenity.label, amenity.id];
+      }
+    });
   };
 
   // Função de Gravação no Banco de Dados Supabase
@@ -1131,12 +1136,12 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
               <label>Comodidades Disponíveis no seu Carro (Selecione todas que se aplicam):</label>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
                 {AVAILABLE_AMENITIES.map(amenity => {
-                  const isChecked = selectedAmenities.includes(amenity.label);
+                  const isChecked = selectedAmenities.includes(amenity.label) || selectedAmenities.includes(amenity.id);
 
                   return (
                     <div
                       key={amenity.id}
-                      onClick={() => toggleAmenity(amenity.label)}
+                      onClick={() => toggleAmenity(amenity)}
                       style={{
                         padding: '12px 14px',
                         borderRadius: '12px',
@@ -1770,11 +1775,13 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
               Categoria: <strong>{categoriesList.find(c => c.id === vehicleCategory)?.name || vehicleCategory}</strong> • Cor: {vehicleColor}
             </div>
             <div style={{ fontSize: '0.75rem', color: '#818cf8', display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '4px' }}>
-              {selectedAmenities.map(a => (
-                <span key={a} style={{ background: 'rgba(99, 102, 241, 0.15)', padding: '2px 6px', borderRadius: '4px' }}>
-                  ✓ {a}
-                </span>
-              ))}
+              {selectedAmenities
+                .filter(a => !AVAILABLE_AMENITIES.some(m => m.id === a))
+                .map(a => (
+                  <span key={a} style={{ background: 'rgba(99, 102, 241, 0.15)', padding: '2px 6px', borderRadius: '4px' }}>
+                    ✓ {a}
+                  </span>
+                ))}
             </div>
           </div>
 
