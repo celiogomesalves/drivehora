@@ -6,7 +6,7 @@ import {
   TrendingUp, Database, Image, AlertTriangle, Eye, X, Check,
   Settings, Bell, CreditCard, Sliders, Send, Save, Trash2,
   Calendar, Filter, Globe, Key, Radio, Power, MessageSquare, Edit3,
-  EyeOff
+  EyeOff, LayoutDashboard
 } from 'lucide-react';
 import { formatCurrency, formatCurrencyInput, parseCurrencyInput, formatPhone, formatCpf, formatPlate } from '../utils/formatters';
 import { 
@@ -547,7 +547,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       </div>
 
       {/* Navegação de Sub-Abas do Admin (Mobile Friendly com Scroll Lateral Suave) */}
-      <div className="nav-scrollable" style={{
+      <div className="nav-scrollable admin-subnav-desktop" style={{
         background: 'rgba(15, 23, 42, 0.95)',
         padding: '6px',
         borderRadius: '14px',
@@ -4020,6 +4020,125 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
+      {/* Menu Inferior no Rodapé Mobile para o Administrador */}
+      <div className="mobile-nav-spacer" />
+      <nav className="mobile-bottom-nav admin-bottom-nav" aria-label="Menu Inferior do Administrador">
+        <button
+          onClick={() => {
+            setActiveSubTab('overview');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          className={`mobile-nav-item ${activeSubTab === 'overview' ? 'active' : ''}`}
+        >
+          <div className="icon-wrapper">
+            <LayoutDashboard size={17} />
+          </div>
+          <span>Geral</span>
+        </button>
+
+        <button
+          onClick={() => {
+            setActiveSubTab('drivers');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          className={`mobile-nav-item ${activeSubTab === 'drivers' ? 'active' : ''}`}
+        >
+          <div className="icon-wrapper" style={{ position: 'relative' }}>
+            <Car size={17} />
+            {pendingDrivers.length > 0 && (
+              <span style={{
+                position: 'absolute',
+                top: '-3px',
+                right: '-5px',
+                background: '#f59e0b',
+                color: '#000',
+                fontSize: '0.58rem',
+                fontWeight: 800,
+                width: '14px',
+                height: '14px',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                {pendingDrivers.length}
+              </span>
+            )}
+          </div>
+          <span>Motoristas</span>
+        </button>
+
+        <button
+          onClick={() => {
+            setActiveSubTab('clients');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          className={`mobile-nav-item ${activeSubTab === 'clients' ? 'active' : ''}`}
+        >
+          <div className="icon-wrapper">
+            <Users size={17} />
+          </div>
+          <span>Clientes</span>
+        </button>
+
+        <button
+          onClick={() => {
+            setActiveSubTab('rides');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          className={`mobile-nav-item ${activeSubTab === 'rides' ? 'active' : ''}`}
+        >
+          <div className="icon-wrapper">
+            <Radio size={17} />
+          </div>
+          <span>Corridas</span>
+        </button>
+
+        <button
+          onClick={() => {
+            setActiveSubTab('reports');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          className={`mobile-nav-item ${activeSubTab === 'reports' ? 'active' : ''}`}
+        >
+          <div className="icon-wrapper" style={{ position: 'relative' }}>
+            <AlertTriangle size={17} color={reports.filter(r => r.status === 'pending').length > 0 ? '#ef4444' : 'currentColor'} />
+            {reports.filter(r => r.status === 'pending').length > 0 && (
+              <span style={{
+                position: 'absolute',
+                top: '-3px',
+                right: '-5px',
+                background: '#ef4444',
+                color: '#fff',
+                fontSize: '0.58rem',
+                fontWeight: 800,
+                width: '14px',
+                height: '14px',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                {reports.filter(r => r.status === 'pending').length}
+              </span>
+            )}
+          </div>
+          <span>Ocorrências</span>
+        </button>
+
+        <button
+          onClick={() => {
+            setActiveSubTab('settings');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          className={`mobile-nav-item ${activeSubTab === 'settings' ? 'active' : ''}`}
+        >
+          <div className="icon-wrapper">
+            <Settings size={17} />
+          </div>
+          <span>Config</span>
+        </button>
+      </nav>
     </div>
   );
 };

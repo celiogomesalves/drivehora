@@ -431,6 +431,25 @@ h1, h2, h3, h4, h5, h6 {
     display: none !important;
   }
 
+  .admin-subnav-desktop {
+    display: none !important;
+  }
+
+  .admin-bottom-nav {
+    padding: 5px 6px calc(6px + env(safe-area-inset-bottom, 6px)) 6px;
+  }
+
+  .admin-bottom-nav .mobile-nav-item {
+    padding: 2px 2px;
+    font-size: 0.62rem;
+    gap: 2px;
+  }
+
+  .admin-bottom-nav .mobile-nav-item .icon-wrapper {
+    width: 30px;
+    height: 26px;
+  }
+
   .mobile-nav-item.active.driver-active {
     color: #10b981;
   }
@@ -641,6 +660,10 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .driver-subnav-desktop {
+  display: flex;
+}
+
+.admin-subnav-desktop {
   display: flex;
 }
 
