@@ -301,22 +301,29 @@ export const dbSaveClientProfile = async (
       updated_at: new Date().toISOString()
     }), 8000);
 
-    // 2. Atualizar clients
-    await withTimeout(sb.from('clients').upsert({
-      id: client.id,
+    // 2. Atualizar clients (reutilizando o ID existente se já houver registro para o user_id)
+    const existingClient = await sb.from('clients').select('id').eq('user_id', client.userId).maybeSingle();
+    const targetClientId = existingClient?.data?.id || client.id || ('client_' + client.userId);
+
+    const cRes: any = await withTimeout(sb.from('clients').upsert({
+      id: targetClientId,
       user_id: client.userId,
       full_name: resolvedFullName,
-      cpf: client.cpf,
+      cpf: client.cpf ? client.cpf.replace(/\D/g, '') : null,
       phone: resolvedPhone,
-      cep: client.cep,
-      street: client.street,
-      number: client.number,
-      complement: client.complement,
-      neighborhood: client.neighborhood,
-      city: client.city,
-      state: client.state,
+      cep: client.cep ? client.cep.replace(/\D/g, '') : null,
+      street: client.street || '',
+      number: client.number || '',
+      complement: client.complement || '',
+      neighborhood: client.neighborhood || '',
+      city: client.city || '',
+      state: client.state || '',
       is_profile_complete: true
     }), 8000);
+
+    if (cRes?.error) {
+      console.warn('Erro ao salvar client no Supabase:', cRes.error);
+    }
 
     // 3. Se o usuário também for motorista cadastrado, sincronizar o nome, cpf e telefone na tabela drivers
     try {
@@ -447,13 +454,16 @@ export const dbSaveDriverProfile = async (
       updated_at: new Date().toISOString()
     }), 8000);
 
-    // 2. Atualizar drivers
+    // 2. Atualizar drivers (reutilizando o ID existente se já houver registro para o user_id)
+    const existingDriver = await sb.from('drivers').select('id').eq('user_id', driver.userId).maybeSingle();
+    const targetDriverId = existingDriver?.data?.id || driver.id || ('driver_' + driver.userId);
+
     const res: any = await withTimeout(sb.from('drivers').upsert({
-      id: driver.id,
+      id: targetDriverId,
       user_id: driver.userId,
       driver_name: resolvedName,
       full_name: resolvedName,
-      cpf: driver.cpf,
+      cpf: driver.cpf ? driver.cpf.replace(/\D/g, '') : null,
       phone: resolvedPhone,
       cnh_number: driver.cnhNumber,
       cnh_category: driver.cnhCategory,

@@ -36,6 +36,7 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
 
   useEffect(() => {
     if (initialProfile) {
+      if (initialProfile.fullName) setFullName(initialProfile.fullName);
       if (initialProfile.cpf) setCpf(formatCpf(initialProfile.cpf));
       if (initialProfile.phone) setPhone(formatPhone(initialProfile.phone));
       if (initialProfile.cep) setCep(formatCep(initialProfile.cep));
@@ -45,8 +46,10 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
       if (initialProfile.neighborhood) setNeighborhood(initialProfile.neighborhood);
       if (initialProfile.city) setCity(initialProfile.city);
       if (initialProfile.state) setState(initialProfile.state);
+    } else if (user.fullName) {
+      setFullName(user.fullName);
     }
-  }, [initialProfile]);
+  }, [initialProfile, user.fullName]);
 
   const handleCepChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const formatted = formatCep(e.target.value);

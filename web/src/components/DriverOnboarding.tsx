@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { UserProfile, DriverProfile, DriverVerificationStatus } from '../types/auth';
+import { isSuperAdminEmail } from '../types/auth';
 import { 
   ShieldCheck, Camera, CheckCircle2, 
   UploadCloud, Check, AlertCircle, Eye, Database, Edit3, X,
@@ -167,7 +168,42 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
   const [changeRequestText, setChangeRequestText] = useState('');
   const [changeRequestSent, setChangeRequestSent] = useState(false);
 
-  const isApproved = verificationStatus === 'approved';
+  const isApproved = verificationStatus === 'approved' && !user.isAdmin && user.role !== 'admin' && !isSuperAdminEmail(user.email);
+
+  // Sincronizar dados quando o perfil do motorista carregar do banco de dados
+  useEffect(() => {
+    if (initialProfile) {
+      const bestName = initialProfile.fullName || initialProfile.driverName;
+      if (bestName) setFullName(bestName);
+      if (initialProfile.cpf) setCpf(formatCpf(initialProfile.cpf));
+      if (initialProfile.phone) setPhone(formatPhone(initialProfile.phone));
+      if (initialProfile.cnhNumber) setCnhNumber(initialProfile.cnhNumber);
+      if (initialProfile.cnhCategory) setCnhCategory(initialProfile.cnhCategory);
+      if (initialProfile.vehicleBrand) setVehicleBrand(initialProfile.vehicleBrand);
+      if (initialProfile.vehicleModel) setVehicleModel(initialProfile.vehicleModel);
+      if (initialProfile.vehicleYear) setVehicleYear(initialProfile.vehicleYear);
+      if (initialProfile.vehiclePlate) setVehiclePlate(formatPlate(initialProfile.vehiclePlate));
+      if (initialProfile.vehicleColor) setVehicleColor(initialProfile.vehicleColor);
+      if (initialProfile.vehicleCategory) setVehicleCategory(initialProfile.vehicleCategory);
+      if (initialProfile.verificationStatus) setVerificationStatus(initialProfile.verificationStatus);
+      if (initialProfile.bio) setBio(initialProfile.bio);
+      if (initialProfile.amenities && initialProfile.amenities.length > 0) setSelectedAmenities(initialProfile.amenities);
+      if (initialProfile.cnhUrl) {
+        setCnhUrl(initialProfile.cnhUrl);
+        setCnhFileName('cnh_anexada.jpg');
+      }
+      if (initialProfile.crlvUrl) {
+        setCrlvUrl(initialProfile.crlvUrl);
+        setCrlvFileName('crlv_anexado.jpg');
+      }
+      if (initialProfile.selfieUrl) {
+        setSelfieUrl(initialProfile.selfieUrl);
+        setSelfieFileName('selfie_biometria.jpg');
+      }
+    } else if (user.fullName) {
+      setFullName(user.fullName);
+    }
+  }, [initialProfile, user.fullName]);
 
   // Salvar rascunho em localStorage
   useEffect(() => {
@@ -272,8 +308,87 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
     );
   };
 
-  // Validadores de Etapas
-  const handleStep1Submit = (e: React.FormEvent) => {
+  // Função de Gravação no Banco de Dados Supabase
+  const saveToDatabase = async (status: DriverVerificationStatus): Promise<{ success: boolean; error?: string }> => {
+    const profile: DriverProfile = {
+      id: 'driver_' + user.id,
+      userId: user.id,
+      fullName: fullName.trim(),
+      driverName: fullName.trim(),
+      cpf: cpf.replace(/\D/g, ''),
+      phone: phone.replace(/\D/g, ''),
+      cnhNumber: cnhNumber.trim(),
+      cnhCategory,
+      vehicleBrand: vehicleBrand.trim(),
+      vehicleModel: vehicleModel.trim(),
+      vehicleYear: vehicleYear.trim(),
+      vehiclePlate: vehiclePlate.trim().toUpperCase(),
+      vehicleColor: vehicleColor.trim(),
+      vehicleCategory,
+      amenities: selectedAmenities,
+      bio: bio.trim(),
+      languages: ['Português'],
+      cnhUrl: cnhUrl || undefined,
+      crlvUrl: crlvUrl || undefined,
+      selfieUrl: selfieUrl || undefined,
+      verificationStatus: status,
+      rating: initialProfile?.rating || 5.0,
+      totalRides: initialProfile?.totalRides || 0
+    };
+
+    const res = await dbSaveDriverProfile(profile, user);
+    return res;
+  };
+
+  // Salvar alterações imediatamente sem precisar percorrer todas as etapas
+  const handleDirectSave = async () => {
+    setErrorMessage(null);
+    if (!fullName.trim()) {
+      setErrorMessage('Informe seu nome completo.');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const res = await saveToDatabase(verificationStatus);
+      setIsSaving(false);
+      if (res.success) {
+        const savedProfile: DriverProfile = {
+          id: 'driver_' + user.id,
+          userId: user.id,
+          fullName: fullName.trim(),
+          driverName: fullName.trim(),
+          cpf: cpf.replace(/\D/g, ''),
+          phone: phone.replace(/\D/g, ''),
+          cnhNumber: cnhNumber.trim(),
+          cnhCategory,
+          vehicleBrand: vehicleBrand.trim(),
+          vehicleModel: vehicleModel.trim(),
+          vehicleYear: vehicleYear.trim(),
+          vehiclePlate: vehiclePlate.trim().toUpperCase(),
+          vehicleColor: vehicleColor.trim(),
+          vehicleCategory,
+          amenities: selectedAmenities,
+          bio: bio.trim(),
+          languages: ['Português'],
+          cnhUrl: cnhUrl || undefined,
+          crlvUrl: crlvUrl || undefined,
+          selfieUrl: selfieUrl || undefined,
+          verificationStatus,
+          rating: initialProfile?.rating || 5.0,
+          totalRides: initialProfile?.totalRides || 0
+        };
+        onComplete(savedProfile);
+      } else {
+        setErrorMessage(`Erro ao salvar: ${res.error}`);
+      }
+    } catch (err: any) {
+      setIsSaving(false);
+      setErrorMessage(`Erro ao salvar: ${err.message || 'Falha de comunicação'}`);
+    }
+  };
+
+  // Validadores de Etapas com Auto-Persistência no Banco
+  const handleStep1Submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
     if (!fullName.trim()) {
@@ -292,10 +407,16 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
       setErrorMessage('Registro de CNH inválido. Verifique o número de 11 dígitos da sua CNH.');
       return;
     }
+
+    // Persistir imediatamente no banco os dados preenchidos da Etapa 1
+    try {
+      await saveToDatabase(verificationStatus);
+    } catch (err) {}
+
     setStep(2);
   };
 
-  const handleStep2Submit = (e: React.FormEvent) => {
+  const handleStep2Submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
     if (!vehicleBrand.trim() || !vehicleModel.trim()) {
@@ -306,16 +427,28 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
       setErrorMessage('Placa do veículo inválida. Digite no padrão Mercosul (ABC1D23) ou Tradicional (ABC-1234).');
       return;
     }
+
+    // Persistir imediatamente no banco os dados preenchidos da Etapa 2
+    try {
+      await saveToDatabase(verificationStatus);
+    } catch (err) {}
+
     setStep(3);
   };
 
-  const handleStep3Submit = (e: React.FormEvent) => {
+  const handleStep3Submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
     if (!bio.trim() || bio.trim().length < 15) {
       setErrorMessage('Por favor, escreva uma breve descrição sobre seu perfil profissional (mínimo 15 caracteres).');
       return;
     }
+
+    // Persistir imediatamente no banco os dados preenchidos da Etapa 3
+    try {
+      await saveToDatabase(verificationStatus);
+    } catch (err) {}
+
     setStep(4);
   };
 
@@ -352,37 +485,6 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
     } finally {
       setIsSaving(false);
     }
-  };
-
-  const saveToDatabase = async (status: DriverVerificationStatus): Promise<{ success: boolean; error?: string }> => {
-    const profile: DriverProfile = {
-      id: 'driver_' + user.id,
-      userId: user.id,
-      fullName,
-      driverName: fullName,
-      cpf,
-      phone,
-      cnhNumber,
-      cnhCategory,
-      vehicleBrand,
-      vehicleModel,
-      vehicleYear,
-      vehiclePlate,
-      vehicleColor,
-      vehicleCategory,
-      amenities: selectedAmenities,
-      bio,
-      languages: ['Português'],
-      cnhUrl: cnhUrl || undefined,
-      crlvUrl: crlvUrl || undefined,
-      selfieUrl: selfieUrl || undefined,
-      verificationStatus: status,
-      rating: initialProfile?.rating || 5.0,
-      totalRides: initialProfile?.totalRides || 0
-    };
-
-    const res = await dbSaveDriverProfile(profile, user);
-    return res;
   };
 
   const handleApproveImmediate = async () => {
@@ -672,14 +774,25 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
             </div>
 
             {!isApproved && (
-              <button
-                type="submit"
-                className="btn-primary"
-                style={{ width: '100%', padding: '14px', fontSize: '0.95rem', marginTop: '6px' }}
-              >
-                <span>Avançar para Dados do Veículo</span>
-                <ArrowRight size={18} />
-              </button>
+              <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
+                <button
+                  type="button"
+                  onClick={handleDirectSave}
+                  disabled={isSaving}
+                  className="btn-outline"
+                  style={{ flex: 1, padding: '14px', fontSize: '0.9rem' }}
+                >
+                  {isSaving ? 'Salvando...' : '💾 Salvar'}
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  style={{ flex: 2, padding: '14px', fontSize: '0.95rem' }}
+                >
+                  <span>Avançar para Veículo</span>
+                  <ArrowRight size={18} />
+                </button>
+              </div>
             )}
           </form>
         </div>
@@ -813,6 +926,15 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
                 style={{ flex: 1, padding: '14px', fontSize: '0.9rem' }}
               >
                 <ArrowLeft size={16} /> Voltar
+              </button>
+              <button
+                type="button"
+                onClick={handleDirectSave}
+                disabled={isSaving}
+                className="btn-outline"
+                style={{ flex: 1, padding: '14px', fontSize: '0.9rem' }}
+              >
+                {isSaving ? 'Salvando...' : '💾 Salvar'}
               </button>
               <button
                 type="submit"

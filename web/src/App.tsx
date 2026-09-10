@@ -611,23 +611,43 @@ export function App() {
   useEffect(() => {
     const loadUserProfiles = async () => {
       if (!currentUser) return;
-      if (isUserAdmin) {
-        setActiveTab('admin');
-      } else if (currentUser.role === 'client') {
-        const cp = await dbGetClientProfile(currentUser.id, currentUser.email);
-        setClientProfile(cp);
-        setActiveTab('client');
-      } else {
-        const dp = await dbGetDriverProfile(currentUser.id, currentUser.email);
-        setDriverProfile(dp);
-        if (dp?.isOnline !== undefined) {
-          setIsDriverOnline(dp.isOnline);
+
+      try {
+        // Sempre carregar ambos os perfis (essencial para Admin e usuários multirrole)
+        const [cp, dp] = await Promise.all([
+          dbGetClientProfile(currentUser.id, currentUser.email),
+          dbGetDriverProfile(currentUser.id, currentUser.email)
+        ]);
+
+        if (cp) {
+          setClientProfile(cp);
         }
-        setActiveTab('driver');
+        if (dp) {
+          setDriverProfile(dp);
+          if (dp.isOnline !== undefined) {
+            setIsDriverOnline(dp.isOnline);
+          }
+        }
+
+        // Se houver nome completo gravado no banco, atualizar currentUser e localStorage
+        const latestFullName = dp?.fullName || cp?.fullName;
+        if (latestFullName && latestFullName !== currentUser.fullName) {
+          setCurrentUser(prev => prev ? { ...prev, fullName: latestFullName } : prev);
+          try {
+            const savedStr = localStorage.getItem('drivehora_current_user');
+            if (savedStr) {
+              const parsed = JSON.parse(savedStr);
+              parsed.fullName = latestFullName;
+              localStorage.setItem('drivehora_current_user', JSON.stringify(parsed));
+            }
+          } catch (e) {}
+        }
+      } catch (err) {
+        console.warn('Erro ao carregar perfis do usuário no banco:', err);
       }
     };
     loadUserProfiles();
-  }, [currentUser, isUserAdmin, supabaseConnected]);
+  }, [currentUser?.id, currentUser?.email, supabaseConnected]);
 
   // Escuta alterações remotas de status do motorista (ex: Desconexão remota pelo Admin/Suporte)
   useEffect(() => {
