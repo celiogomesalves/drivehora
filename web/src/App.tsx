@@ -210,8 +210,16 @@ export function App() {
   const [scheduledTime, setScheduledTime] = useState('09:00');
   const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
 
-  // Cliente: Sub-aba (Solicitar Corrida, Radar, Favoritos VIP, Histórico ou Meus Dados/CPF)
-  const [clientSubTab, setClientSubTab] = useState<'request' | 'nearby_radar' | 'favorites' | 'history' | 'profile'>('request');
+  // Cliente: Sub-aba (Solicitar Corrida, Agendadas, Radar, Favoritos VIP, Histórico ou Meus Dados/CPF)
+  const [clientSubTab, setClientSubTab] = useState<'request' | 'scheduled' | 'nearby_radar' | 'favorites' | 'history' | 'profile'>('request');
+  const [expandedScheduledRideIds, setExpandedScheduledRideIds] = useState<Record<string, boolean>>({});
+
+  const toggleScheduledRideExpand = (rideId: string) => {
+    setExpandedScheduledRideIds(prev => ({
+      ...prev,
+      [rideId]: !prev[rideId]
+    }));
+  };
   const [clientDateFilter, setClientDateFilter] = useState<'all' | 'today' | 'week' | '15days' | '30days' | 'custom'>('week');
   const [clientCustomDate, setClientCustomDate] = useState<string>('');
   const [selectedDriverForProfile, setSelectedDriverForProfile] = useState<DriverPublicProfile | null>(null);
@@ -480,7 +488,6 @@ export function App() {
   // Motorista & Alertas em Tempo Real
   const [isDriverOnline, setIsDriverOnline] = useState(false);
   const [isTogglingOnline, setIsTogglingOnline] = useState(false);
-  const [driverEarnings, setDriverEarnings] = useState(0);
   const [dismissedRideId, setDismissedRideId] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [allDriversList, setAllDriversList] = useState<DriverProfile[]>([]);
@@ -927,9 +934,6 @@ export function App() {
             };
           });
           setRides(formatted);
-          const finished = formatted.filter(r => r.status === 'finished');
-          const sum = finished.reduce((acc, cur) => acc + (cur.driverNet || 0), 0);
-          setDriverEarnings(sum);
           return;
         }
       } catch (e) {
@@ -966,9 +970,6 @@ export function App() {
           };
         });
         setRides(mapped);
-        const finished = mapped.filter((r: DbRide) => r.status === 'finished');
-        const sum = finished.reduce((acc: number, cur: DbRide) => acc + (cur.driverNet || 0), 0);
-        setDriverEarnings(sum);
       }
     } catch (e) {
       console.warn("Erro ao buscar corridas:", e);
@@ -1072,12 +1073,12 @@ export function App() {
       return;
     }
 
-    // 1. Passageiro só pode fazer uma solicitação por vez
-    if (activeClientRide) {
+    // 1. Passageiro só pode fazer uma solicitação imediata por vez se houver uma aberta
+    if (!isScheduledRide && activeClientImmediateRide) {
       showAlert(
-        `Você já possui uma solicitação de corrida em atendimento (#${activeClientRide.id.slice(-6)}). Conclua ou cancele a corrida atual para fazer um novo pedido.`,
+        `Você já possui uma solicitação de viagem imediata em atendimento (#${activeClientImmediateRide.id.slice(-6)}). Conclua ou cancele a corrida atual para fazer um novo pedido imediato.`,
         'warning',
-        'Solicitação Ativa em Andamento'
+        'Viagem Imediata em Andamento'
       );
       return;
     }
@@ -1209,7 +1210,21 @@ export function App() {
     };
 
     // 1. Atualização imediata no estado local do cliente
-    setCurrentRideId(rideId);
+    if (!isScheduledRide) {
+      setCurrentRideId(rideId);
+    } else {
+      // Para corrida agendada: não define como corrida imediata ativa
+      // Limpa os campos do formulário para permitir novas solicitações imediatamente
+      setOrigin('');
+      setDestination('');
+      setSelectedAmenities([]);
+      setClientOriginCoords(null);
+      setIsScheduledRide(false);
+      setScheduledDate('');
+      setScheduledTime('');
+      setClientSubTab('scheduled');
+      showToast('Corrida agendada com sucesso! Você pode acompanhá-la na aba "Agendadas".', 'success');
+    }
     setRides(prev => [newRide, ...prev.filter(r => r.id !== rideId)]);
 
     // 2. Se for Pix e restar valor a pagar, exibe o modal de pagamento Pix
@@ -1264,13 +1279,15 @@ export function App() {
     const isSearching = targetRide.status === 'searching';
     const acceptedTs = targetRide.acceptedAt || targetRide.createdAt || Date.now();
     const elapsedSeconds = Math.floor((Date.now() - acceptedTs) / 1000);
-    const isWithinFreePeriod = isSearching || elapsedSeconds <= 300;
+    const isWithinFreePeriod = targetRide.isScheduled || isSearching || elapsedSeconds <= 300;
 
     if (isWithinFreePeriod) {
       showConfirm(
-        isSearching
-          ? 'Deseja realmente cancelar a busca pelo motorista? Nenhum valor será cobrado.'
-          : `Você está dentro do prazo de 5 minutos de cancelamento gratuito. Deseja realmente cancelar a chamada sem nenhum custo?${targetRide.paymentMethod !== 'cash' ? ' O valor pago será estornado integralmente para sua carteira.' : ''}`,
+        targetRide.isScheduled
+          ? `Deseja realmente cancelar este agendamento?${targetRide.paymentMethod !== 'cash' ? ' O valor pago será estornado integralmente para sua carteira.' : ''}`
+          : isSearching
+            ? 'Deseja realmente cancelar a busca pelo motorista? Nenhum valor será cobrado.'
+            : `Você está dentro do prazo de 5 minutos de cancelamento gratuito. Deseja realmente cancelar a chamada sem nenhum custo?${targetRide.paymentMethod !== 'cash' ? ' O valor pago será estornado integralmente para sua carteira.' : ''}`,
         async () => {
           await dbCancelRide(rideId, isSearching ? 'Cancelado pelo passageiro durante a busca' : 'Cancelado pelo passageiro (dentro do prazo de 5 minutos)', 'client');
           if (targetRide.paymentMethod !== 'cash' && targetRide.clientId && targetRide.total > 0) {
@@ -1582,10 +1599,22 @@ export function App() {
   // ========================================================
   const isRideActive = (status?: string) => status === 'searching' || status === 'accepted' || status === 'to_pickup' || status === 'arrived_at_pickup' || status === 'in_progress';
 
-  const activeClientRide = 
-    (currentRideId ? rides.find(r => r.id === currentRideId && isRideActive(r.status)) : null) || 
-    rides.find(r => currentUser && r.clientId === currentUser.id && isRideActive(r.status)) ||
+  // Todas as corridas agendadas ativas do passageiro (exibidas na aba Agendadas com cards expansíveis)
+  const clientScheduledRides = rides.filter(r => 
+    currentUser && 
+    r.clientId === currentUser.id && 
+    r.isScheduled && 
+    isRideActive(r.status)
+  );
+
+  // Solicitação imediata do passageiro (apenas esta substitui o formulário na aba Solicitar)
+  const activeClientImmediateRide = 
+    (currentRideId ? rides.find(r => r.id === currentRideId && !r.isScheduled && isRideActive(r.status)) : null) || 
+    rides.find(r => currentUser && r.clientId === currentUser.id && !r.isScheduled && isRideActive(r.status)) ||
     null;
+
+  // activeClientRide permanece vinculado à corrida imediata para não bloquear a interface de novos pedidos
+  const activeClientRide = activeClientImmediateRide;
   const pendingRides = rides.filter(r => {
     if (r.status !== 'searching') return false;
     // Administradores veem todas para testes e controle
@@ -2585,6 +2614,28 @@ export function App() {
                   </button>
 
                   <button
+                    onClick={() => setClientSubTab('scheduled')}
+                    className={clientSubTab === 'scheduled' ? 'btn-primary' : 'btn-outline'}
+                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', fontSize: '0.9rem', borderRadius: '14px', position: 'relative' }}
+                  >
+                    <Calendar size={18} />
+                    <span>Agendadas</span>
+                    {clientScheduledRides.length > 0 && (
+                      <span style={{
+                        background: '#f59e0b',
+                        color: '#000',
+                        fontSize: '0.72rem',
+                        fontWeight: 800,
+                        padding: '1px 7px',
+                        borderRadius: '10px',
+                        marginLeft: '4px'
+                      }}>
+                        {clientScheduledRides.length}
+                      </span>
+                    )}
+                  </button>
+
+                  <button
                     onClick={() => setClientSubTab('nearby_radar')}
                     className={clientSubTab === 'nearby_radar' ? 'btn-primary' : 'btn-outline'}
                     style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', fontSize: '0.9rem', borderRadius: '14px' }}
@@ -2675,8 +2726,405 @@ export function App() {
                   />
                 )}
 
+                {/* SUB-ABA: CORRIDAS AGENDADAS DO PASSAGEIRO */}
+                {clientSubTab === 'scheduled' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '850px', margin: '0 auto', width: '100%' }}>
+                    {/* Cabeçalho da Aba Agendadas */}
+                    <div className="glass-panel" style={{ padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                        <div style={{
+                          width: '46px',
+                          height: '46px',
+                          borderRadius: '14px',
+                          background: 'rgba(245, 158, 11, 0.18)',
+                          color: '#f59e0b',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          boxShadow: '0 4px 12px rgba(245, 158, 11, 0.25)'
+                        }}>
+                          <Calendar size={24} />
+                        </div>
+                        <div>
+                          <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#fff', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            Minhas Corridas Agendadas
+                            {clientScheduledRides.length > 0 && (
+                              <span style={{
+                                background: '#f59e0b',
+                                color: '#000',
+                                fontSize: '0.75rem',
+                                padding: '2px 8px',
+                                borderRadius: '12px',
+                                fontWeight: 900
+                              }}>
+                                {clientScheduledRides.length}
+                              </span>
+                            )}
+                          </h2>
+                          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>
+                            Acompanhe suas viagens programadas, motoristas parceiros e itinerários.
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setClientSubTab('request');
+                          setIsScheduledRide(true);
+                        }}
+                        className="btn-primary"
+                        style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', fontSize: '0.88rem' }}
+                      >
+                        <Calendar size={16} />
+                        <span>Agendar Nova Corrida</span>
+                      </button>
+                    </div>
+
+                    {/* Lista ou Estado Vazio */}
+                    {clientScheduledRides.length === 0 ? (
+                      <div className="glass-panel" style={{ padding: '48px 24px', textAlign: 'center', border: '1px dashed rgba(255, 255, 255, 0.15)' }}>
+                        <div style={{
+                          width: '68px',
+                          height: '68px',
+                          borderRadius: '50%',
+                          background: 'rgba(245, 158, 11, 0.12)',
+                          color: '#f59e0b',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          margin: '0 auto 16px'
+                        }}>
+                          <Calendar size={34} />
+                        </div>
+                        <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#fff', marginBottom: '8px' }}>
+                          Nenhuma corrida agendada no momento
+                        </h3>
+                        <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', maxWidth: '460px', margin: '0 auto 24px', lineHeight: 1.5 }}>
+                          Planeje seus deslocamentos com antecedência. Você pode marcar a data, o horário exato e selecionar comodidades especiais como transporte PCD ou veículo espaçoso.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setClientSubTab('request');
+                            setIsScheduledRide(true);
+                          }}
+                          className="btn-primary"
+                          style={{ padding: '12px 24px', fontWeight: 700 }}
+                        >
+                          Agendar uma Corrida Agora
+                        </button>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                        {clientScheduledRides.map(r => {
+                          const isExpanded = !!expandedScheduledRideIds[r.id];
+                          const assignedDriver = allDriversList.find(d => d.userId === r.driverId || d.id === r.driverId);
+                          const isAssigned = Boolean(r.driverId && r.status !== 'searching');
+                          const amenities = safeAmenitiesArray(r.requiredAmenities);
+
+                          return (
+                            <div
+                              key={r.id}
+                              className="glass-panel"
+                              style={{
+                                padding: 0,
+                                overflow: 'hidden',
+                                border: isAssigned ? '1.5px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(245, 158, 11, 0.4)',
+                                background: isAssigned ? 'rgba(15, 23, 42, 0.95)' : 'rgba(15, 23, 42, 0.9)',
+                                transition: 'all 0.25s ease'
+                              }}
+                            >
+                              {/* Header do Card (Clicável para expandir) */}
+                              <div
+                                onClick={() => toggleScheduledRideExpand(r.id)}
+                                style={{
+                                  padding: '18px 20px',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  gap: '14px',
+                                  flexWrap: 'wrap',
+                                  userSelect: 'none'
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1, minWidth: '260px' }}>
+                                  <div style={{
+                                    width: '42px',
+                                    height: '42px',
+                                    borderRadius: '12px',
+                                    background: isAssigned ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                                    color: isAssigned ? '#10b981' : '#f59e0b',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    flexShrink: 0
+                                  }}>
+                                    <Calendar size={20} />
+                                  </div>
+                                  <div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                      <span style={{ fontSize: '1rem', fontWeight: 800, color: '#fff' }}>
+                                        {formatScheduledDate(r.scheduledFor)}
+                                      </span>
+                                      <span style={{
+                                        fontSize: '0.7rem',
+                                        padding: '3px 8px',
+                                        borderRadius: '8px',
+                                        fontWeight: 800,
+                                        background: isAssigned ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)',
+                                        color: isAssigned ? '#34d399' : '#fbbf24',
+                                        border: `1px solid ${isAssigned ? 'rgba(16, 185, 129, 0.4)' : 'rgba(245, 158, 11, 0.4)'}`
+                                      }}>
+                                        {isAssigned ? '✅ Motorista Confirmado' : '🕒 No Mural de Agendamentos'}
+                                      </span>
+                                    </div>
+                                    <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                                      {r.origin.split(',')[0]} ➔ {r.destination.split(',')[0]}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                  <div style={{ textAlign: 'right' }}>
+                                    <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#10b981' }}>
+                                      {formatCurrency(r.total)}
+                                    </div>
+                                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                                      {r.hours}h contratada{r.hours > 1 ? 's' : ''}
+                                    </div>
+                                  </div>
+                                  <div style={{
+                                    width: '32px',
+                                    height: '32px',
+                                    borderRadius: '8px',
+                                    background: 'rgba(255, 255, 255, 0.05)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    color: 'var(--text-muted)'
+                                  }}>
+                                    {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Conteúdo Expandido com Detalhes Completos */}
+                              {isExpanded && (
+                                <div style={{
+                                  padding: '16px 20px 20px',
+                                  borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                                  background: 'rgba(0, 0, 0, 0.2)',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: '16px'
+                                }}>
+                                  {/* Rota Completa */}
+                                  <div style={{
+                                    background: 'rgba(15, 23, 42, 0.6)',
+                                    borderRadius: '12px',
+                                    padding: '14px',
+                                    border: '1px solid var(--border-subtle)',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '10px'
+                                  }}>
+                                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                                      <span style={{ color: '#10b981', fontWeight: 700, fontSize: '0.85rem', flexShrink: 0 }}>🟢 Partida:</span>
+                                      <span style={{ fontSize: '0.85rem', color: '#e2e8f0' }}>{r.origin}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                                      <span style={{ color: '#ef4444', fontWeight: 700, fontSize: '0.85rem', flexShrink: 0 }}>🔴 Destino:</span>
+                                      <span style={{ fontSize: '0.85rem', color: '#e2e8f0' }}>{r.destination}</span>
+                                    </div>
+                                  </div>
+
+                                  {/* Seção do Motorista Parceiro */}
+                                  {isAssigned ? (
+                                    <div style={{
+                                      background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(15, 23, 42, 0.8) 100%)',
+                                      border: '1px solid rgba(16, 185, 129, 0.3)',
+                                      borderRadius: '12px',
+                                      padding: '14px 16px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      gap: '12px',
+                                      flexWrap: 'wrap'
+                                    }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                        <div style={{
+                                          width: '44px',
+                                          height: '44px',
+                                          borderRadius: '50%',
+                                          background: 'rgba(16, 185, 129, 0.25)',
+                                          color: '#10b981',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          fontWeight: 800,
+                                          fontSize: '1.1rem'
+                                        }}>
+                                          {(assignedDriver?.driverName || assignedDriver?.fullName || 'M')[0].toUpperCase()}
+                                        </div>
+                                        <div>
+                                          <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#fff' }}>
+                                            {assignedDriver?.driverName || assignedDriver?.fullName || 'Motorista Parceiro Confirmado'}
+                                          </div>
+                                          <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '2px' }}>
+                                            {assignedDriver?.vehicleBrand ? `${assignedDriver.vehicleBrand} ${assignedDriver.vehicleModel} • Placa ${assignedDriver.vehiclePlate}` : 'Veículo Regularizado'}
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      {assignedDriver?.phone && (
+                                        <div style={{ fontSize: '0.8rem', color: '#a7f3d0', background: 'rgba(16, 185, 129, 0.15)', padding: '6px 12px', borderRadius: '8px' }}>
+                                          📞 Contato: {assignedDriver.phone}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <div style={{
+                                      background: 'rgba(245, 158, 11, 0.08)',
+                                      border: '1px solid rgba(245, 158, 11, 0.25)',
+                                      borderRadius: '12px',
+                                      padding: '12px 16px',
+                                      fontSize: '0.83rem',
+                                      color: '#fde68a',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '10px'
+                                    }}>
+                                      <Radio size={18} className="animate-pulse" color="#f59e0b" style={{ flexShrink: 0 }} />
+                                      <span>
+                                        <strong>Agendamento em Aberto:</strong> Esta solicitação está disponível no painel de oportunidades para os motoristas parceiros. Você receberá a confirmação assim que um motorista reservar sua agenda.
+                                      </span>
+                                    </div>
+                                  )}
+
+                                  {/* Comodidades Requisitadas */}
+                                  {amenities.length > 0 && (
+                                    <div>
+                                      <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                                        Comodidades Requisitadas:
+                                      </div>
+                                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                        {amenities.map(am => (
+                                          <span
+                                            key={am}
+                                            style={{
+                                              fontSize: '0.75rem',
+                                              fontWeight: 600,
+                                              padding: '4px 10px',
+                                              borderRadius: '8px',
+                                              background: am === 'acessibilidade_pcd' ? 'rgba(59, 130, 246, 0.25)' : 'rgba(255, 255, 255, 0.08)',
+                                              color: am === 'acessibilidade_pcd' ? '#93c5fd' : '#cbd5e1',
+                                              border: am === 'acessibilidade_pcd' ? '1px solid #3b82f6' : '1px solid var(--border-subtle)'
+                                            }}
+                                          >
+                                            {am === 'acessibilidade_pcd' ? '♿ Adaptado PCD' :
+                                             am === 'ar_condicionado' ? '❄️ Ar-condicionado' :
+                                             am === 'porta_malas_grande' ? '🧳 Porta-malas G' :
+                                             am === 'pet_friendly' ? '🐾 Pet Friendly' :
+                                             am === 'cadeirinha_bebe' ? '👶 Cadeirinha' : am}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Rodapé do Card com Ações */}
+                                  <div style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    paddingTop: '10px',
+                                    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                                    flexWrap: 'wrap',
+                                    gap: '12px'
+                                  }}>
+                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                      ID: #{r.id.slice(-8).toUpperCase()} • Pagamento: {r.paymentMethod === 'pix' ? 'Pix' : r.paymentMethod === 'credit_card' ? 'Cartão de Crédito' : 'Dinheiro'}
+                                    </div>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => handleCancelRideByClient(r.id)}
+                                      className="btn-outline"
+                                      style={{
+                                        padding: '7px 14px',
+                                        fontSize: '0.8rem',
+                                        color: '#ef4444',
+                                        borderColor: 'rgba(239, 68, 68, 0.4)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px'
+                                      }}
+                                    >
+                                      <Trash2 size={14} />
+                                      <span>Cancelar Agendamento</span>
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {clientSubTab === 'request' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    {/* Banner Informativo de Corridas Agendadas */}
+                    {clientScheduledRides.length > 0 && !activeClientRide && (
+                      <div className="glass-panel" style={{
+                        padding: '14px 20px',
+                        border: '1px solid rgba(245, 158, 11, 0.4)',
+                        background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.12) 0%, rgba(15, 23, 42, 0.85) 100%)',
+                        borderRadius: '16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '14px',
+                        flexWrap: 'wrap'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <div style={{
+                            width: '40px',
+                            height: '40px',
+                            borderRadius: '10px',
+                            background: 'rgba(245, 158, 11, 0.2)',
+                            color: '#f59e0b',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0
+                          }}>
+                            <Calendar size={20} />
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#fef3c7' }}>
+                              Você possui {clientScheduledRides.length} corrida{clientScheduledRides.length > 1 ? 's' : ''} agendada{clientScheduledRides.length > 1 ? 's' : ''}
+                            </div>
+                            <div style={{ fontSize: '0.8rem', color: '#cbd5e1', marginTop: '2px' }}>
+                              Acompanhe os detalhes e motoristas parceiros na aba dedicada.
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setClientSubTab('scheduled')}
+                          className="btn-primary"
+                          style={{ padding: '8px 16px', fontSize: '0.82rem', background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: '#000', fontWeight: 800 }}
+                        >
+                          Ver Agendadas ➔
+                        </button>
+                      </div>
+                    )}
+
                     {/* Banner de Aviso de Corrida Cancelada pelo Motorista com Justificativa e Estorno em Créditos */}
                     {cancelledRideForClient && !activeClientRide && (
                       <div className="glass-panel" style={{
@@ -4943,39 +5391,65 @@ export function App() {
                   )}
 
                   {/* Cards de Métricas */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '24px' }}>
-                    <div style={{
-                      background: 'rgba(15, 23, 42, 0.8)',
-                      padding: '16px',
-                      borderRadius: '14px',
-                      border: '1px solid var(--border-subtle)'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
-                        <DollarSign size={16} color="#10b981" />
-                        <span>Ganhos Líquidos</span>
-                      </div>
-                      <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#10b981', marginTop: '6px' }}>
-                        {formatCurrency(driverEarnings)}
-                      </div>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Repasse de 85% do total</div>
-                    </div>
+                  {(() => {
+                    const isDateToday = (ts?: number | string | null) => {
+                      if (!ts) return false;
+                      const d = new Date(ts);
+                      if (isNaN(d.getTime())) return false;
+                      const nowDate = new Date();
+                      return d.getDate() === nowDate.getDate() && d.getMonth() === nowDate.getMonth() && d.getFullYear() === nowDate.getFullYear();
+                    };
 
-                    <div style={{
-                      background: 'rgba(15, 23, 42, 0.8)',
-                      padding: '16px',
-                      borderRadius: '14px',
-                      border: '1px solid var(--border-subtle)'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
-                        <Award size={16} color="#f59e0b" />
-                        <span>Corridas Feitas</span>
+                    const myDriverCompletedRides = rides.filter(r => 
+                      r.status === 'finished' && 
+                      (r.driverId === currentUser?.id || (!r.driverId && isUserAdmin))
+                    );
+                    const myDriverCompletedToday = myDriverCompletedRides.filter(r => 
+                      isDateToday(r.finishedAt || r.createdAt || (r as any).created_at)
+                    );
+                    const myDriverAccumulatedEarnings = myDriverCompletedRides.reduce((acc, cur) => acc + (cur.driverNet || 0), 0);
+                    const myDriverTodayEarnings = myDriverCompletedToday.reduce((acc, cur) => acc + (cur.driverNet || 0), 0);
+
+                    return (
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '24px' }}>
+                        <div style={{
+                          background: 'rgba(15, 23, 42, 0.8)',
+                          padding: '16px',
+                          borderRadius: '14px',
+                          border: '1px solid var(--border-subtle)'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+                            <DollarSign size={16} color="#10b981" />
+                            <span>Ganhos Líquidos</span>
+                          </div>
+                          <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#10b981', marginTop: '6px' }}>
+                            {formatCurrency(myDriverAccumulatedEarnings)}
+                          </div>
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                            Repasse de 85% ({formatCurrency(myDriverTodayEarnings)} hoje)
+                          </div>
+                        </div>
+
+                        <div style={{
+                          background: 'rgba(15, 23, 42, 0.8)',
+                          padding: '16px',
+                          borderRadius: '14px',
+                          border: '1px solid var(--border-subtle)'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+                            <Award size={16} color="#f59e0b" />
+                            <span>Corridas Feitas</span>
+                          </div>
+                          <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#fff', marginTop: '6px' }}>
+                            {myDriverCompletedToday.length}
+                          </div>
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                            Completadas hoje ({myDriverCompletedRides.length} no total)
+                          </div>
+                        </div>
                       </div>
-                      <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#fff', marginTop: '6px' }}>
-                        {rides.filter(r => r.status === 'finished').length}
-                      </div>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Completadas hoje</div>
-                    </div>
-                  </div>
+                    );
+                  })()}
 
                   {driverSubTab === 'radar' ? (
                     <>
@@ -6141,6 +6615,39 @@ export function App() {
                 <Car size={19} />
               </div>
               <span>Solicitar</span>
+            </button>
+ 
+            <button
+              onClick={() => {
+                setClientSubTab('scheduled');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className={`mobile-nav-item ${clientSubTab === 'scheduled' ? 'active' : ''}`}
+            >
+              <div className="icon-wrapper" style={{ position: 'relative' }}>
+                <Calendar size={19} />
+                {clientScheduledRides.length > 0 && (
+                  <span style={{
+                    position: 'absolute',
+                    top: '-4px',
+                    right: '-6px',
+                    background: '#f59e0b',
+                    color: '#000',
+                    fontSize: '0.62rem',
+                    fontWeight: 900,
+                    width: '16px',
+                    height: '16px',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 0 6px rgba(245, 158, 11, 0.8)'
+                  }}>
+                    {clientScheduledRides.length}
+                  </span>
+                )}
+              </div>
+              <span>Agendadas</span>
             </button>
 
             <button
