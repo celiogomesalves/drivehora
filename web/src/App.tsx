@@ -2717,6 +2717,9 @@ export function App() {
                   <ClientProfileManager
                     user={currentUser}
                     initialProfile={clientProfile}
+                    isApproved={Boolean(clientProfile?.isProfileComplete || (clientProfile as any)?.verificationStatus === 'approved')}
+                    hasCompletedRides={rides.some(r => r.clientId === currentUser.id && (r.status === 'finished' || (r.status as string) === 'completed'))}
+                    isUserAdmin={isUserAdmin}
                     onSaveSuccess={(updated) => {
                       setClientProfile(updated);
                       if (updated.fullName) {
@@ -2764,41 +2767,41 @@ export function App() {
 
                 {/* SUB-ABA: CORRIDAS AGENDADAS DO PASSAGEIRO */}
                 {clientSubTab === 'scheduled' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '850px', margin: '0 auto', width: '100%' }}>
-                    {/* Cabeçalho da Aba Agendadas */}
-                    <div className="glass-panel" style={{ padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxWidth: '850px', margin: '0 auto', width: '100%' }}>
+                    {/* Cabeçalho da Aba Agendadas - Compacto e Elegante */}
+                    <div className="glass-panel" style={{ padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: '180px' }}>
                         <div style={{
-                          width: '46px',
-                          height: '46px',
-                          borderRadius: '14px',
+                          width: '36px',
+                          height: '36px',
+                          borderRadius: '10px',
                           background: 'rgba(245, 158, 11, 0.18)',
                           color: '#f59e0b',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          boxShadow: '0 4px 12px rgba(245, 158, 11, 0.25)'
+                          flexShrink: 0
                         }}>
-                          <Calendar size={24} />
+                          <Calendar size={18} />
                         </div>
                         <div>
-                          <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#fff', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            Minhas Corridas Agendadas
+                          <h2 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#fff', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            Agendadas
                             {clientScheduledRides.length > 0 && (
                               <span style={{
                                 background: '#f59e0b',
                                 color: '#000',
-                                fontSize: '0.75rem',
-                                padding: '2px 8px',
-                                borderRadius: '12px',
-                                fontWeight: 900
+                                fontSize: '0.7rem',
+                                padding: '1px 6px',
+                                borderRadius: '10px',
+                                fontWeight: 800
                               }}>
                                 {clientScheduledRides.length}
                               </span>
                             )}
                           </h2>
-                          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>
-                            Acompanhe suas viagens programadas, motoristas parceiros e itinerários.
+                          <p style={{ fontSize: '0.76rem', color: 'var(--text-secondary)', margin: '2px 0 0 0' }}>
+                            Acompanhe suas viagens programadas e itinerários
                           </p>
                         </div>
                       </div>
@@ -2810,10 +2813,19 @@ export function App() {
                           setIsScheduledRide(true);
                         }}
                         className="btn-primary"
-                        style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', fontSize: '0.88rem' }}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '7px 14px',
+                          fontSize: '0.82rem',
+                          whiteSpace: 'nowrap',
+                          flexShrink: 0,
+                          borderRadius: '8px'
+                        }}
                       >
-                        <Calendar size={16} />
-                        <span>Agendar Nova Corrida</span>
+                        <Calendar size={14} />
+                        <span>Agendar Corrida</span>
                       </button>
                     </div>
 
@@ -4588,29 +4600,44 @@ export function App() {
                 const totalSpent = filteredClientRides.reduce((acc, curr) => acc + (curr.total || 0), 0);
 
                 return (
-                  <div className="glass-panel" style={{ padding: '24px' }}>
-                    {/* Cabeçalho do Histórico com Totalizador */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px', marginBottom: '20px' }}>
-                      <div>
-                        <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <Clock size={22} color="#6366f1" />
-                          Histórico de Corridas
-                        </h3>
-                        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                          Gerencie seus registros de viagens, arquive para manter a tela limpa e consulte gastos.
-                        </p>
+                  <div className="glass-panel" style={{ padding: '16px 18px' }}>
+                    {/* Cabeçalho do Histórico com Totalizador Compacto */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '14px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{
+                          width: '36px',
+                          height: '36px',
+                          borderRadius: '10px',
+                          background: 'rgba(99, 102, 241, 0.15)',
+                          color: '#818cf8',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0
+                        }}>
+                          <Clock size={18} color="#818cf8" />
+                        </div>
+                        <div>
+                          <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#fff', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            Histórico de Corridas
+                          </h3>
+                          <p style={{ fontSize: '0.76rem', color: 'var(--text-secondary)', margin: '2px 0 0 0' }}>
+                            Gerencie seus registros e consulte seus gastos
+                          </p>
+                        </div>
                       </div>
 
                       {historyViewTab === 'active' && (
                         <div style={{
                           background: 'rgba(99, 102, 241, 0.12)',
                           border: '1px solid rgba(99, 102, 241, 0.3)',
-                          padding: '10px 18px',
-                          borderRadius: '12px',
-                          textAlign: 'right'
+                          padding: '6px 12px',
+                          borderRadius: '10px',
+                          textAlign: 'right',
+                          flexShrink: 0
                         }}>
-                          <div style={{ fontSize: '0.7rem', color: '#a5b4fc' }}>Total no Período Selecionado</div>
-                          <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#818cf8' }}>{formatCurrency(totalSpent)}</div>
+                          <div style={{ fontSize: '0.65rem', color: '#a5b4fc' }}>Total no Período</div>
+                          <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#818cf8' }}>{formatCurrency(totalSpent)}</div>
                         </div>
                       )}
                     </div>
@@ -4618,11 +4645,11 @@ export function App() {
                     {/* Alternador de Abas: Histórico Principal vs Corridas Arquivadas */}
                     <div style={{
                       display: 'flex',
-                      gap: '8px',
-                      marginBottom: '20px',
+                      gap: '6px',
+                      marginBottom: '14px',
                       background: 'rgba(15, 23, 42, 0.8)',
-                      padding: '4px',
-                      borderRadius: '14px',
+                      padding: '3px',
+                      borderRadius: '10px',
                       border: '1px solid var(--border-subtle)',
                       width: 'fit-content'
                     }}>
@@ -4633,19 +4660,20 @@ export function App() {
                           display: 'flex',
                           alignItems: 'center',
                           gap: '6px',
-                          padding: '8px 16px',
-                          borderRadius: '10px',
+                          padding: '6px 12px',
+                          borderRadius: '8px',
                           border: 'none',
                           cursor: 'pointer',
-                          fontSize: '0.85rem',
+                          fontSize: '0.8rem',
                           fontWeight: 700,
+                          whiteSpace: 'nowrap',
                           background: historyViewTab === 'active' ? 'var(--primary-gradient)' : 'transparent',
                           color: historyViewTab === 'active' ? '#fff' : 'var(--text-secondary)',
                           transition: 'all 0.2s ease'
                         }}
                       >
-                        <Clock size={15} />
-                        <span>Histórico Principal ({activeHistoryRides.length})</span>
+                        <Clock size={14} />
+                        <span>Principal ({activeHistoryRides.length})</span>
                       </button>
 
                       <button
@@ -4655,18 +4683,19 @@ export function App() {
                           display: 'flex',
                           alignItems: 'center',
                           gap: '6px',
-                          padding: '8px 16px',
-                          borderRadius: '10px',
+                          padding: '6px 12px',
+                          borderRadius: '8px',
                           border: 'none',
                           cursor: 'pointer',
-                          fontSize: '0.85rem',
+                          fontSize: '0.8rem',
                           fontWeight: 700,
+                          whiteSpace: 'nowrap',
                           background: historyViewTab === 'archived' ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'transparent',
                           color: historyViewTab === 'archived' ? '#000' : '#f59e0b',
                           transition: 'all 0.2s ease'
                         }}
                       >
-                        <Archive size={15} />
+                        <Archive size={14} />
                         <span>Arquivadas ({archivedHistoryRides.length})</span>
                       </button>
                     </div>
@@ -4679,26 +4708,27 @@ export function App() {
                           display: 'flex',
                           alignItems: 'center',
                           flexWrap: 'wrap',
-                          gap: '8px',
-                          padding: '12px 16px',
+                          gap: '6px',
+                          padding: '8px 12px',
                           background: 'rgba(255, 255, 255, 0.03)',
-                          borderRadius: '12px',
+                          borderRadius: '10px',
                           border: '1px solid var(--border-subtle)',
-                          marginBottom: '20px'
+                          marginBottom: '16px'
                         }}>
-                          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginRight: '4px' }}>
-                            <Filter size={15} color="#818cf8" />
-                            Filtrar por:
+                          <span style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px', marginRight: '4px', whiteSpace: 'nowrap' }}>
+                            <Filter size={13} color="#818cf8" />
+                            Filtrar:
                           </span>
 
                           <button
                             type="button"
                             onClick={() => setClientDateFilter('all')}
                             style={{
-                              padding: '6px 14px',
-                              borderRadius: '20px',
-                              fontSize: '0.8rem',
+                              padding: '4px 10px',
+                              borderRadius: '16px',
+                              fontSize: '0.75rem',
                               fontWeight: 600,
+                              whiteSpace: 'nowrap',
                               border: '1px solid var(--border-subtle)',
                               background: clientDateFilter === 'all' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
                               color: clientDateFilter === 'all' ? '#fff' : 'var(--text-secondary)',
@@ -4712,10 +4742,11 @@ export function App() {
                             type="button"
                             onClick={() => setClientDateFilter('today')}
                             style={{
-                              padding: '6px 14px',
-                              borderRadius: '20px',
-                              fontSize: '0.8rem',
+                              padding: '4px 10px',
+                              borderRadius: '16px',
+                              fontSize: '0.75rem',
                               fontWeight: 600,
+                              whiteSpace: 'nowrap',
                               border: '1px solid var(--border-subtle)',
                               background: clientDateFilter === 'today' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
                               color: clientDateFilter === 'today' ? '#fff' : 'var(--text-secondary)',
@@ -4729,10 +4760,11 @@ export function App() {
                             type="button"
                             onClick={() => setClientDateFilter('week')}
                             style={{
-                              padding: '6px 14px',
-                              borderRadius: '20px',
-                              fontSize: '0.8rem',
+                              padding: '4px 10px',
+                              borderRadius: '16px',
+                              fontSize: '0.75rem',
                               fontWeight: 600,
+                              whiteSpace: 'nowrap',
                               border: '1px solid var(--border-subtle)',
                               background: clientDateFilter === 'week' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
                               color: clientDateFilter === 'week' ? '#fff' : 'var(--text-secondary)',
@@ -4746,10 +4778,11 @@ export function App() {
                             type="button"
                             onClick={() => setClientDateFilter('15days')}
                             style={{
-                              padding: '6px 14px',
-                              borderRadius: '20px',
-                              fontSize: '0.8rem',
+                              padding: '4px 10px',
+                              borderRadius: '16px',
+                              fontSize: '0.75rem',
                               fontWeight: 600,
+                              whiteSpace: 'nowrap',
                               border: '1px solid var(--border-subtle)',
                               background: clientDateFilter === '15days' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
                               color: clientDateFilter === '15days' ? '#fff' : 'var(--text-secondary)',
@@ -4763,10 +4796,11 @@ export function App() {
                             type="button"
                             onClick={() => setClientDateFilter('30days')}
                             style={{
-                              padding: '6px 14px',
-                              borderRadius: '20px',
-                              fontSize: '0.8rem',
+                              padding: '4px 10px',
+                              borderRadius: '16px',
+                              fontSize: '0.75rem',
                               fontWeight: 600,
+                              whiteSpace: 'nowrap',
                               border: '1px solid var(--border-subtle)',
                               background: clientDateFilter === '30days' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
                               color: clientDateFilter === '30days' ? '#fff' : 'var(--text-secondary)',
@@ -4780,29 +4814,30 @@ export function App() {
                             type="button"
                             onClick={() => setClientDateFilter('custom')}
                             style={{
-                              padding: '6px 14px',
-                              borderRadius: '20px',
-                              fontSize: '0.8rem',
+                              padding: '4px 10px',
+                              borderRadius: '16px',
+                              fontSize: '0.75rem',
                               fontWeight: 600,
+                              whiteSpace: 'nowrap',
                               border: '1px solid var(--border-subtle)',
                               background: clientDateFilter === 'custom' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
                               color: clientDateFilter === 'custom' ? '#fff' : 'var(--text-secondary)',
                               cursor: 'pointer'
                             }}
                           >
-                            Data Específica
+                            Personalizado
                           </button>
 
                           {clientDateFilter === 'custom' && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: 'auto' }}>
                               <input
                                 type="date"
                                 value={clientCustomDate}
                                 onChange={(e) => setClientCustomDate(e.target.value)}
                                 className="input-field"
                                 style={{
-                                  padding: '5px 10px',
-                                  fontSize: '0.8rem',
+                                  padding: '4px 8px',
+                                  fontSize: '0.75rem',
                                   background: 'rgba(15, 23, 42, 0.9)',
                                   color: '#fff',
                                   border: '1px solid #6366f1',

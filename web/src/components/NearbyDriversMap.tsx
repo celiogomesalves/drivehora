@@ -355,25 +355,23 @@ export function NearbyDriversMap({
         </div>
 
         <div className="radar-actions-row">
-          {/* Botão de Enquadrar Visão Geral */}
+          {/* Botão de Enquadrar com Sincronização Integrada */}
           <button
-            onClick={() => fitMapToAllDrivers(true)}
-            title="Ajustar zoom para enquadrar a visão geral de todos os motoristas"
-            className="btn-outline radar-action-btn"
-            style={{ background: 'rgba(99, 102, 241, 0.1)', borderColor: 'rgba(99, 102, 241, 0.4)', color: '#a5b4fc' }}
-          >
-            <Maximize2 size={13} />
-            <span>Enquadrar</span>
-          </button>
-
-          <button
-            onClick={() => loadDrivers(true)}
+            onClick={() => {
+              loadDrivers(true);
+              fitMapToAllDrivers(true);
+            }}
             disabled={isSyncing}
+            title={`Sincronizar e enquadrar motoristas (última atualização: ${lastSyncTime.toLocaleTimeString()})`}
             className="btn-outline radar-action-btn"
-            title={`Atualizado às ${lastSyncTime.toLocaleTimeString()}`}
+            style={{ background: 'rgba(99, 102, 241, 0.12)', borderColor: 'rgba(99, 102, 241, 0.4)', color: '#a5b4fc' }}
           >
-            <RefreshCw size={13} className={isSyncing ? 'animate-spin' : ''} />
-            <span>Sincronizar</span>
+            {isSyncing ? (
+              <RefreshCw size={13} className="animate-spin" />
+            ) : (
+              <Maximize2 size={13} />
+            )}
+            <span>Enquadrar</span>
           </button>
 
           {onSelectDriverToRequest && (
@@ -426,7 +424,10 @@ export function NearbyDriversMap({
           </div>
 
           <button
-            onClick={() => fitMapToAllDrivers(true)}
+            onClick={() => {
+              loadDrivers(true);
+              fitMapToAllDrivers(true);
+            }}
             style={{
               background: 'rgba(15, 23, 42, 0.92)',
               backdropFilter: 'blur(10px)',

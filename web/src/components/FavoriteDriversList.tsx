@@ -52,24 +52,36 @@ export function FavoriteDriversList({
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      {/* Banner Superior da Lista VIP */}
-      <div className="glass-panel" style={{ padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <div style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', padding: '12px', borderRadius: '14px' }}>
-            <Heart size={28} fill="#ef4444" />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+      {/* Banner Superior da Lista VIP - Compacto e Elegante */}
+      <div className="glass-panel" style={{ padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: '180px' }}>
+          <div style={{
+            width: '36px',
+            height: '36px',
+            borderRadius: '10px',
+            background: 'rgba(239, 68, 68, 0.15)',
+            color: '#ef4444',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0
+          }}>
+            <Heart size={18} fill="#ef4444" />
           </div>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <h2 style={{ fontSize: '1.35rem', fontWeight: 800, margin: 0 }}>
-                Meus Motoristas Favoritos (VIP)
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <h2 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: '#fff' }}>
+                Motoristas Favoritos
               </h2>
-              <span style={{ fontSize: '0.7rem', background: 'rgba(239, 68, 68, 0.2)', color: '#f87171', padding: '2px 8px', borderRadius: '12px', fontWeight: 800 }}>
-                {favorites.length} FAVORITO(S)
-              </span>
+              {favorites.length > 0 && (
+                <span style={{ fontSize: '0.7rem', background: 'rgba(239, 68, 68, 0.2)', color: '#f87171', padding: '1px 6px', borderRadius: '10px', fontWeight: 800 }}>
+                  {favorites.length}
+                </span>
+              )}
             </div>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: '4px 0 0' }}>
-              Sua rede particular de confiança para viagens imediatas ou agendamentos exclusivos.
+            <p style={{ fontSize: '0.76rem', color: 'var(--text-secondary)', margin: '2px 0 0' }}>
+              Sua rede particular para viagens diretas e exclusivas
             </p>
           </div>
         </div>
@@ -77,10 +89,19 @@ export function FavoriteDriversList({
         <button
           onClick={onExploreRadar}
           className="btn-outline"
-          style={{ fontSize: '0.85rem', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '6px' }}
+          style={{
+            fontSize: '0.82rem',
+            padding: '7px 14px',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            whiteSpace: 'nowrap',
+            flexShrink: 0,
+            borderRadius: '8px'
+          }}
         >
-          <Zap size={15} color="#10b981" />
-          <span>Explorar no Radar</span>
+          <Zap size={14} color="#10b981" />
+          <span>Explorar Radar</span>
         </button>
       </div>
 
