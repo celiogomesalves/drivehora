@@ -175,9 +175,68 @@ export function App() {
   // Alerta de Sessão Concorrente / Desconexão Forçada
   const [forcedLogoutNotice, setForcedLogoutNotice] = useState<{ activeDevice: string } | null>(null);
 
-  // Perfis Onboarding
-  const [clientProfile, setClientProfile] = useState<ClientProfile | null>(null);
-  const [driverProfile, setDriverProfile] = useState<DriverProfile | null>(null);
+  // Perfis Onboarding (Recuperação síncrona imediata do cache local para evitar flicker ou tela incorreta no reload)
+  const [clientProfile, setClientProfile] = useState<ClientProfile | null>(() => {
+    try {
+      const savedUser = localStorage.getItem('drivehora_current_user');
+      if (!savedUser) return null;
+      const parsed = JSON.parse(savedUser);
+      if (!parsed?.id) return null;
+      const cached = localStorage.getItem(`drivehora_client_profile_${parsed.id}`);
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [driverProfile, setDriverProfile] = useState<DriverProfile | null>(() => {
+    try {
+      const savedUser = localStorage.getItem('drivehora_current_user');
+      if (!savedUser) return null;
+      const parsed = JSON.parse(savedUser);
+      if (!parsed?.id) return null;
+      const cached = localStorage.getItem(`drivehora_driver_profile_${parsed.id}`);
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  // Estado de carregamento/verificação inicial de perfil
+  const [isLoadingProfile, setIsLoadingProfile] = useState<boolean>(() => {
+    try {
+      const savedUser = localStorage.getItem('drivehora_current_user');
+      if (!savedUser) return false;
+      const parsed = JSON.parse(savedUser);
+      if (!parsed) return false;
+      if (isSuperAdminEmail(parsed.email) || parsed.role === 'admin' || parsed.isAdmin) return false;
+
+      // Se for cliente e já tiver o perfil completo salvo no cache local, pode exibir direto
+      if (parsed.role === 'client') {
+        const cachedClient = parsed.id ? localStorage.getItem(`drivehora_client_profile_${parsed.id}`) : null;
+        if (cachedClient) {
+          const p = JSON.parse(cachedClient);
+          if (p?.isProfileComplete) return false;
+        }
+        return true;
+      }
+
+      // Se for motorista e já tiver o perfil aprovado salvo no cache local, pode exibir direto
+      if (parsed.role === 'driver') {
+        const cachedDriver = parsed.id ? localStorage.getItem(`drivehora_driver_profile_${parsed.id}`) : null;
+        if (cachedDriver) {
+          const p = JSON.parse(cachedDriver);
+          if (p?.verificationStatus === 'approved') return false;
+        }
+        return true;
+      }
+
+      return false;
+    } catch {
+      return false;
+    }
+  });
+
   const [showDriverProfileEdit, setShowDriverProfileEdit] = useState(false);
 
   // Supabase state & modal
@@ -719,9 +778,23 @@ export function App() {
   // Carregar perfis do banco sempre que o usuário mudar
   useEffect(() => {
     const loadUserProfiles = async () => {
-      if (!currentUser) return;
+      if (!currentUser) {
+        setIsLoadingProfile(false);
+        return;
+      }
 
       try {
+        // Se o perfil ainda não estiver carregado ou homologado, garante tela de carregamento ativa
+        const isAdmin = isSuperAdminEmail(currentUser.email) || currentUser.role === 'admin' || currentUser.isAdmin;
+        if (!isAdmin) {
+          if (
+            (currentUser.role === 'client' && (!clientProfile || !clientProfile.isProfileComplete)) ||
+            (currentUser.role === 'driver' && (!driverProfile || driverProfile.verificationStatus !== 'approved'))
+          ) {
+            setIsLoadingProfile(true);
+          }
+        }
+
         // Sempre carregar ambos os perfis (essencial para Admin e usuários multirrole)
         const [cp, dp] = await Promise.all([
           dbGetClientProfile(currentUser.id, currentUser.email),
@@ -753,6 +826,8 @@ export function App() {
         }
       } catch (err) {
         console.warn('Erro ao carregar perfis do usuário no banco:', err);
+      } finally {
+        setIsLoadingProfile(false);
       }
     };
     loadUserProfiles();
@@ -1072,6 +1147,7 @@ export function App() {
     setClientProfile(null);
     setDriverProfile(null);
     setIsDriverOnline(false);
+    setIsLoadingProfile(false);
   };
 
   // Solicitar corrida como cliente
@@ -1842,6 +1918,7 @@ export function App() {
               setActiveTab('client');
             }
             setCurrentUser(user);
+            setIsLoadingProfile(!isAdmin);
           }}
         />
         {forcedLogoutNotice && (
@@ -2646,11 +2723,67 @@ export function App() {
         {/* TAB 1: CLIENTE (PASSAGEIRO) */}
         {activeTab === 'client' && (
           <div>
-            {!isUserAdmin && currentUser.role === 'client' && (!clientProfile || !clientProfile.isProfileComplete) ? (
+            {isLoadingProfile && (!clientProfile || !clientProfile.isProfileComplete) ? (
+              <div style={{
+                minHeight: '400px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '60px 20px',
+                textAlign: 'center'
+              }}>
+                <div style={{
+                  position: 'relative',
+                  width: '84px',
+                  height: '84px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: '24px'
+                }}>
+                  <div style={{
+                    position: 'absolute',
+                    inset: 0,
+                    borderRadius: '50%',
+                    border: '3px solid rgba(99, 102, 241, 0.15)',
+                    borderTopColor: '#6366f1',
+                    animation: 'spin 1s linear infinite'
+                  }} />
+                  <Car size={36} color="#6366f1" style={{ animation: 'pulse 2s infinite' }} />
+                </div>
+
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '8px' }}>
+                  Preparando o DriveHora...
+                </h3>
+                <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', maxWidth: '360px', lineHeight: 1.5, margin: '0 0 20px 0' }}>
+                  Verificando seu cadastro e carregando a tela de solicitações.
+                </p>
+
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px 16px',
+                  background: 'rgba(99, 102, 241, 0.08)',
+                  borderRadius: '20px',
+                  border: '1px solid rgba(99, 102, 241, 0.2)',
+                  fontSize: '0.8rem',
+                  color: '#818cf8',
+                  fontWeight: 600
+                }}>
+                  <RefreshCw size={14} style={{ animation: 'spin 1.5s linear infinite' }} />
+                  <span>Sincronizando dados com o servidor...</span>
+                </div>
+              </div>
+            ) : !isUserAdmin && currentUser.role === 'client' && (!clientProfile || !clientProfile.isProfileComplete) ? (
               <ClientOnboarding
                 user={currentUser}
                 initialProfile={clientProfile}
-                onComplete={(cp) => setClientProfile(cp)}
+                onComplete={(cp) => {
+                  setClientProfile(cp);
+                  setIsLoadingProfile(false);
+                }}
               />
             ) : (
               <div>
@@ -5470,14 +5603,67 @@ export function App() {
         {/* TAB 2: MOTORISTA */}
         {activeTab === 'driver' && (
           <div>
-            {/* Se o motorista não for admin e ainda não foi aprovado, exibe onboarding */}
-            {!isUserAdmin && (!driverProfile || driverProfile.verificationStatus !== 'approved') ? (
+            {isLoadingProfile && (!driverProfile || driverProfile.verificationStatus !== 'approved') ? (
+              <div style={{
+                minHeight: '400px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '60px 20px',
+                textAlign: 'center'
+              }}>
+                <div style={{
+                  position: 'relative',
+                  width: '84px',
+                  height: '84px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: '24px'
+                }}>
+                  <div style={{
+                    position: 'absolute',
+                    inset: 0,
+                    borderRadius: '50%',
+                    border: '3px solid rgba(16, 185, 129, 0.15)',
+                    borderTopColor: '#10b981',
+                    animation: 'spin 1s linear infinite'
+                  }} />
+                  <Car size={36} color="#10b981" style={{ animation: 'pulse 2s infinite' }} />
+                </div>
+
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '8px' }}>
+                  Preparando Painel do Motorista...
+                </h3>
+                <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', maxWidth: '360px', lineHeight: 1.5, margin: '0 0 20px 0' }}>
+                  Verificando credenciais e status de homologação.
+                </p>
+
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px 16px',
+                  background: 'rgba(16, 185, 129, 0.08)',
+                  borderRadius: '20px',
+                  border: '1px solid rgba(16, 185, 129, 0.2)',
+                  fontSize: '0.8rem',
+                  color: '#34d399',
+                  fontWeight: 600
+                }}>
+                  <RefreshCw size={14} style={{ animation: 'spin 1.5s linear infinite' }} />
+                  <span>Sincronizando dados com o servidor...</span>
+                </div>
+              </div>
+            ) : !isUserAdmin && (!driverProfile || driverProfile.verificationStatus !== 'approved') ? (
               <DriverOnboarding
                 user={currentUser}
                 initialProfile={driverProfile}
                 initialStep={driverOnboardingInitialStep}
                 onComplete={(dp) => {
                   setDriverProfile(dp);
+                  setIsLoadingProfile(false);
                   if (dp.fullName) {
                     setCurrentUser(prev => prev ? { ...prev, fullName: dp.fullName!, phone: dp.phone || prev.phone } : prev);
                     try {

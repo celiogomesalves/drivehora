@@ -742,3 +742,23 @@ h1, h2, h3, h4, h5, h6 {
 .animate-modal-alert {
   animation: alert-modal-glow 1.5s ease-in-out infinite;
 }
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 0.8;
+  }
+}
