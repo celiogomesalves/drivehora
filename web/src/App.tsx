@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Car, Clock, DollarSign, Navigation, ShieldCheck, 
   Smartphone, Users, RefreshCw, CheckCircle2, 
@@ -6,7 +6,7 @@ import {
   X, Check, LogOut, MapPin, Crown, AlertTriangle, UserCheck,
   BellRing, Volume2, VolumeX, Ban, AlertOctagon, Heart, ShieldAlert, RotateCcw,
   Filter, Archive, ArchiveRestore, Trash2, CreditCard,
-  ChevronDown, ChevronUp
+  ChevronDown, ChevronUp, AlertCircle, Headphones
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import confetti from 'canvas-confetti';
@@ -23,6 +23,10 @@ import { DriverProfileModal } from './components/DriverProfileModal';
 import { FavoriteDriversList } from './components/FavoriteDriversList';
 import { ReportIssueModal } from './components/ReportIssueModal';
 import { ClientProfileManager } from './components/ClientProfileManager';
+import { RatingModal } from './components/RatingModal';
+import { DriverCancelModal } from './components/DriverCancelModal';
+import { getUserWallet, addWalletCredit, addWalletDebit, type UserWallet } from './services/walletService';
+import { dbCreateRideReport } from './services/dbService';
 import { GpsNavigationModal } from './components/GpsNavigationModal';
 import { getDriverPreferredGps, launchNavigationApp } from './services/gpsNavigationService';
 import { sendAppNotification, requestNotificationPermission } from './services/soundAndNotificationService';
@@ -273,6 +277,20 @@ export function App() {
     externalId?: string;
   } | null>(null);
   const [isCopiedPix, setIsCopiedPix] = useState(false);
+
+  // Carteira, Avaliações e Cancelamento com Justificativa
+  const [clientWallet, setClientWallet] = useState<UserWallet | null>(null);
+  const [activeRatingRide, setActiveRatingRide] = useState<DbRide | null>(null);
+  const [driverCancelModalRide, setDriverCancelModalRide] = useState<DbRide | null>(null);
+  const [showDebtSupportModal, setShowDebtSupportModal] = useState<boolean>(false);
+  const [debtSupportMessage, setDebtSupportMessage] = useState<string>('');
+  const [isSubmittingDebtSupport, setIsSubmittingDebtSupport] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (currentUser?.id) {
+      getUserWallet(currentUser.id).then(setClientWallet);
+    }
+  }, [currentUser?.id]);
 
   // Status de Integridade do Gateway (Trava de Segurança Obrigatória para o Sistema Operar)
   const [gatewayOperational, setGatewayOperational] = useState<boolean>(true);
@@ -776,12 +794,20 @@ export function App() {
             driverName: profilesMap.get(d.driver_id) || d.driver_name || (d.driver_id ? 'Motorista Parceiro' : undefined),
             origin: d.origin,
             destination: d.destination,
+            originLat: d.origin_lat !== undefined && d.origin_lat !== null ? Number(d.origin_lat) : d.originLat,
+            originLng: d.origin_lng !== undefined && d.origin_lng !== null ? Number(d.origin_lng) : d.originLng,
+            destLat: d.dest_lat !== undefined && d.dest_lat !== null ? Number(d.dest_lat) : d.destLat,
+            destLng: d.dest_lng !== undefined && d.dest_lng !== null ? Number(d.dest_lng) : d.destLng,
             hours: Number(d.hours),
             hourlyRate: Number(d.hourly_rate),
             total: Number(d.total),
             commission: Number(d.commission),
             driverNet: Number(d.driver_net),
             status: d.status,
+            paymentMethod: d.payment_method || d.paymentMethod,
+            paymentStatus: d.payment_status || d.paymentStatus,
+            cancellationReason: d.cancellation_reason || d.cancellationReason,
+            cancelledBy: d.cancelled_by || d.cancelledBy,
             driverAcknowledgedAt: d.driver_acknowledged_at ? new Date(d.driver_acknowledged_at).getTime() : undefined,
             createdAt: new Date(d.created_at).getTime(),
             acceptedAt: d.accepted_at ? new Date(d.accepted_at).getTime() : undefined,
@@ -906,6 +932,27 @@ export function App() {
       return;
     }
 
+    // 1. Passageiro só pode fazer uma solicitação por vez
+    if (activeClientRide) {
+      showAlert(
+        `Você já possui uma solicitação de corrida em atendimento (#${activeClientRide.id.slice(-6)}). Conclua ou cancele a corrida atual para fazer um novo pedido.`,
+        'warning',
+        'Solicitação Ativa em Andamento'
+      );
+      return;
+    }
+
+    // 2. Bloqueio em caso de débito pendente na conta
+    if (clientWallet && clientWallet.balance < 0) {
+      showAlert(
+        `Você possui um saldo devedor pendente de ${formatCurrency(Math.abs(clientWallet.balance))}. Regularize a pendência junto ao nosso suporte para liberar novas solicitações.`,
+        'warning',
+        'Conta com Débito Pendente'
+      );
+      setShowDebtSupportModal(true);
+      return;
+    }
+
     if (!gatewayOperational) {
       showAlert(
         'As solicitações de corrida estão momentaneamente indisponíveis porque o sistema de pagamentos está em validação. Por favor, tente novamente em alguns instantes.',
@@ -931,19 +978,39 @@ export function App() {
     const rideId = 'ride_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
     const clientId = currentUser?.id || ('client_' + Math.random().toString(36).substring(2, 6));
 
+    // Cálculo com abatimento de créditos disponíveis
+    const availableCredit = clientWallet && clientWallet.balance > 0 ? clientWallet.balance : 0;
+    const creditDiscount = Math.min(availableCredit, totalAmount);
+    const effectiveTotalToPay = Math.max(0, Number((totalAmount - creditDiscount).toFixed(2)));
+
     let pixDataResult: any = null;
     let paymentStatus: any = 'pending';
+    let finalPaymentMethod = selectedPaymentMethod;
 
-    if (selectedPaymentMethod === 'cash' || selectedPaymentMethod === 'card_machine') {
+    if (creditDiscount >= totalAmount) {
+      // Coberto 100% por créditos
+      paymentStatus = 'paid';
+      finalPaymentMethod = 'wallet' as any;
+      try {
+        await addWalletDebit(clientId, creditDiscount, `Pagamento integral com saldo de créditos (#${rideId.slice(-6)})`, rideId);
+        if (currentUser?.id) getUserWallet(currentUser.id).then(setClientWallet);
+      } catch {}
+    } else if (selectedPaymentMethod === 'cash' || selectedPaymentMethod === 'card_machine') {
       paymentStatus = 'in_person_pending';
+      if (creditDiscount > 0) {
+        try {
+          await addWalletDebit(clientId, creditDiscount, `Abatimento parcial de crédito (#${rideId.slice(-6)})`, rideId);
+          if (currentUser?.id) getUserWallet(currentUser.id).then(setClientWallet);
+        } catch {}
+      }
     } else if (selectedPaymentMethod === 'pix') {
       try {
         pixDataResult = await createPixPayment({
           rideId,
-          amount: totalAmount,
+          amount: effectiveTotalToPay,
           clientName: currentUser?.fullName || 'Passageiro',
           clientEmail: currentUser?.email,
-          description: `Contratação de Motorista por ${hours} horas`
+          description: `Contratação de Motorista por ${hours} horas${creditDiscount > 0 ? ` (Abatido ${formatCurrency(creditDiscount)} de créditos)` : ''}`
         });
       } catch (e) {
         console.warn('Erro ao gerar cobrança Pix:', e);
@@ -989,7 +1056,7 @@ export function App() {
       commission: platformFee,
       driverNet: driverNet,
       status: 'searching',
-      paymentMethod: selectedPaymentMethod,
+      paymentMethod: finalPaymentMethod as any,
       paymentStatus: paymentStatus,
       paymentGateway: systemSettings.paymentGateway.activeGateway || 'asaas',
       paymentExternalId: pixDataResult?.externalId,
@@ -1002,17 +1069,19 @@ export function App() {
     setCurrentRideId(rideId);
     setRides(prev => [newRide, ...prev.filter(r => r.id !== rideId)]);
 
-    // 2. Se for Pix, exibe imediatamente o modal de pagamento Pix
-    if (selectedPaymentMethod === 'pix' && pixDataResult) {
+    // 2. Se for Pix e restar valor a pagar, exibe o modal de pagamento Pix
+    if (finalPaymentMethod === 'pix' && pixDataResult && effectiveTotalToPay > 0) {
       setPixModalData({
         isOpen: true,
         rideId,
-        amount: totalAmount,
+        amount: effectiveTotalToPay,
         qrCodeUrl: pixDataResult.pixQrCodeUrl,
         copiaECola: pixDataResult.pixCopiaECola,
         expiresAt: pixDataResult.expiresAt,
         externalId: pixDataResult.externalId
       });
+    } else if (effectiveTotalToPay === 0) {
+      showToast('Corrida contratada e paga com 100% de saldo em créditos!', 'success');
     }
 
     // 3. Gravação no Supabase
@@ -1062,41 +1131,33 @@ export function App() {
   };
 
   const handleStartToPickup = async (rideId: string) => {
-    const targetRide = rides.find(r => r.id === rideId);
     await dbUpdateRide(rideId, {
       status: 'to_pickup'
     });
     fetchRides();
     showToast('Deslocamento iniciado! Passageiro notificado que você está a caminho.', 'info');
+  };
 
-    if (targetRide) {
-      handleOpenGpsNavigation(
-        targetRide.origin,
-        'Ponto de Embarque do Passageiro',
-        targetRide.originLat && targetRide.originLng ? { lat: targetRide.originLat, lng: targetRide.originLng } : undefined
-      );
-    }
+  const handleArrivedAtPickup = async (rideId: string) => {
+    await dbUpdateRide(rideId, {
+      status: 'arrived_at_pickup',
+      arrivedAt: Date.now()
+    });
+    fetchRides();
+    showToast('Chegada confirmada! O passageiro foi notificado para embarque.', 'success');
   };
 
   const handleStartRide = async (rideId: string) => {
-    const targetRide = rides.find(r => r.id === rideId);
     await dbUpdateRide(rideId, {
       status: 'in_progress',
       startedAt: Date.now()
     });
     fetchRides();
-    showToast('Corrida iniciada! O tempo contratado começou a ser contabilizado.', 'success');
-
-    if (targetRide) {
-      handleOpenGpsNavigation(
-        targetRide.destination,
-        'Destino Final da Corrida',
-        targetRide.destLat && targetRide.destLng ? { lat: targetRide.destLat, lng: targetRide.destLng } : undefined
-      );
-    }
+    showToast('Corrida iniciada! Passageiro a bordo e tempo contratado em andamento.', 'success');
   };
 
   const handleFinishRide = async (rideId: string) => {
+    const targetRide = rides.find(r => r.id === rideId);
     await dbUpdateRide(rideId, {
       status: 'finished',
       finishedAt: Date.now()
@@ -1104,6 +1165,36 @@ export function App() {
     confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
     fetchRides();
     showToast('Corrida finalizada com sucesso! Ganhos creditados.', 'success');
+
+    // Abre modal de avaliação obrigatória para o motorista avaliar o passageiro
+    if (targetRide) {
+      setTimeout(() => {
+        setActiveRatingRide(targetRide);
+      }, 500);
+    }
+  };
+
+  // Cancelamento pelo motorista com justificativa obrigatória e estorno em créditos
+  const handleDriverCancelRide = async (rideId: string, reason: string) => {
+    const targetRide = rides.find(r => r.id === rideId);
+    await dbCancelRide(rideId, reason, 'driver');
+    
+    // Se a corrida foi paga online (Pix/Cartão), estorna para a carteira do passageiro
+    if (targetRide && targetRide.paymentMethod !== 'cash' && targetRide.clientId) {
+      try {
+        await addWalletCredit(
+          targetRide.clientId,
+          targetRide.total,
+          `Estorno de corrida #${targetRide.id.slice(-6)} cancelada pelo motorista (${reason})`,
+          targetRide.id
+        );
+      } catch (err) {
+        console.warn('Erro ao creditar saldo na carteira do passageiro:', err);
+      }
+    }
+
+    fetchRides();
+    showToast('Corrida cancelada com sucesso. O passageiro foi notificado da justificativa e ressarcido.', 'info');
   };
 
   // Alternar modo online do motorista aguardando validação e gravação no Supabase
@@ -1200,14 +1291,14 @@ export function App() {
   // ========================================================
   // CÁLCULOS E EFEITOS DO SISTEMA (DECLARADOS ANTES DO RENDER CONDICIONAL PARA RESPEITAR AS REGRAS DOS HOOKS DO REACT)
   // ========================================================
-  const isRideActive = (status?: string) => status === 'searching' || status === 'accepted' || status === 'to_pickup' || status === 'in_progress';
+  const isRideActive = (status?: string) => status === 'searching' || status === 'accepted' || status === 'to_pickup' || status === 'arrived_at_pickup' || status === 'in_progress';
 
   const activeClientRide = 
     (currentRideId ? rides.find(r => r.id === currentRideId && isRideActive(r.status)) : null) || 
     rides.find(r => currentUser && r.clientId === currentUser.id && isRideActive(r.status)) ||
     null;
   const pendingRides = rides.filter(r => r.status === 'searching');
-  const myDriverRides = rides.filter(r => (r.status === 'accepted' || r.status === 'to_pickup' || r.status === 'in_progress') && (r.driverId === currentUser?.id || !r.driverId));
+  const myDriverRides = rides.filter(r => (r.status === 'accepted' || r.status === 'to_pickup' || r.status === 'arrived_at_pickup' || r.status === 'in_progress') && (r.driverId === currentUser?.id || !r.driverId));
 
   // Corrida cancelada recente para alertar o motorista (apenas se recente e não descartada no banco/local)
   const cancelledRideForDriver = rides.find(r => {
@@ -1217,6 +1308,14 @@ export function App() {
     const rideTime = (r as any).cancelledAt || r.finishedAt || r.acceptedAt || r.createdAt || 0;
     const isRecent = !rideTime || (Date.now() - rideTime) < 6 * 3600 * 1000;
     return isRecent;
+  });
+
+  // Corrida cancelada recente para alertar o passageiro com a justificativa
+  const cancelledRideForClient = rides.find(r => {
+    if (r.status !== 'cancelled' || r.clientId !== currentUser?.id) return false;
+    if (dismissedCancellationIds.includes(r.id)) return false;
+    const rideTime = (r as any).cancelledAt || r.finishedAt || r.acceptedAt || r.createdAt || 0;
+    return (Date.now() - rideTime) < 2 * 3600 * 1000;
   });
 
   // Identificar se a solicitação do cliente está em busca de motorista
@@ -1273,6 +1372,13 @@ export function App() {
   const canCancelAccepted = cancelSecondsRemaining > 0;
 
   // Notificações e Sons em Tempo Real para o Passageiro
+  const lastActiveRideRef = useRef<DbRide | null>(null);
+  useEffect(() => {
+    if (activeClientRide) {
+      lastActiveRideRef.current = activeClientRide;
+    }
+  }, [activeClientRide]);
+
   useEffect(() => {
     if (!currentUser || currentUser.role !== 'client') return;
     const currentStatus = activeClientRide?.status || null;
@@ -1292,6 +1398,13 @@ export function App() {
           soundType: 'accepted'
         });
         showToast('Motorista a caminho do seu local de embarque!', 'success');
+      } else if (currentStatus === 'arrived_at_pickup') {
+        sendAppNotification({
+          title: '📍 Motorista Chegou ao Embarque!',
+          body: `${activeClientRide?.driverName || 'O motorista'} está aguardando você no local de embarque.`,
+          soundType: 'accepted'
+        });
+        showToast('📍 Motorista chegou e está aguardando você no ponto de partida!', 'success');
       } else if (currentStatus === 'in_progress') {
         sendAppNotification({
           title: '🏁 Corrida Iniciada!',
@@ -1300,12 +1413,35 @@ export function App() {
         });
         showToast('Sua corrida começou! Tempo contratado em andamento.', 'info');
       } else if (currentStatus === 'finished') {
+        const finishedRide = activeClientRide || lastActiveRideRef.current;
         sendAppNotification({
           title: '✅ Corrida Concluída!',
           body: 'Você chegou ao seu destino. Obrigado por viajar com o DriveHora!',
           soundType: 'finished'
         });
         showToast('Corrida concluída com sucesso!', 'success');
+        if (finishedRide) {
+          setTimeout(() => {
+            setActiveRatingRide(finishedRide);
+          }, 600);
+        }
+      }
+    } else if (!currentStatus && lastClientRideStatus) {
+      // Caso a corrida tenha sido finalizada ou cancelada e activeClientRide virou null
+      const lastRide = lastActiveRideRef.current;
+      if (lastRide) {
+        if (lastClientRideStatus === 'in_progress') {
+          // Finalizada pelo motorista
+          sendAppNotification({
+            title: '✅ Corrida Concluída!',
+            body: 'Você chegou ao seu destino. Obrigado por viajar com o DriveHora!',
+            soundType: 'finished'
+          });
+          showToast('Corrida concluída com sucesso!', 'success');
+          setTimeout(() => {
+            setActiveRatingRide(lastRide);
+          }, 600);
+        }
       }
     }
 
@@ -2184,9 +2320,205 @@ export function App() {
                 )}
 
                 {clientSubTab === 'request' && (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }}>
-                    {/* Form de Solicitação */}
-                    <div className="glass-panel" style={{ padding: '28px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    {/* Banner de Aviso de Corrida Cancelada pelo Motorista com Justificativa e Estorno em Créditos */}
+                    {cancelledRideForClient && !activeClientRide && (
+                      <div className="glass-panel" style={{
+                        padding: '18px 22px',
+                        border: '1.5px solid #ef4444',
+                        background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(15, 23, 42, 0.9) 100%)',
+                        borderRadius: '16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '16px'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                          <div style={{
+                            width: '44px',
+                            height: '44px',
+                            borderRadius: '12px',
+                            background: 'rgba(239, 68, 68, 0.2)',
+                            color: '#ef4444',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0
+                          }}>
+                            <Ban size={22} />
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#fca5a5' }}>
+                              Corrida #{cancelledRideForClient.id.slice(-6)} cancelada pelo motorista
+                            </div>
+                            <div style={{ fontSize: '0.85rem', color: '#cbd5e1', marginTop: '3px' }}>
+                              <strong>Justificativa informada:</strong> {cancelledRideForClient.cancellationReason || 'Imprevisto operacional informado pelo parceiro.'}
+                              {cancelledRideForClient.paymentMethod !== 'cash' && (
+                                <span style={{ color: '#34d399', display: 'block', fontWeight: 600, marginTop: '3px' }}>
+                                  🎁 O valor de {formatCurrency(cancelledRideForClient.total)} já foi estornado como crédito em sua carteira!
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setDismissedCancellationIds(prev => [...prev, cancelledRideForClient.id])}
+                          className="btn-outline"
+                          style={{ padding: '8px 16px', fontSize: '0.82rem', flexShrink: 0 }}
+                        >
+                          Entendido
+                        </button>
+                      </div>
+                    )}
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }}>
+                      {/* Coluna da Esquerda: Se possui corrida ativa, bloqueia nova solicitação */}
+                      {activeClientRide ? (
+                        <div className="glass-panel" style={{ padding: '28px', border: '1px solid rgba(99, 102, 241, 0.4)', background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(15, 23, 42, 0.85) 100%)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '18px' }}>
+                            <div style={{
+                              width: '46px',
+                              height: '46px',
+                              borderRadius: '14px',
+                              background: '#6366f1',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: '#fff',
+                              boxShadow: '0 8px 16px rgba(99, 102, 241, 0.3)'
+                            }}>
+                              <Car size={24} />
+                            </div>
+                            <div>
+                              <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#fff' }}>
+                                Corrida #{activeClientRide.id.slice(-6)} em Andamento
+                              </div>
+                              <div style={{ fontSize: '0.82rem', color: '#a5b4fc', marginTop: '2px' }}>
+                                Atendimento ativo pelo parceiro
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ background: 'rgba(15, 23, 42, 0.6)', borderRadius: '14px', padding: '16px', marginBottom: '18px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                            <p style={{ fontSize: '0.88rem', color: '#cbd5e1', lineHeight: 1.6, margin: 0 }}>
+                              Para sua segurança e organização operacional, o sistema permite <strong>apenas uma solicitação de corrida por vez</strong>. Novas solicitações de viagem estarão disponíveis assim que este atendimento for concluído ou cancelado.
+                            </p>
+                          </div>
+
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.84rem' }}>
+                              <span style={{ color: '#94a3b8' }}>Status do atendimento:</span>
+                              <span style={{ fontWeight: 700, color: '#6ee7b7' }}>
+                                {activeClientRide.status === 'searching' ? 'Procurando motoristas' :
+                                 activeClientRide.status === 'accepted' ? 'Motorista confirmado' :
+                                 activeClientRide.status === 'to_pickup' ? 'Motorista a caminho' :
+                                 activeClientRide.status === 'arrived_at_pickup' ? 'Motorista no embarque' :
+                                 'Corrida em andamento'}
+                              </span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.84rem' }}>
+                              <span style={{ color: '#94a3b8' }}>Tempo contratado:</span>
+                              <span style={{ fontWeight: 700, color: '#fff' }}>{activeClientRide.hours} Horas</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.84rem' }}>
+                              <span style={{ color: '#94a3b8' }}>Valor total:</span>
+                              <span style={{ fontWeight: 700, color: '#818cf8' }}>{formatCurrency(activeClientRide.total)}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ) : clientWallet && clientWallet.balance < 0 ? (
+                        <div className="glass-panel" style={{ padding: '36px 24px', border: '1px solid rgba(239, 68, 68, 0.4)', background: 'rgba(239, 68, 68, 0.05)', textAlign: 'center' }}>
+                          <div style={{
+                            width: '64px',
+                            height: '64px',
+                            borderRadius: '50%',
+                            background: 'rgba(239, 68, 68, 0.15)',
+                            color: '#ef4444',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            margin: '0 auto 16px'
+                          }}>
+                            <AlertCircle size={32} />
+                          </div>
+                          <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#fff', marginBottom: '8px' }}>
+                            Solicitações Bloqueadas por Débito
+                          </h3>
+                          <p style={{ fontSize: '0.9rem', color: '#cbd5e1', maxWidth: '420px', margin: '0 auto 20px', lineHeight: 1.5 }}>
+                            Identificamos um saldo devedor de <strong style={{ color: '#ef4444' }}>{formatCurrency(Math.abs(clientWallet.balance))}</strong> pendente na sua conta.
+                            Para desbloquear novas viagens, envie uma mensagem ao suporte para análise e quitação.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setShowDebtSupportModal(true)}
+                            className="btn-primary"
+                            style={{
+                              padding: '12px 24px',
+                              fontWeight: 700,
+                              background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '8px'
+                            }}
+                          >
+                            <Headphones size={18} />
+                            <span>Falar com o Suporte para Quitação</span>
+                          </button>
+                        </div>
+                      ) : (
+                        /* Form de Solicitação */
+                        <div className="glass-panel" style={{ padding: '28px' }}>
+                          
+                          {/* Badge de Créditos Disponíveis na Carteira */}
+                          {clientWallet && clientWallet.balance > 0 && (
+                            <div style={{
+                              background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(5, 150, 105, 0.08) 100%)',
+                              border: '1px solid rgba(16, 185, 129, 0.35)',
+                              borderRadius: '16px',
+                              padding: '14px 16px',
+                              marginBottom: '20px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              gap: '12px'
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <div style={{
+                                  width: '40px',
+                                  height: '40px',
+                                  borderRadius: '12px',
+                                  background: '#10b981',
+                                  color: '#fff',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  fontSize: '1.2rem',
+                                  flexShrink: 0
+                                }}>
+                                  🎁
+                                </div>
+                                <div>
+                                  <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#6ee7b7' }}>
+                                    Saldo de Créditos Disponível
+                                  </div>
+                                  <div style={{ fontSize: '0.78rem', color: '#cbd5e1' }}>
+                                    Será abatido automaticamente no valor desta corrida
+                                  </div>
+                                </div>
+                              </div>
+                              <div style={{
+                                fontSize: '1.1rem',
+                                fontWeight: 800,
+                                color: '#10b981',
+                                background: 'rgba(16, 185, 129, 0.15)',
+                                padding: '6px 14px',
+                                borderRadius: '10px'
+                              }}>
+                                {formatCurrency(clientWallet.balance)}
+                              </div>
+                            </div>
+                          )}
                       
                       {/* Banner de Agendamento Direto com Motorista Favorito Selecionado */}
                       {selectedDirectDriver && (
@@ -2645,12 +2977,23 @@ export function App() {
                       ) : (
                         <>
                           <Car size={18} />
-                          <span>Solicitar Motorista por {formatCurrency(totalAmount)}</span>
+                          <span>
+                            {clientWallet && clientWallet.balance > 0 ? (
+                              clientWallet.balance >= totalAmount ? (
+                                `Solicitar Motorista (Grátis via Créditos: ${formatCurrency(totalAmount)})`
+                              ) : (
+                                `Solicitar Motorista por ${formatCurrency(totalAmount - clientWallet.balance)} (Abatido ${formatCurrency(clientWallet.balance)})`
+                              )
+                            ) : (
+                              `Solicitar Motorista por ${formatCurrency(totalAmount)}`
+                            )}
+                          </span>
                         </>
                       )}
                     </button>
                   </form>
                 </div>
+              )}
 
                 {/* Status em Tempo Real da Corrida do Cliente */}
                 <div id="active-ride-tracking-section" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -3116,6 +3459,7 @@ export function App() {
                   </div>
                 </div>
               </div>
+            </div>
             )}
 
             {clientSubTab === 'history' && (
@@ -4094,166 +4438,288 @@ export function App() {
                         {/* Corridas Aceitas / Em Andamento pelo Motorista */}
                         {myDriverRides.length > 0 && (
                           <div style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid var(--border-subtle)' }}>
-                            <h4 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '12px', color: '#f59e0b' }}>
-                              🚗 Minhas Corridas em Atendimento
-                            </h4>
-                            {myDriverRides.map(r => (
-                              <div
-                                key={r.id}
-                                style={{
-                                  background: 'rgba(245, 158, 11, 0.08)',
-                                  border: '1px solid rgba(245, 158, 11, 0.3)',
-                                  borderRadius: '12px',
-                                  padding: '14px',
-                                  marginBottom: '10px'
-                                }}
-                              >
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                  <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>{r.origin} ➔ {r.destination}</span>
-                                  <span style={{
-                                    fontSize: '0.75rem',
-                                    color: r.status === 'in_progress' ? '#10b981' : '#f59e0b',
-                                    fontWeight: 800,
-                                    textTransform: 'uppercase'
-                                  }}>
-                                    {r.status === 'to_pickup' ? 'A CAMINHO' : r.status === 'accepted' ? 'CONFIRMADA' : r.status === 'in_progress' ? 'EM ANDAMENTO' : r.status}
-                                  </span>
-                                </div>
+                        {/* Corridas Aceitas / Em Andamento pelo Motorista (Fila de Atendimento) */}
+                        {myDriverRides.length > 0 && (() => {
+                          const sortedDriverRides = [...myDriverRides].sort((a, b) => {
+                            const scoreStatus = (s: string) => (s === 'in_progress' ? 4 : s === 'arrived_at_pickup' ? 3 : s === 'to_pickup' ? 2 : 1);
+                            const diff = scoreStatus(b.status) - scoreStatus(a.status);
+                            if (diff !== 0) return diff;
+                            return (a.acceptedAt || a.createdAt || 0) - (b.acceptedAt || b.createdAt || 0);
+                          });
 
-                                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>
-                                  <div><strong>Passageiro:</strong> {r.clientName || 'Passageiro'}</div>
-                                  <div><strong>Embarque:</strong> {r.origin}</div>
-                                  <div><strong>Destino:</strong> {r.destination}</div>
-                                </div>
-
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px' }}>
-                                  {/* Botão de Navegação Externa (Waze / Google Maps / Apple Maps) */}
-                                  <div style={{ display: 'flex', gap: '8px' }}>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        if (r.status === 'in_progress') {
-                                          handleOpenGpsNavigation(
-                                            r.destination,
-                                            'Destino Final da Corrida',
-                                            r.destLat && r.destLng ? { lat: r.destLat, lng: r.destLng } : undefined
-                                          );
-                                        } else {
-                                          handleOpenGpsNavigation(
-                                            r.origin,
-                                            'Ponto de Embarque do Passageiro',
-                                            r.originLat && r.originLng ? { lat: r.originLat, lng: r.originLng } : undefined
-                                          );
-                                        }
-                                      }}
-                                      className="btn-outline"
-                                      style={{
-                                        flex: 1,
-                                        padding: '10px 14px',
-                                        fontSize: '0.82rem',
-                                        fontWeight: 700,
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        gap: '8px',
-                                        borderColor: '#38bdf8',
-                                        color: '#38bdf8',
-                                        background: 'rgba(56, 189, 248, 0.08)'
-                                      }}
-                                      title="Abrir rota no Waze, Google Maps ou Apple Maps"
-                                    >
-                                      <Navigation size={16} />
-                                      <span>{r.status === 'in_progress' ? '🗺️ Navegar até o Destino' : '🗺️ Navegar até o Passageiro'}</span>
-                                    </button>
-
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setGpsModalData({
-                                          isOpen: true,
-                                          destinationAddress: r.status === 'in_progress' ? r.destination : r.origin,
-                                          destinationLabel: r.status === 'in_progress' ? 'Destino Final' : 'Ponto de Embarque',
-                                          coords: r.status === 'in_progress'
-                                            ? (r.destLat && r.destLng ? { lat: r.destLat, lng: r.destLng } : undefined)
-                                            : (r.originLat && r.originLng ? { lat: r.originLat, lng: r.originLng } : undefined)
-                                        });
-                                      }}
-                                      className="btn-outline"
-                                      style={{
-                                        padding: '10px 12px',
-                                        fontSize: '0.78rem',
-                                        borderRadius: '10px',
-                                        color: 'var(--text-secondary)'
-                                      }}
-                                      title="Alterar aplicativo padrão de GPS (Waze / Google Maps / Apple Maps)"
-                                    >
-                                      ⚙️ GPS
-                                    </button>
-                                  </div>
-
-                                  {/* Ação de Transição de Status da Corrida */}
-                                  {r.status === 'accepted' && (
-                                    <button
-                                      onClick={() => handleStartToPickup(r.id)}
-                                      className="btn-primary"
-                                      style={{
-                                        width: '100%',
-                                        padding: '12px',
-                                        fontSize: '0.88rem',
-                                        fontWeight: 800,
-                                        background: 'linear-gradient(135deg, #f59e0b, #d97706)',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        gap: '8px'
-                                      }}
-                                    >
-                                      <Navigation size={18} />
-                                      <span>🚗 Iniciar Deslocamento até o Passageiro</span>
-                                    </button>
-                                  )}
-                                  {r.status === 'to_pickup' && (
-                                    <button
-                                      onClick={() => handleStartRide(r.id)}
-                                      className="btn-primary"
-                                      style={{
-                                        width: '100%',
-                                        padding: '12px',
-                                        fontSize: '0.88rem',
-                                        fontWeight: 800,
-                                        background: 'linear-gradient(135deg, #10b981, #059669)',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        gap: '8px'
-                                      }}
-                                    >
-                                      <PlayCircle size={18} />
-                                      <span>🏁 Iniciar Corrida até o Destino (Começar Horas)</span>
-                                    </button>
-                                  )}
-                                  {r.status === 'in_progress' && (
-                                    <button
-                                      onClick={() => handleFinishRide(r.id)}
-                                      className="btn-success"
-                                      style={{
-                                        width: '100%',
-                                        padding: '12px',
-                                        fontSize: '0.88rem',
-                                        fontWeight: 800,
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        gap: '8px'
-                                      }}
-                                    >
-                                      <CheckCircle2 size={18} />
-                                      <span>Concluir Corrida e Receber {formatCurrency(r.driverNet)}</span>
-                                    </button>
-                                  )}
-                                </div>
+                          return (
+                            <div style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid var(--border-subtle)' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                                <h4 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0, color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  🚗 Fila de Atendimento ({sortedDriverRides.length})
+                                </h4>
+                                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                  Atendimento sequencial obrigatório
+                                </span>
                               </div>
-                            ))}
+
+                              {sortedDriverRides.map((r, index) => {
+                                const isCurrentActive = index === 0;
+
+                                return (
+                                  <div
+                                    key={r.id}
+                                    style={{
+                                      background: isCurrentActive ? 'rgba(99, 102, 241, 0.08)' : 'rgba(255, 255, 255, 0.03)',
+                                      border: `1.5px solid ${isCurrentActive ? '#6366f1' : 'var(--border-subtle)'}`,
+                                      borderRadius: '16px',
+                                      padding: '16px',
+                                      marginBottom: '14px',
+                                      position: 'relative',
+                                      boxShadow: isCurrentActive ? '0 0 25px rgba(99, 102, 241, 0.2)' : undefined,
+                                      opacity: isCurrentActive ? 1 : 0.85
+                                    }}
+                                  >
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <span style={{
+                                          fontSize: '0.72rem',
+                                          fontWeight: 800,
+                                          padding: '3px 10px',
+                                          borderRadius: '20px',
+                                          background: isCurrentActive ? '#10b981' : '#f59e0b',
+                                          color: '#fff'
+                                        }}>
+                                          {isCurrentActive ? '🟢 Em Atendimento Agora' : `🕒 ${index + 1}ª na Fila de Espera`}
+                                        </span>
+                                        <strong style={{ fontSize: '0.85rem', color: '#fff' }}>#{r.id.slice(-6)}</strong>
+                                      </div>
+
+                                      <span style={{
+                                        fontSize: '0.75rem',
+                                        color: r.status === 'in_progress' ? '#10b981' : r.status === 'arrived_at_pickup' ? '#38bdf8' : r.status === 'to_pickup' ? '#a855f7' : '#f59e0b',
+                                        fontWeight: 800,
+                                        textTransform: 'uppercase'
+                                      }}>
+                                        {r.status === 'arrived_at_pickup'
+                                          ? '📍 NO LOCAL DE EMBARQUE'
+                                          : r.status === 'to_pickup'
+                                          ? '🚗 A CAMINHO DO EMBARQUE'
+                                          : r.status === 'in_progress'
+                                          ? '⏱️ EM ANDAMENTO'
+                                          : 'CONFIRMADA'}
+                                      </span>
+                                    </div>
+
+                                    <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                      <div>👤 <strong>Passageiro:</strong> <span style={{ color: '#fff' }}>{r.clientName || 'Passageiro'}</span></div>
+                                      <div>📍 <strong>Embarque:</strong> {r.origin}</div>
+                                      <div>🏁 <strong>Destino:</strong> {r.destination}</div>
+                                      <div style={{ color: '#10b981', fontWeight: 700, marginTop: '2px' }}>
+                                        💵 Ganho Líquido: {formatCurrency(r.driverNet)} ({r.hours}h de serviço)
+                                      </div>
+                                    </div>
+
+                                    {/* Alerta de Fila de Espera se não for o primeiro */}
+                                    {!isCurrentActive && (
+                                      <div style={{
+                                        padding: '10px 12px',
+                                        borderRadius: '10px',
+                                        background: 'rgba(245, 158, 11, 0.12)',
+                                        border: '1px solid rgba(245, 158, 11, 0.3)',
+                                        color: '#fcd34d',
+                                        fontSize: '0.75rem',
+                                        marginBottom: '10px',
+                                        lineHeight: 1.4
+                                      }}>
+                                        ⚠️ <strong>Aguardando conclusão da corrida atual (#{sortedDriverRides[0].id.slice(-6)}):</strong> Os botões de início e atendimento desta corrida serão liberados automaticamente assim que a anterior for finalizada ou cancelada.
+                                      </div>
+                                    )}
+
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                      {/* Linha de Botões de GPS */}
+                                      <div style={{ display: 'flex', gap: '8px' }}>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            if (r.status === 'in_progress') {
+                                              handleOpenGpsNavigation(
+                                                r.destination,
+                                                'Destino Final da Corrida',
+                                                r.destLat && r.destLng ? { lat: r.destLat, lng: r.destLng } : undefined
+                                              );
+                                            } else {
+                                              handleOpenGpsNavigation(
+                                                r.origin,
+                                                'Ponto de Embarque do Passageiro',
+                                                r.originLat && r.originLng ? { lat: r.originLat, lng: r.originLng } : undefined
+                                              );
+                                            }
+                                          }}
+                                          className="btn-outline"
+                                          style={{
+                                            flex: 1,
+                                            padding: '10px 14px',
+                                            fontSize: '0.82rem',
+                                            fontWeight: 700,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            gap: '8px',
+                                            borderColor: '#38bdf8',
+                                            color: '#38bdf8',
+                                            background: 'rgba(56, 189, 248, 0.08)'
+                                          }}
+                                        >
+                                          <Navigation size={16} />
+                                          <span>{r.status === 'in_progress' ? '🗺️ Abrir GPS até o Destino' : '🗺️ Abrir GPS até o Passageiro'}</span>
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setGpsModalData({
+                                              isOpen: true,
+                                              destinationAddress: r.status === 'in_progress' ? r.destination : r.origin,
+                                              destinationLabel: r.status === 'in_progress' ? 'Destino Final' : 'Ponto de Embarque',
+                                              coords: r.status === 'in_progress'
+                                                ? (r.destLat && r.destLng ? { lat: r.destLat, lng: r.destLng } : undefined)
+                                                : (r.originLat && r.originLng ? { lat: r.originLat, lng: r.originLng } : undefined)
+                                            });
+                                          }}
+                                          className="btn-outline"
+                                          style={{ padding: '10px 12px', fontSize: '0.78rem', borderRadius: '10px', color: 'var(--text-secondary)' }}
+                                          title="Alterar aplicativo padrão de GPS (Waze / Google Maps / Apple Maps)"
+                                        >
+                                          ⚙️ GPS
+                                        </button>
+                                      </div>
+
+                                      {/* Ações de Transição de Etapa Operacional (Apenas na Corrida Ativa no Topo da Fila) */}
+                                      {isCurrentActive ? (
+                                        <>
+                                          {r.status === 'accepted' && (
+                                            <button
+                                              onClick={() => handleStartToPickup(r.id)}
+                                              className="btn-primary"
+                                              style={{
+                                                width: '100%',
+                                                padding: '12px',
+                                                fontSize: '0.9rem',
+                                                fontWeight: 800,
+                                                background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '8px'
+                                              }}
+                                            >
+                                              <Car size={18} />
+                                              <span>🚗 Iniciar Deslocamento até o Passageiro</span>
+                                            </button>
+                                          )}
+
+                                          {r.status === 'to_pickup' && (
+                                            <button
+                                              onClick={() => handleArrivedAtPickup(r.id)}
+                                              className="btn-primary"
+                                              style={{
+                                                width: '100%',
+                                                padding: '12px',
+                                                fontSize: '0.9rem',
+                                                fontWeight: 800,
+                                                background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '8px'
+                                              }}
+                                            >
+                                              <MapPin size={18} />
+                                              <span>📍 Cheguei ao Local de Embarque</span>
+                                            </button>
+                                          )}
+
+                                          {r.status === 'arrived_at_pickup' && (
+                                            <button
+                                              onClick={() => handleStartRide(r.id)}
+                                              className="btn-primary"
+                                              style={{
+                                                width: '100%',
+                                                padding: '12px',
+                                                fontSize: '0.9rem',
+                                                fontWeight: 800,
+                                                background: 'linear-gradient(135deg, #10b981, #059669)',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '8px'
+                                              }}
+                                            >
+                                              <PlayCircle size={18} />
+                                              <span>🏁 Iniciar Corrida até o Destino (Passageiro a Bordo)</span>
+                                            </button>
+                                          )}
+
+                                          {r.status === 'in_progress' && (
+                                            <button
+                                              onClick={() => handleFinishRide(r.id)}
+                                              className="btn-success"
+                                              style={{
+                                                width: '100%',
+                                                padding: '12px',
+                                                fontSize: '0.9rem',
+                                                fontWeight: 800,
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '8px'
+                                              }}
+                                            >
+                                              <CheckCircle2 size={18} />
+                                              <span>Concluir Corrida e Receber {formatCurrency(r.driverNet)}</span>
+                                            </button>
+                                          )}
+                                        </>
+                                      ) : (
+                                        <button
+                                          disabled
+                                          className="btn-outline"
+                                          style={{
+                                            width: '100%',
+                                            padding: '10px',
+                                            fontSize: '0.82rem',
+                                            opacity: 0.5,
+                                            cursor: 'not-allowed'
+                                          }}
+                                        >
+                                          🔒 Atendimento bloqueado até finalizar a corrida anterior
+                                        </button>
+                                      )}
+
+                                      {/* Botão de Cancelamento com Justificativa Obrigatória */}
+                                      <button
+                                        type="button"
+                                        onClick={() => setDriverCancelModalRide(r)}
+                                        className="btn-outline"
+                                        style={{
+                                          width: '100%',
+                                          padding: '8px',
+                                          fontSize: '0.78rem',
+                                          borderColor: 'rgba(239, 68, 68, 0.4)',
+                                          color: '#fca5a5',
+                                          background: 'rgba(239, 68, 68, 0.05)',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          gap: '6px'
+                                        }}
+                                      >
+                                        <Ban size={14} />
+                                        <span>Cancelar Atendimento com Justificativa</span>
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        })()}
                           </div>
                         )}
                       </div>
@@ -5113,6 +5579,166 @@ export function App() {
             showToast('Navegação GPS iniciada! O app DriveHora continua ativo no fundo.', 'success');
           }}
         />
+      )}
+
+      {/* Modal de Cancelamento de Atendimento pelo Motorista com Justificativa */}
+      {driverCancelModalRide && (
+        <DriverCancelModal
+          isOpen={Boolean(driverCancelModalRide)}
+          ride={driverCancelModalRide}
+          onClose={() => setDriverCancelModalRide(null)}
+          onConfirmCancel={async (reason) => {
+            const rId = driverCancelModalRide.id;
+            setDriverCancelModalRide(null);
+            await handleDriverCancelRide(rId, reason);
+          }}
+        />
+      )}
+
+      {/* Modal de Avaliação Obrigatória Bilateral (Passageiro e Motorista) */}
+      {activeRatingRide && currentUser && (
+        <RatingModal
+          ride={activeRatingRide}
+          currentUserRole={currentUser.role === 'driver' ? 'driver' : 'client'}
+          currentUserId={currentUser.id}
+          onRatingCompleted={() => {
+            setActiveRatingRide(null);
+            showToast('Avaliação registrada com sucesso! Obrigado pelo feedback.', 'success');
+          }}
+        />
+      )}
+
+      {/* Modal de Suporte para Quitação e Regularização de Débito */}
+      {showDebtSupportModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.85)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '20px'
+          }}
+        >
+          <div
+            className="glass-panel"
+            style={{
+              maxWidth: '480px',
+              width: '100%',
+              padding: '28px',
+              borderRadius: '24px',
+              background: '#0f172a',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              boxShadow: '0 25px 50px -12px rgba(239, 68, 68, 0.25)'
+            }}
+          >
+            <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+              <div
+                style={{
+                  width: '64px',
+                  height: '64px',
+                  borderRadius: '50%',
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  color: '#ef4444',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 16px'
+                }}
+              >
+                <AlertCircle size={32} />
+              </div>
+              <h3 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#fff', marginBottom: '8px' }}>
+                Regularização de Débito Pendente
+              </h3>
+              <p style={{ fontSize: '0.9rem', color: '#94a3b8' }}>
+                Seu saldo atual está devedor em{' '}
+                <strong style={{ color: '#ef4444' }}>
+                  {formatCurrency(Math.abs(clientWallet?.balance || 0))}
+                </strong>
+                . Descreva abaixo sua solicitação para que a equipe de administração avalie e dê baixa no débito.
+              </p>
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '8px', fontWeight: 600 }}>
+                Mensagem para a Administração / Suporte:
+              </label>
+              <textarea
+                value={debtSupportMessage}
+                onChange={(e) => setDebtSupportMessage(e.target.value)}
+                placeholder="Ex: Realizei o pagamento via transferência direta / Solicito quitação por favor..."
+                rows={4}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  borderRadius: '12px',
+                  background: 'rgba(15, 23, 42, 0.6)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  color: '#fff',
+                  fontSize: '0.9rem',
+                  resize: 'none'
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                type="button"
+                onClick={() => setShowDebtSupportModal(false)}
+                className="btn-outline"
+                style={{ flex: 1, padding: '12px' }}
+                disabled={isSubmittingDebtSupport}
+              >
+                Voltar
+              </button>
+              <button
+                type="button"
+                disabled={isSubmittingDebtSupport || !debtSupportMessage.trim()}
+                onClick={async () => {
+                  if (!currentUser?.id) return;
+                  setIsSubmittingDebtSupport(true);
+                  try {
+                    await dbCreateRideReport({
+                      id: 'rep_' + Date.now(),
+                      rideId: 'WALLET_DEBT',
+                      reporterId: currentUser.id,
+                      reporterName: currentUser.fullName || 'Passageiro',
+                      reporterRole: 'client',
+                      reporterPhone: currentUser.phone,
+                      category: 'other',
+                      categoryLabel: 'Quitação de Débito',
+                      description: `Saldo devedor: ${formatCurrency(Math.abs(clientWallet?.balance || 0))}\nMensagem: ${debtSupportMessage}`,
+                      status: 'pending',
+                      createdAt: Date.now()
+                    });
+                    showToast('Solicitação enviada ao administrador com sucesso!', 'success');
+                    setShowDebtSupportModal(false);
+                    setDebtSupportMessage('');
+                  } catch (err) {
+                    console.error('Erro ao enviar solicitação:', err);
+                    showToast('Erro ao enviar solicitação ao suporte. Tente novamente.', 'error');
+                  } finally {
+                    setIsSubmittingDebtSupport(false);
+                  }
+                }}
+                className="btn-primary"
+                style={{
+                  flex: 2,
+                  padding: '12px',
+                  background: 'linear-gradient(135deg, #10b981, #059669)'
+                }}
+              >
+                {isSubmittingDebtSupport ? 'Enviando...' : 'Enviar ao Suporte'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

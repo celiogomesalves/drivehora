@@ -19,15 +19,18 @@ export interface DbRide {
   total: number;
   commission: number;
   driverNet: number;
-  status: 'searching' | 'accepted' | 'to_pickup' | 'in_progress' | 'finished' | 'cancelled';
+  status: 'searching' | 'accepted' | 'to_pickup' | 'arrived_at_pickup' | 'in_progress' | 'finished' | 'cancelled';
   paymentMethod?: 'pix' | 'credit_card' | 'cash' | 'card_machine';
   paymentStatus?: 'pending' | 'paid' | 'in_person_pending' | 'in_person_completed' | 'failed';
   paymentGateway?: 'asaas' | 'mercadopago' | 'stripe';
   paymentExternalId?: string;
   pixQrCodeUrl?: string;
   pixCopiaECola?: string;
+  cancellationReason?: string;
+  cancelledBy?: 'client' | 'driver' | 'admin' | 'system';
   createdAt: number;
   acceptedAt?: number;
+  arrivedAt?: number;
   startedAt?: number;
   finishedAt?: number;
   driverAcknowledgedAt?: number;
@@ -669,8 +672,15 @@ export const dbUpdateRide = async (
       if (updates.finishedAt) payload.finished_at = new Date(updates.finishedAt).toISOString();
       if (updates.createdAt) payload.created_at = new Date(updates.createdAt).toISOString();
       if (updates.paymentStatus) payload.payment_status = updates.paymentStatus;
+      if (updates.cancellationReason) payload.cancellation_reason = updates.cancellationReason;
 
-      await sb.from('rides').update(payload).eq('id', rideId);
+      let res = await sb.from('rides').update(payload).eq('id', rideId);
+      // Fallback: se a constraint de status no Supabase não aceitar status estendido
+      if (res?.error && res.error.code === '23514' && (updates.status === 'to_pickup' || updates.status === 'arrived_at_pickup')) {
+        console.warn('Constraint de status estendido, aplicando fallback compatível:', res.error.message);
+        payload.status = 'accepted';
+        await sb.from('rides').update(payload).eq('id', rideId);
+      }
       return;
     } catch (e) {
       console.warn('Erro ao atualizar corrida no Supabase:', e);
@@ -692,12 +702,25 @@ export const dbUpdateRide = async (
   }
 };
 
-// 7.1 Cancelar Corrida pelo Passageiro
-export const dbCancelRide = async (rideId: string): Promise<void> => {
+// 7.1 Cancelar Corrida (por Passageiro, Motorista ou Sistema com Justificativa)
+export const dbCancelRide = async (
+  rideId: string,
+  reason?: string,
+  cancelledBy: 'client' | 'driver' | 'admin' | 'system' = 'client'
+): Promise<void> => {
   const sb = getSupabase();
   if (sb) {
     try {
-      await sb.from('rides').update({ status: 'cancelled' }).eq('id', rideId);
+      const updatePayload: any = { status: 'cancelled' };
+      // Tenta gravar motivo se a coluna existir, com fallback seguro
+      let res = await sb.from('rides').update({
+        ...updatePayload,
+        cancellation_reason: reason || null
+      }).eq('id', rideId);
+
+      if (res?.error && res.error.code === 'PGRST204') {
+        await sb.from('rides').update(updatePayload).eq('id', rideId);
+      }
       return;
     } catch (e) {
       console.warn('Erro ao cancelar corrida no Supabase:', e);
@@ -705,7 +728,11 @@ export const dbCancelRide = async (rideId: string): Promise<void> => {
   }
 
   try {
-    await fetch(`/api/rides/${rideId}/cancel`, { method: 'POST' });
+    await fetch(`/api/rides/${rideId}/cancel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason, cancelledBy })
+    });
   } catch (e) {}
 };
 
@@ -723,6 +750,104 @@ export const dbAcknowledgeRide = async (rideId: string): Promise<void> => {
   try {
     await fetch(`/api/rides/${rideId}/acknowledge`, { method: 'POST' });
   } catch (e) {}
+};
+
+// 7.1.2 Avaliações Obrigatórias do Sistema (Passageiro e Motorista)
+export interface DbRating {
+  id: string;
+  rideId: string;
+  fromUserId: string;
+  toUserId: string;
+  score: number;
+  comment?: string;
+  createdAt: number;
+  fromUserName?: string;
+  toUserName?: string;
+}
+
+const RATINGS_STORAGE_KEY = 'drivehora_ratings_cache';
+
+export const dbSubmitRating = async (rating: DbRating): Promise<{ success: boolean; error?: string }> => {
+  // 1. Cache local para responsividade imediata
+  try {
+    const raw = localStorage.getItem(RATINGS_STORAGE_KEY);
+    const list: DbRating[] = raw ? JSON.parse(raw) : [];
+    localStorage.setItem(RATINGS_STORAGE_KEY, JSON.stringify([rating, ...list.filter(r => r.id !== rating.id)]));
+  } catch (e) {}
+
+  // 2. Gravação no Supabase
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      const res = await sb.from('ratings').insert([{
+        id: rating.id,
+        ride_id: rating.rideId,
+        from_user_id: rating.fromUserId,
+        to_user_id: rating.toUserId,
+        score: rating.score,
+        comment: rating.comment || null
+      }]);
+
+      if (res?.error) {
+        console.warn('Aviso ao inserir rating no Supabase:', res.error);
+      }
+
+      // Recalcula média se o usuário avaliado for motorista
+      try {
+        const { data: allRatings } = await sb.from('ratings').select('score').eq('to_user_id', rating.toUserId);
+        if (allRatings && allRatings.length > 0) {
+          const sum = allRatings.reduce((acc: number, curr: any) => acc + Number(curr.score), 0);
+          const newAvg = Number((sum / allRatings.length).toFixed(2));
+          await sb.from('drivers').update({ rating: newAvg }).eq('user_id', rating.toUserId);
+        }
+      } catch {}
+
+      return { success: true };
+    } catch (err: any) {
+      console.warn('Erro ao salvar avaliação:', err);
+      return { success: false, error: err.message };
+    }
+  }
+
+  return { success: true };
+};
+
+export const dbGetRatings = async (): Promise<DbRating[]> => {
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      const [ratingsRes, profilesRes] = await Promise.all([
+        sb.from('ratings').select('*').order('created_at', { ascending: false }).limit(100),
+        sb.from('profiles').select('id, full_name')
+      ]);
+
+      if (!ratingsRes.error && ratingsRes.data) {
+        const nameMap = new Map<string, string>();
+        (profilesRes.data || []).forEach((p: any) => nameMap.set(p.id, p.full_name));
+
+        return ratingsRes.data.map((r: any) => ({
+          id: r.id,
+          rideId: r.ride_id,
+          fromUserId: r.from_user_id,
+          toUserId: r.to_user_id,
+          score: Number(r.score) || 5,
+          comment: r.comment || '',
+          createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
+          fromUserName: nameMap.get(r.from_user_id) || 'Usuário',
+          toUserName: nameMap.get(r.to_user_id) || 'Parceiro'
+        }));
+      }
+    } catch (e) {
+      console.warn('Erro ao buscar ratings no Supabase:', e);
+    }
+  }
+
+  try {
+    const raw = localStorage.getItem(RATINGS_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
 };
 
 // 7.2 Excluir Definitivamente Corrida pelo Passageiro / Admin

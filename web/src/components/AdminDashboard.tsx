@@ -6,7 +6,7 @@ import {
   TrendingUp, Database, Image, AlertTriangle, Eye, X, Check,
   Settings, Bell, CreditCard, Sliders, Send, Save, Trash2,
   Calendar, Filter, Globe, Key, Radio, Power, MessageSquare, Edit3,
-  EyeOff, LayoutDashboard
+  EyeOff, LayoutDashboard, Star
 } from 'lucide-react';
 import { formatCurrency, formatCurrencyInput, parseCurrencyInput, formatPhone, formatCpf, formatPlate } from '../utils/formatters';
 import { 
@@ -21,9 +21,13 @@ import {
   dbAdminUpdateClientProfile,
   dbGetRideReports, 
   dbUpdateRideReportStatus, 
+  dbCreateRideReport,
+  dbGetRatings,
   type DbRide, 
-  type RideReport 
+  type RideReport,
+  type DbRating
 } from '../services/dbService';
+import { clearUserDebtByAdmin } from '../services/walletService';
 import { getSupabase } from '../supabase';
 import { getSystemSettings, saveSystemSettings, fetchSystemSettingsFromDb, type SystemSettings } from '../services/settingsService';
 import { testGatewayConnection, type GatewayHealthResult } from '../services/paymentGatewayService';
@@ -56,10 +60,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onReloadRides
 }) => {
   const { showAlert, showConfirm, showToast } = useSystemDialog();
-  const [activeSubTab, setActiveSubTab] = useState<'overview' | 'drivers' | 'clients' | 'rides' | 'reports' | 'settings'>('overview');
+  const [activeSubTab, setActiveSubTab] = useState<'overview' | 'drivers' | 'clients' | 'rides' | 'reports' | 'ratings' | 'settings'>('overview');
   const [drivers, setDrivers] = useState<DriverProfile[]>([]);
   const [clients, setClients] = useState<ClientProfile[]>([]);
   const [reports, setReports] = useState<RideReport[]>([]);
+  const [ratingsList, setRatingsList] = useState<DbRating[]>([]);
+  const [ratingScoreFilter, setRatingScoreFilter] = useState<'all' | 'low' | 'high'>('all');
+  const [ratingSearch, setRatingSearch] = useState<string>('');
   const [reportFilter, setReportFilter] = useState<'all' | 'pending' | 'in_review' | 'resolved'>('all');
   const [reportSearch, setReportSearch] = useState('');
   const [editingReportNoteId, setEditingReportNoteId] = useState<string | null>(null);
@@ -202,14 +209,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const loadAdminData = async () => {
-    const [driverList, clientList, reportsList] = await Promise.all([
+    const [driverList, clientList, reportsList, ratingsData] = await Promise.all([
       dbGetAllDrivers(),
       dbGetAllClients(),
-      dbGetRideReports()
+      dbGetRideReports(),
+      dbGetRatings()
     ]);
     setDrivers(driverList);
     setClients(clientList);
     setReports(reportsList);
+    setRatingsList(ratingsData);
   };
 
   useEffect(() => {
@@ -227,6 +236,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => loadAdminData())
         .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, () => loadAdminData())
         .on('postgres_changes', { event: '*', schema: 'public', table: 'drivers' }, () => loadAdminData())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'ratings' }, () => loadAdminData())
         .subscribe();
     }
 
@@ -649,6 +659,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {reports.filter(r => r.status === 'pending').length > 0 && (
             <span style={{ background: '#ef4444', color: '#fff', fontSize: '0.7rem', padding: '1px 6px', borderRadius: '10px', fontWeight: 800 }}>
               {reports.filter(r => r.status === 'pending').length} pendente{reports.filter(r => r.status === 'pending').length > 1 ? 's' : ''}
+            </span>
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('ratings')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '8px 16px',
+            borderRadius: '10px',
+            border: 'none',
+            cursor: 'pointer',
+            fontWeight: 700,
+            fontSize: '0.85rem',
+            background: activeSubTab === 'ratings' ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'transparent',
+            color: activeSubTab === 'ratings' ? '#000' : '#f59e0b'
+          }}
+        >
+          <Star size={15} />
+          <span>Avaliações ({ratingsList.length})</span>
+          {ratingsList.filter(r => r.score <= 3).length > 0 && (
+            <span style={{ background: '#ef4444', color: '#fff', fontSize: '0.7rem', padding: '1px 6px', borderRadius: '10px', fontWeight: 800 }}>
+              {ratingsList.filter(r => r.score <= 3).length} baixa{ratingsList.filter(r => r.score <= 3).length > 1 ? 's' : ''}
             </span>
           )}
         </button>
@@ -2166,6 +2201,44 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               ✓ Marcar como Resolvida
                             </button>
                           )}
+
+                          {/* Ação de Quitação de Débito do Usuário pelo Administrador */}
+                          {(rep.rideId === 'WALLET_DEBT' || rep.categoryLabel?.toLowerCase().includes('débito') || rep.description?.toLowerCase().includes('saldo devedor') || (rep as any).reason?.toLowerCase().includes('débito')) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                showConfirm(
+                                  'Deseja liquidar e quitar integralmente a pendência financeira deste usuário? A conta será imediatamente liberada para novas solicitações.',
+                                  async () => {
+                                    if (rep.reporterId) {
+                                      try {
+                                        await clearUserDebtByAdmin(rep.reporterId, 'Débito quitado pelo administrador na central');
+                                        await handleUpdateReport(rep.id, 'resolved', 'Débito liquidado e conta liberada pelo suporte.');
+                                        showToast('Débito liquidado com sucesso! Usuário liberado.', 'success');
+                                      } catch (e) {
+                                        showToast('Erro ao processar quitação.', 'error');
+                                      }
+                                    }
+                                  },
+                                  undefined,
+                                  { title: 'Quitação de Débito do Passageiro', confirmLabel: 'Confirmar Quitação', cancelLabel: 'Voltar' }
+                                );
+                              }}
+                              className="btn-primary"
+                              style={{
+                                padding: '5px 12px',
+                                fontSize: '0.72rem',
+                                fontWeight: 800,
+                                background: 'linear-gradient(135deg, #10b981, #047857)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '5px'
+                              }}
+                            >
+                              <CreditCard size={12} />
+                              <span>💰 Quitar Débito do Passageiro</span>
+                            </button>
+                          )}
                         </div>
 
                         {/* Ação Emergencial no Motorista */}
@@ -2203,6 +2276,286 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           </div>
                         )}
                       </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* SUB-ABA: MONITORAMENTO DE AVALIAÇÕES & PADRÃO DE QUALIDADE */}
+      {activeSubTab === 'ratings' && (() => {
+        const totalRatings = ratingsList.length;
+        const lowRatings = ratingsList.filter(r => r.score <= 3);
+        const highRatings = ratingsList.filter(r => r.score >= 4);
+        const avgScore = totalRatings > 0
+          ? (ratingsList.reduce((acc, curr) => acc + curr.score, 0) / totalRatings).toFixed(2)
+          : '5.0';
+
+        const filtered = ratingsList.filter(r => {
+          if (ratingScoreFilter === 'low' && r.score > 3) return false;
+          if (ratingScoreFilter === 'high' && r.score < 4) return false;
+          if (ratingSearch.trim()) {
+            const q = ratingSearch.toLowerCase();
+            return (
+              r.fromUserName?.toLowerCase().includes(q) ||
+              r.toUserName?.toLowerCase().includes(q) ||
+              r.comment?.toLowerCase().includes(q) ||
+              r.rideId?.toLowerCase().includes(q)
+            );
+          }
+          return true;
+        });
+
+        return (
+          <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            {/* Header com Estatísticas de Avaliações */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+              <div>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Star size={22} color="#f59e0b" fill="#f59e0b" />
+                  <span>Central de Avaliações & Qualidade Operacional</span>
+                </h3>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                  Monitoramento de notas bilaterais (passageiros e motoristas) para preservação do padrão VIP e providências preventivas.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => dbGetRatings().then(setRatingsList)}
+                className="btn-outline"
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', fontSize: '0.82rem' }}
+              >
+                <RefreshCw size={14} />
+                <span>Atualizar</span>
+              </button>
+            </div>
+
+            {/* Cards de Métricas Rápidas */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+              <div style={{ padding: '16px', borderRadius: '14px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 700 }}>MÉDIA GERAL DO SISTEMA</div>
+                <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#f59e0b', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>{avgScore}</span>
+                  <Star size={20} fill="#f59e0b" color="#f59e0b" />
+                </div>
+                <div style={{ fontSize: '0.74rem', color: '#94a3b8', marginTop: '2px' }}>Baseado em {totalRatings} avaliações</div>
+              </div>
+
+              <div style={{ padding: '16px', borderRadius: '14px', background: 'rgba(239, 68, 68, 0.06)', border: '1px solid rgba(239, 68, 68, 0.25)' }}>
+                <div style={{ fontSize: '0.78rem', color: '#fca5a5', fontWeight: 700 }}>NOTAS BAIXAS (1 A 3 ESTRELAS)</div>
+                <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#ef4444', marginTop: '4px' }}>
+                  {lowRatings.length}
+                </div>
+                <div style={{ fontSize: '0.74rem', color: '#cbd5e1', marginTop: '2px' }}>
+                  {lowRatings.length > 0 ? 'Requerem intervenção preventiva' : 'Nenhuma avaliação negativa'}
+                </div>
+              </div>
+
+              <div style={{ padding: '16px', borderRadius: '14px', background: 'rgba(16, 185, 129, 0.06)', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
+                <div style={{ fontSize: '0.78rem', color: '#6ee7b7', fontWeight: 700 }}>EXCELÊNCIA (4 E 5 ESTRELAS)</div>
+                <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#10b981', marginTop: '4px' }}>
+                  {highRatings.length}
+                </div>
+                <div style={{ fontSize: '0.74rem', color: '#cbd5e1', marginTop: '2px' }}>
+                  {totalRatings > 0 ? `${((highRatings.length / totalRatings) * 100).toFixed(0)}% de aprovação` : '100%'}
+                </div>
+              </div>
+            </div>
+
+            {/* Filtros e Barra de Pesquisa */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => setRatingScoreFilter('all')}
+                  className={ratingScoreFilter === 'all' ? 'btn-primary' : 'btn-outline'}
+                  style={{ padding: '6px 14px', fontSize: '0.8rem', borderRadius: '10px' }}
+                >
+                  Todas ({totalRatings})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRatingScoreFilter('low')}
+                  className={ratingScoreFilter === 'low' ? 'btn-primary' : 'btn-outline'}
+                  style={{
+                    padding: '6px 14px',
+                    fontSize: '0.8rem',
+                    borderRadius: '10px',
+                    color: ratingScoreFilter === 'low' ? '#fff' : '#ef4444',
+                    borderColor: 'rgba(239, 68, 68, 0.4)',
+                    background: ratingScoreFilter === 'low' ? 'linear-gradient(135deg, #ef4444, #b91c1c)' : undefined
+                  }}
+                >
+                  ⚠️ Notas Baixas / Críticas ({lowRatings.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRatingScoreFilter('high')}
+                  className={ratingScoreFilter === 'high' ? 'btn-primary' : 'btn-outline'}
+                  style={{ padding: '6px 14px', fontSize: '0.8rem', borderRadius: '10px' }}
+                >
+                  ⭐ Excelentes ({highRatings.length})
+                </button>
+              </div>
+
+              <input
+                type="text"
+                placeholder="Buscar por usuário, corrida ou comentário..."
+                value={ratingSearch}
+                onChange={(e) => setRatingSearch(e.target.value)}
+                className="input-field"
+                style={{ minWidth: '260px', fontSize: '0.85rem', padding: '8px 12px' }}
+              />
+            </div>
+
+            {/* Lista de Avaliações */}
+            {filtered.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--text-muted)' }}>
+                <Star size={44} color="#6366f1" style={{ margin: '0 auto 12px', opacity: 0.5 }} />
+                <p style={{ fontSize: '1rem', fontWeight: 700, color: '#fff' }}>Nenhuma avaliação encontrada</p>
+                <p style={{ fontSize: '0.82rem', marginTop: '4px' }}>
+                  {ratingScoreFilter !== 'all' ? 'Não há registros com este filtro.' : 'As avaliações aparecerão aqui conforme as corridas forem concluídas.'}
+                </p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {filtered.map(item => {
+                  const isLow = item.score <= 3;
+                  const targetDriver = drivers.find(d => d.id === item.toUserId || d.userId === item.toUserId);
+
+                  return (
+                    <div
+                      key={item.id}
+                      style={{
+                        padding: '18px',
+                        borderRadius: '16px',
+                        background: isLow ? 'rgba(239, 68, 68, 0.04)' : 'rgba(255, 255, 255, 0.02)',
+                        border: `1px solid ${isLow ? 'rgba(239, 68, 68, 0.35)' : 'rgba(255, 255, 255, 0.08)'}`,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '12px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div style={{ display: 'flex', gap: '3px' }}>
+                            {[1, 2, 3, 4, 5].map(s => (
+                              <Star
+                                key={s}
+                                size={17}
+                                fill={s <= item.score ? (isLow ? '#ef4444' : '#f59e0b') : 'transparent'}
+                                color={s <= item.score ? (isLow ? '#ef4444' : '#f59e0b') : '#475569'}
+                              />
+                            ))}
+                          </div>
+
+                          <span style={{
+                            fontSize: '0.78rem',
+                            fontWeight: 800,
+                            padding: '3px 8px',
+                            borderRadius: '8px',
+                            background: isLow ? 'rgba(239, 68, 68, 0.2)' : 'rgba(16, 185, 129, 0.2)',
+                            color: isLow ? '#f87171' : '#34d399'
+                          }}>
+                            {item.score}.0 / 5.0
+                          </span>
+
+                          <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
+                            Corrida #{item.rideId.slice(-6)}
+                          </span>
+                        </div>
+
+                        <span style={{ fontSize: '0.76rem', color: '#64748b' }}>
+                          {new Date(item.createdAt).toLocaleString('pt-BR')}
+                        </span>
+                      </div>
+
+                      {/* Relação Avaliador -> Avaliado */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
+                        <div style={{ padding: '8px 12px', borderRadius: '10px', background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.04)' }}>
+                          <div style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase' }}>Avaliador</div>
+                          <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#fff', marginTop: '2px' }}>{item.fromUserName}</div>
+                        </div>
+
+                        <div style={{ padding: '8px 12px', borderRadius: '10px', background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.04)' }}>
+                          <div style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase' }}>Avaliado</div>
+                          <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#38bdf8', marginTop: '2px' }}>{item.toUserName}</div>
+                        </div>
+                      </div>
+
+                      {/* Comentário */}
+                      <div style={{
+                        background: 'rgba(15, 23, 42, 0.5)',
+                        border: '1px solid rgba(255, 255, 255, 0.06)',
+                        borderRadius: '12px',
+                        padding: '12px 14px',
+                        fontSize: '0.86rem',
+                        color: item.comment ? '#cbd5e1' : '#64748b',
+                        fontStyle: item.comment ? 'normal' : 'italic'
+                      }}>
+                        {item.comment ? `"${item.comment}"` : 'Sem comentário adicional por escrito.'}
+                      </div>
+
+                      {/* Ações Moderativas em caso de Nota Baixa */}
+                      {isLow && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', paddingTop: '8px', borderTop: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                          <span style={{ fontSize: '0.74rem', color: '#fca5a5', fontWeight: 600 }}>
+                            ⚠️ Nota insatisfatória. Ações disciplinares disponíveis:
+                          </span>
+
+                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                await dbCreateRideReport({
+                                  id: 'rep_' + Date.now(),
+                                  rideId: item.rideId,
+                                  reporterId: item.fromUserId,
+                                  reporterName: item.fromUserName || 'Usuário',
+                                  reporterRole: 'client',
+                                  category: 'driver_behavior',
+                                  categoryLabel: 'Padrão de Atendimento',
+                                  description: `Nota Baixa (${item.score} Estrelas)\nFeedback: ${item.comment || 'Sem comentário'}\nAvaliado: ${item.toUserName}`,
+                                  status: 'in_review',
+                                  createdAt: Date.now()
+                                });
+                                showToast(`Ocorrência de advertência registrada com sucesso!`, 'info');
+                                loadAdminData();
+                              }}
+                              className="btn-outline"
+                              style={{ padding: '4px 10px', fontSize: '0.74rem', color: '#f59e0b', borderColor: 'rgba(245, 158, 11, 0.4)' }}
+                            >
+                              Registrar Advertência
+                            </button>
+
+                            {targetDriver && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  showConfirm(
+                                    `Deseja suspender temporariamente o motorista ${targetDriver.fullName}? O cadastro ficará 'Em Revisão' para apuração de conduta.`,
+                                    async () => {
+                                      await dbAdminUpdateDriverStatus(targetDriver.id, 'under_review');
+                                      showToast(`Motorista ${targetDriver.fullName} suspenso para revisão!`, 'warning');
+                                      loadAdminData();
+                                    },
+                                    undefined,
+                                    { title: 'Suspender Motorista Preventivamente', confirmLabel: 'Suspender', cancelLabel: 'Cancelar' }
+                                  );
+                                }}
+                                className="btn-outline"
+                                style={{ padding: '4px 10px', fontSize: '0.74rem', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.4)' }}
+                              >
+                                Suspender Motorista
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -4124,6 +4477,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             )}
           </div>
           <span>Ocorrências</span>
+        </button>
+
+        <button
+          onClick={() => {
+            setActiveSubTab('ratings');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          className={`mobile-nav-item ${activeSubTab === 'ratings' ? 'active' : ''}`}
+        >
+          <div className="icon-wrapper" style={{ position: 'relative' }}>
+            <Star size={17} color={ratingsList.filter(r => r.score <= 3).length > 0 ? '#f59e0b' : 'currentColor'} />
+            {ratingsList.filter(r => r.score <= 3).length > 0 && (
+              <span style={{
+                position: 'absolute',
+                top: '-3px',
+                right: '-5px',
+                background: '#ef4444',
+                color: '#fff',
+                fontSize: '0.58rem',
+                fontWeight: 800,
+                width: '14px',
+                height: '14px',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                {ratingsList.filter(r => r.score <= 3).length}
+              </span>
+            )}
+          </div>
+          <span>Avaliações</span>
         </button>
 
         <button
