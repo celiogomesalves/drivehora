@@ -22,6 +22,9 @@ import { DriverProfileModal } from './components/DriverProfileModal';
 import { FavoriteDriversList } from './components/FavoriteDriversList';
 import { ReportIssueModal } from './components/ReportIssueModal';
 import { ClientProfileManager } from './components/ClientProfileManager';
+import { GpsNavigationModal } from './components/GpsNavigationModal';
+import { getDriverPreferredGps, launchNavigationApp } from './services/gpsNavigationService';
+import { sendAppNotification, requestNotificationPermission } from './services/soundAndNotificationService';
 import { getCurrentPosition, reverseGeocode, searchAddressPlaces } from './services/gpsService';
 import { formatCurrency, formatCurrencyInput, parseCurrencyInput } from './utils/formatters';
 import { 
@@ -200,6 +203,33 @@ export function App() {
   // Modal de Reportar Problema com Corrida
   const [selectedRideForReport, setSelectedRideForReport] = useState<DbRide | null>(null);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+
+  // Modal de Seleção de GPS (Waze, Google Maps, Apple Maps)
+  const [gpsModalData, setGpsModalData] = useState<{
+    isOpen: boolean;
+    destinationAddress: string;
+    destinationLabel: string;
+    coords?: { lat: number; lng: number };
+  } | null>(null);
+
+  const handleOpenGpsNavigation = (destinationAddress: string, destinationLabel: string, coords?: { lat: number; lng: number }) => {
+    const pref = getDriverPreferredGps();
+    if (pref !== 'ask') {
+      launchNavigationApp(destinationAddress, pref, coords);
+      showToast(`Iniciando navegação no ${pref === 'waze' ? 'Waze' : pref === 'google_maps' ? 'Google Maps' : 'Apple Maps'}...`, 'info');
+    } else {
+      setGpsModalData({
+        isOpen: true,
+        destinationAddress,
+        destinationLabel,
+        coords
+      });
+    }
+  };
+
+  // Status anterior da corrida do cliente para disparar notificações nas transições
+  const [lastClientRideStatus, setLastClientRideStatus] = useState<string | null>(null);
+  const [notifiedIncomingRideId, setNotifiedIncomingRideId] = useState<string | null>(null);
 
   // Meio de Pagamento Selecionado pelo Passageiro
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethodType>('pix');
@@ -944,6 +974,7 @@ export function App() {
     const driverId = currentUser?.id || 'driver_demo_01';
     const driverName = currentUser?.fullName || 'Motorista Parceiro';
     setDismissedRideId(null);
+    const targetRide = rides.find(r => r.id === rideId);
     await dbUpdateRide(rideId, {
       driverId,
       driverName,
@@ -951,16 +982,33 @@ export function App() {
       acceptedAt: Date.now()
     });
     fetchRides();
-    showToast('Corrida aceita com sucesso! Inicie o deslocamento.', 'success');
+    showToast('Corrida aceita com sucesso! Inicie o deslocamento até o passageiro.', 'success');
+
+    if (targetRide) {
+      handleOpenGpsNavigation(
+        targetRide.origin,
+        'Ponto de Embarque do Passageiro',
+        targetRide.originLat && targetRide.originLng ? { lat: targetRide.originLat, lng: targetRide.originLng } : undefined
+      );
+    }
   };
 
   const handleStartRide = async (rideId: string) => {
+    const targetRide = rides.find(r => r.id === rideId);
     await dbUpdateRide(rideId, {
       status: 'in_progress',
       startedAt: Date.now()
     });
     fetchRides();
-    showToast('Corrida iniciada! Bom trabalho.', 'success');
+    showToast('Corrida iniciada! Abrindo GPS para navegação até o destino.', 'success');
+
+    if (targetRide) {
+      handleOpenGpsNavigation(
+        targetRide.destination,
+        'Destino Final da Corrida',
+        targetRide.destLat && targetRide.destLng ? { lat: targetRide.destLat, lng: targetRide.destLng } : undefined
+      );
+    }
   };
 
   const handleFinishRide = async (rideId: string) => {
@@ -1131,6 +1179,52 @@ export function App() {
   const formattedCountdown = `${String(cancelMinutes).padStart(2, '0')}:${String(cancelSecs).padStart(2, '0')}`;
   const canCancelAccepted = cancelSecondsRemaining > 0;
 
+  // Notificações e Sons em Tempo Real para o Passageiro
+  useEffect(() => {
+    if (!currentUser || currentUser.role !== 'client') return;
+    const currentStatus = activeClientRide?.status || null;
+
+    if (lastClientRideStatus && currentStatus && lastClientRideStatus !== currentStatus) {
+      if (lastClientRideStatus === 'searching' && currentStatus === 'accepted') {
+        sendAppNotification({
+          title: '🚗 Motorista a Caminho!',
+          body: `${activeClientRide?.driverName || 'O motorista parceiro'} aceitou sua chamada e está se deslocando até seu local de embarque.`,
+          soundType: 'accepted'
+        });
+        showToast('Motorista aceitou sua corrida e já está a caminho!', 'success');
+      } else if (lastClientRideStatus === 'accepted' && currentStatus === 'in_progress') {
+        sendAppNotification({
+          title: '🏁 Corrida Iniciada!',
+          body: 'Sua viagem começou! Acompanhe a rota ao vivo na tela.',
+          soundType: 'in_progress'
+        });
+        showToast('Sua corrida começou! Acompanhe o trajeto em tempo real.', 'info');
+      } else if (lastClientRideStatus === 'in_progress' && currentStatus === 'finished') {
+        sendAppNotification({
+          title: '✅ Corrida Concluída!',
+          body: 'Você chegou ao seu destino. Obrigado por viajar com o DriveHora!',
+          soundType: 'finished'
+        });
+        showToast('Corrida concluída com sucesso!', 'success');
+      }
+    }
+
+    setLastClientRideStatus(currentStatus);
+  }, [activeClientRide?.status, currentUser?.id, currentUser?.role, lastClientRideStatus]);
+
+  // Notificação e Alerta Sonoro para o Motorista ao receber nova chamada pendente
+  useEffect(() => {
+    if (!currentUser || currentUser.role !== 'driver' || !isDriverOnline) return;
+    if (incomingRide && incomingRide.id !== notifiedIncomingRideId && driverSecondsRemaining > 0) {
+      setNotifiedIncomingRideId(incomingRide.id);
+      sendAppNotification({
+        title: '🔔 Nova Solicitação de Corrida!',
+        body: `${incomingRide.hours}h de serviço (${formatCurrency(incomingRide.driverNet)} líquidos) • Partida: ${incomingRide.origin}`,
+        soundType: 'new_ride'
+      });
+    }
+  }, [incomingRide?.id, isDriverOnline, currentUser?.id, currentUser?.role, notifiedIncomingRideId, driverSecondsRemaining]);
+
   // ========================================================
   // 1. TELA INICIAL: PÁGINA DE LOGIN OBRIGATÓRIA (SE NÃO LOGADO)
   // ========================================================
@@ -1241,7 +1335,46 @@ export function App() {
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      
+      {/* Barra de Notificações / Permissão do Navegador */}
+      {typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default' && (
+        <div style={{
+          background: 'linear-gradient(90deg, #4338ca, #6366f1)',
+          color: '#fff',
+          padding: '8px 16px',
+          fontSize: '0.8rem',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '12px',
+          flexWrap: 'wrap',
+          zIndex: 60
+        }}>
+          <span>🔔 Ative as notificações sonoras para ser alertado quando o motorista estiver a caminho ou novos chamados chegarem:</span>
+          <button
+            type="button"
+            onClick={() => {
+              requestNotificationPermission().then(perm => {
+                if (perm === 'granted') {
+                  showToast('Notificações e alertas sonoros ativados com sucesso!', 'success');
+                }
+              });
+            }}
+            style={{
+              background: '#fff',
+              color: '#4338ca',
+              border: 'none',
+              padding: '4px 12px',
+              borderRadius: '10px',
+              fontWeight: 800,
+              cursor: 'pointer',
+              fontSize: '0.75rem'
+            }}
+          >
+            Ativar Notificações
+          </button>
+        </div>
+      )}
+
       {/* Top Header Logado */}
       <header style={{
         background: 'rgba(9, 13, 22, 0.95)',
@@ -2638,7 +2771,10 @@ export function App() {
                       )}
 
                       {activeClientRide.status === 'accepted' && (
-                        <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                          {/* Mapa de Rastreamento em Tempo Real do Motorista a Caminho */}
+                          <LiveRideTrackerMap ride={activeClientRide} />
+
                           <div style={{
                             background: canCancelAccepted ? 'rgba(245, 158, 11, 0.12)' : 'rgba(239, 68, 68, 0.12)',
                             border: `1px solid ${canCancelAccepted ? 'rgba(245, 158, 11, 0.4)' : 'rgba(239, 68, 68, 0.4)'}`,
@@ -2650,7 +2786,7 @@ export function App() {
                           }}>
                             <div>
                               <div style={{ fontSize: '0.75rem', color: canCancelAccepted ? '#f59e0b' : '#ef4444', fontWeight: 700 }}>
-                                {canCancelAccepted ? '⏱️ TEMPO LIMITE DE CANCELAMENTO' : '⚠️ PRAZO DE CANCELAMENTO EXPIRADO'}
+                                {canCancelAccepted ? '⏱️ PRAZO DE CANCELAMENTO GRATUITO' : '⚠️ PRAZO DE CANCELAMENTO EXPIRADO'}
                               </div>
                               <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
                                 {canCancelAccepted 
@@ -3802,23 +3938,97 @@ export function App() {
                                   <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>{r.origin} ➔ {r.destination}</span>
                                   <span style={{ fontSize: '0.75rem', color: '#f59e0b', fontWeight: 700, textTransform: 'uppercase' }}>{r.status}</span>
                                 </div>
-                                <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+
+                                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                                  <div><strong>Passageiro:</strong> {r.clientName || 'Passageiro'}</div>
+                                  <div><strong>Embarque:</strong> {r.origin}</div>
+                                  <div><strong>Destino:</strong> {r.destination}</div>
+                                </div>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px' }}>
+                                  {/* Botão de Navegação Externa (Waze / Google Maps / Apple Maps) */}
+                                  <div style={{ display: 'flex', gap: '8px' }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (r.status === 'accepted') {
+                                          handleOpenGpsNavigation(
+                                            r.origin,
+                                            'Ponto de Embarque do Passageiro',
+                                            r.originLat && r.originLng ? { lat: r.originLat, lng: r.originLng } : undefined
+                                          );
+                                        } else {
+                                          handleOpenGpsNavigation(
+                                            r.destination,
+                                            'Destino Final da Corrida',
+                                            r.destLat && r.destLng ? { lat: r.destLat, lng: r.destLng } : undefined
+                                          );
+                                        }
+                                      }}
+                                      className="btn-outline"
+                                      style={{
+                                        flex: 1,
+                                        padding: '10px 14px',
+                                        fontSize: '0.82rem',
+                                        fontWeight: 700,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '8px',
+                                        borderColor: '#38bdf8',
+                                        color: '#38bdf8',
+                                        background: 'rgba(56, 189, 248, 0.08)'
+                                      }}
+                                      title="Abrir rota no Waze, Google Maps ou Apple Maps"
+                                    >
+                                      <Navigation size={16} />
+                                      <span>{r.status === 'accepted' ? '🗺️ Navegar até o Passageiro' : '🗺️ Navegar até o Destino'}</span>
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setGpsModalData({
+                                          isOpen: true,
+                                          destinationAddress: r.status === 'accepted' ? r.origin : r.destination,
+                                          destinationLabel: r.status === 'accepted' ? 'Ponto de Embarque' : 'Destino Final',
+                                          coords: r.status === 'accepted'
+                                            ? (r.originLat && r.originLng ? { lat: r.originLat, lng: r.originLng } : undefined)
+                                            : (r.destLat && r.destLng ? { lat: r.destLat, lng: r.destLng } : undefined)
+                                        });
+                                      }}
+                                      className="btn-outline"
+                                      style={{
+                                        padding: '10px 12px',
+                                        fontSize: '0.78rem',
+                                        borderRadius: '10px',
+                                        color: 'var(--text-secondary)'
+                                      }}
+                                      title="Alterar aplicativo padrão de GPS (Waze / Google Maps / Apple Maps)"
+                                    >
+                                      ⚙️ GPS
+                                    </button>
+                                  </div>
+
+                                  {/* Ação de Transição de Status da Corrida */}
                                   {r.status === 'accepted' && (
                                     <button
                                       onClick={() => handleStartRide(r.id)}
                                       className="btn-primary"
-                                      style={{ flex: 1, padding: '8px', fontSize: '0.8rem' }}
+                                      style={{ width: '100%', padding: '10px', fontSize: '0.85rem', fontWeight: 700 }}
                                     >
-                                      <PlayCircle size={14} /> Iniciar Trajeto
+                                      <PlayCircle size={16} />
+                                      <span>Iniciar Trajeto com Passageiro</span>
                                     </button>
                                   )}
                                   {r.status === 'in_progress' && (
                                     <button
                                       onClick={() => handleFinishRide(r.id)}
                                       className="btn-success"
-                                      style={{ flex: 1, padding: '8px', fontSize: '0.8rem' }}
+                                      style={{ width: '100%', padding: '10px', fontSize: '0.85rem', fontWeight: 700 }}
                                     >
-                                      <CheckCircle2 size={14} /> Concluir e Receber {formatCurrency(r.driverNet)}
+                                      <CheckCircle2 size={16} />
+                                      <span>Concluir Corrida e Receber {formatCurrency(r.driverNet)}</span>
                                     </button>
                                   )}
                                 </div>
@@ -4429,6 +4639,20 @@ export function App() {
             setIsReportModalOpen(false);
             setSelectedRideForReport(null);
             showToast('Ocorrência registrada! Nossa equipe analisará o ocorrido.', 'success');
+          }}
+        />
+      )}
+
+      {/* Modal de Navegação GPS para Motoristas (Waze / Google Maps / Apple Maps) */}
+      {gpsModalData && (
+        <GpsNavigationModal
+          isOpen={gpsModalData.isOpen}
+          destinationAddress={gpsModalData.destinationAddress}
+          destinationLabel={gpsModalData.destinationLabel}
+          coords={gpsModalData.coords}
+          onClose={() => setGpsModalData(null)}
+          onNavigateStarted={() => {
+            showToast('Navegação GPS iniciada! O app DriveHora continua ativo no fundo.', 'success');
           }}
         />
       )}
