@@ -199,7 +199,24 @@ export function App() {
   const [favoriteDriverIds, setFavoriteDriverIds] = useState<string[]>([]);
   const [selectedDirectDriver, setSelectedDirectDriver] = useState<DriverPublicProfile | null>(null);
   const [now, setNow] = useState(Date.now());
-  const [dismissedCancellationId, setDismissedCancellationId] = useState<string | null>(null);
+  const [dismissedCancellationIds, setDismissedCancellationIds] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem('drivehora_dismissed_cancellations');
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const handleDismissCancellation = (rideId: string) => {
+    setDismissedCancellationIds(prev => {
+      const updated = Array.from(new Set([...prev, rideId]));
+      try {
+        localStorage.setItem('drivehora_dismissed_cancellations', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+  };
 
   // Modal de Reportar Problema com Corrida
   const [selectedRideForReport, setSelectedRideForReport] = useState<DbRide | null>(null);
@@ -1162,10 +1179,14 @@ export function App() {
   const pendingRides = rides.filter(r => r.status === 'searching');
   const myDriverRides = rides.filter(r => (r.status === 'accepted' || r.status === 'to_pickup' || r.status === 'in_progress') && (r.driverId === currentUser?.id || !r.driverId));
 
-  // Corrida cancelada recente para alertar o motorista
-  const cancelledRideForDriver = rides.find(
-    r => r.status === 'cancelled' && r.driverId === currentUser?.id
-  );
+  // Corrida cancelada recente para alertar o motorista (apenas se recente e não descartada anteriormente)
+  const cancelledRideForDriver = rides.find(r => {
+    if (r.status !== 'cancelled' || r.driverId !== currentUser?.id) return false;
+    if (dismissedCancellationIds.includes(r.id)) return false;
+    const rideTime = (r as any).cancelledAt || r.finishedAt || r.acceptedAt || r.createdAt || 0;
+    const isRecent = !rideTime || (Date.now() - rideTime) < 6 * 3600 * 1000;
+    return isRecent;
+  });
 
   // Identificar se a solicitação do cliente está em busca de motorista
   const isClientRideSearching = activeClientRide?.status === 'searching';
@@ -3609,7 +3630,7 @@ export function App() {
             ) : (
               <div>
                 {/* Banner de Aviso de Cancelamento pelo Passageiro */}
-                {cancelledRideForDriver && cancelledRideForDriver.id !== dismissedCancellationId && (
+                {cancelledRideForDriver && (
                   <div style={{
                     background: 'rgba(239, 68, 68, 0.15)',
                     border: '1px solid rgba(239, 68, 68, 0.5)',
@@ -3636,7 +3657,7 @@ export function App() {
                       </div>
                     </div>
                     <button
-                      onClick={() => setDismissedCancellationId(cancelledRideForDriver.id)}
+                      onClick={() => handleDismissCancellation(cancelledRideForDriver.id)}
                       className="btn-outline"
                       style={{ fontSize: '0.8rem', padding: '8px 14px', color: '#fff', borderColor: 'rgba(255,255,255,0.2)' }}
                     >
