@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, ShieldCheck, CheckCircle2, AlertCircle, Save, MapPin, FileText } from 'lucide-react';
+import { User, CheckCircle2, AlertCircle, Save, MapPin, FileText } from 'lucide-react';
 import type { UserProfile, ClientProfile } from '../types/auth';
 import { formatCep, fetchAddressByCep } from '../services/cepService';
 import { formatPhone, formatCpf, validateCpf, validatePhone } from '../utils/formatters';
@@ -144,24 +144,7 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
         </div>
       </div>
 
-      {/* Caixa Informativa sobre Exigências dos Gateways de Pagamento */}
-      <div style={{
-        padding: '14px 16px',
-        borderRadius: '12px',
-        background: 'rgba(56, 189, 248, 0.08)',
-        border: '1px solid rgba(56, 189, 248, 0.25)',
-        marginBottom: '20px',
-        display: 'flex',
-        alignItems: 'flex-start',
-        gap: '10px'
-      }}>
-        <ShieldCheck size={20} color="#38bdf8" style={{ flexShrink: 0, marginTop: '2px' }} />
-        <div style={{ fontSize: '0.76rem', color: '#cbd5e1', lineHeight: 1.5 }}>
-          <strong style={{ color: '#38bdf8' }}>Regulamentação do Banco Central & Gateways:</strong>
-          <br />
-          Para emissão de cobranças instantâneas (Pix e Cartão de Crédito) no Asaas ou Mercado Pago, os dados de <strong>Nome Completo, CPF e Celular</strong> são estritamente obrigatórios por normas de segurança e prevenção a fraudes.
-        </div>
-      </div>
+
 
       {errorMessage && (
         <div style={{
