@@ -521,7 +521,10 @@ export const dbGetDriverProfile = async (userId: string, email?: string): Promis
   const sb = getSupabase();
   if (sb) {
     try {
-      let res: any = await withTimeout(sb.from('drivers').select('*').eq('user_id', userId).maybeSingle(), 6000);
+      let res: any = await withTimeout(
+        sb.from('drivers').select('*').or(`user_id.eq.${userId},id.eq.${userId}`).maybeSingle(),
+        6000
+      );
       let pData: any = null;
 
       if ((!res?.data || res?.error) && email) {
@@ -531,7 +534,10 @@ export const dbGetDriverProfile = async (userId: string, email?: string): Promis
         );
         if (pRes?.data?.id) {
           pData = pRes.data;
-          res = await withTimeout(sb.from('drivers').select('*').eq('user_id', pRes.data.id).maybeSingle(), 4000);
+          res = await withTimeout(
+            sb.from('drivers').select('*').or(`user_id.eq.${pRes.data.id},id.eq.${pRes.data.id}`).maybeSingle(),
+            4000
+          );
         }
       }
 
@@ -574,7 +580,9 @@ export const dbGetDriverProfile = async (userId: string, email?: string): Promis
           verificationStatus: dataVerificationStatus(res.data.verification_status),
           rating: Number(res.data.rating) || 5.0,
           totalRides: Number(res.data.total_rides) || 0,
-          isOnline: Boolean(res.data.is_online)
+          isOnline: Boolean(res.data.is_online),
+          currentLat: res.data.current_lat !== undefined && res.data.current_lat !== null ? Number(res.data.current_lat) : undefined,
+          currentLng: res.data.current_lng !== undefined && res.data.current_lng !== null ? Number(res.data.current_lng) : undefined
         };
 
         try {
@@ -1590,13 +1598,29 @@ export const dbUpdateDriverLocation = async (
   userId: string,
   coords: { latitude: number; longitude: number }
 ): Promise<{ success: boolean; error?: string }> => {
+  // Salva no localStorage e emite evento customizado no window para sincronização instantânea local/entre abas
+  try {
+    const locPayload = {
+      latitude: coords.latitude,
+      longitude: coords.longitude,
+      lat: coords.latitude,
+      lng: coords.longitude,
+      updatedAt: Date.now()
+    };
+    localStorage.setItem(`drivehora_live_driver_gps_${userId}`, JSON.stringify(locPayload));
+    window.dispatchEvent(new CustomEvent('drivehora_driver_gps_updated', {
+      detail: { userId, coords: locPayload }
+    }));
+  } catch {}
+
   const sb = getSupabase();
   if (sb) {
     try {
       await sb.from('drivers').update({
         current_lat: coords.latitude,
-        current_lng: coords.longitude
-      }).eq('user_id', userId);
+        current_lng: coords.longitude,
+        updated_at: new Date().toISOString()
+      }).or(`user_id.eq.${userId},id.eq.${userId}`);
       return { success: true };
     } catch (e: any) {
       return { success: false, error: e.message };

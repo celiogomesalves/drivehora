@@ -1306,24 +1306,46 @@ export function App() {
     await dbUpdateRide(rideId, {
       status: 'to_pickup'
     });
+    // Se temos GPS atual do motorista, transmite imediatamente
+    if (currentUser) {
+      getCurrentPosition()
+        .then(coords => dbUpdateDriverLocation(currentUser.id, coords))
+        .catch(() => {});
+    }
     fetchRides();
     showToast('Deslocamento iniciado! Passageiro notificado que você está a caminho.', 'info');
   };
 
   const handleArrivedAtPickup = async (rideId: string) => {
+    const targetRide = rides.find(r => r.id === rideId);
     await dbUpdateRide(rideId, {
       status: 'arrived_at_pickup',
       arrivedAt: Date.now()
     });
+    // Ao confirmar chegada ao embarque, alinha o GPS do motorista exatamente com o ponto de embarque
+    if (currentUser && targetRide && targetRide.originLat && targetRide.originLng) {
+      dbUpdateDriverLocation(currentUser.id, {
+        latitude: targetRide.originLat,
+        longitude: targetRide.originLng
+      }).catch(() => {});
+    }
     fetchRides();
     showToast('Chegada confirmada! O passageiro foi notificado para embarque.', 'success');
   };
 
   const handleStartRide = async (rideId: string) => {
+    const targetRide = rides.find(r => r.id === rideId);
     await dbUpdateRide(rideId, {
       status: 'in_progress',
       startedAt: Date.now()
     });
+    // Ao iniciar a corrida até o destino, garante transmissão do ponto inicial
+    if (currentUser && targetRide && targetRide.originLat && targetRide.originLng) {
+      dbUpdateDriverLocation(currentUser.id, {
+        latitude: targetRide.originLat,
+        longitude: targetRide.originLng
+      }).catch(() => {});
+    }
     fetchRides();
     showToast('Corrida iniciada! Passageiro a bordo e tempo contratado em andamento.', 'success');
   };
@@ -1483,11 +1505,13 @@ export function App() {
   });
 
   // Corrida cancelada recente para alertar o passageiro com a justificativa
+  // CRÍTICO: Só deve alertar se a corrida foi realmente cancelada pelo motorista com motorista atribuído, e recente (< 20 min)
   const cancelledRideForClient = rides.find(r => {
     if (r.status !== 'cancelled' || r.clientId !== currentUser?.id) return false;
+    if (r.cancelledBy !== 'driver' || !r.driverId) return false;
     if (dismissedCancellationIds.includes(r.id)) return false;
     const rideTime = (r as any).cancelledAt || r.finishedAt || r.acceptedAt || r.createdAt || 0;
-    return (Date.now() - rideTime) < 2 * 3600 * 1000;
+    return (Date.now() - rideTime) < 20 * 60 * 1000;
   });
 
   // Identificar se a solicitação do cliente está em busca de motorista
@@ -2535,7 +2559,15 @@ export function App() {
                         </div>
                         <button
                           type="button"
-                          onClick={() => setDismissedCancellationIds(prev => [...prev, cancelledRideForClient.id])}
+                          onClick={() => {
+                            setDismissedCancellationIds(prev => {
+                              const updated = Array.from(new Set([...prev, cancelledRideForClient.id]));
+                              try {
+                                localStorage.setItem('drivehora_dismissed_cancellations', JSON.stringify(updated));
+                              } catch {}
+                              return updated;
+                            });
+                          }}
                           className="btn-outline"
                           style={{ padding: '8px 16px', fontSize: '0.82rem', flexShrink: 0 }}
                         >
@@ -5814,6 +5846,16 @@ export function App() {
           currentUserId={currentUser.id}
           onRatingCompleted={() => {
             setActiveRatingRide(null);
+            setCurrentRideId(null);
+            // Ao concluir a avaliação com sucesso, descarta quaisquer avisos de cancelamento residuais do passageiro
+            setDismissedCancellationIds(prev => {
+              const clientCancelledRides = rides.filter(r => r.status === 'cancelled' && r.clientId === currentUser?.id).map(r => r.id);
+              const updated = Array.from(new Set([...prev, ...clientCancelledRides]));
+              try {
+                localStorage.setItem('drivehora_dismissed_cancellations', JSON.stringify(updated));
+              } catch {}
+              return updated;
+            });
             showToast('Avaliação registrada com sucesso! Obrigado pelo feedback.', 'success');
           }}
         />
