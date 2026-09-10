@@ -34,6 +34,9 @@ export interface DbRide {
   startedAt?: number;
   finishedAt?: number;
   driverAcknowledgedAt?: number;
+  isScheduled?: boolean;
+  scheduledFor?: string;
+  requiredAmenities?: string[];
 }
 
 // Timeout helper para chamadas de banco nunca travarem
@@ -631,16 +634,31 @@ export const dbCreateRide = async (ride: DbRide): Promise<{ success: boolean; er
       if (ride.originLng) payload.origin_lng = ride.originLng;
       if (ride.destLat) payload.dest_lat = ride.destLat;
       if (ride.destLng) payload.dest_lng = ride.destLng;
+      if (ride.isScheduled) payload.is_scheduled = true;
+      if (ride.scheduledFor) payload.scheduled_for = ride.scheduledFor;
+      if (ride.requiredAmenities && ride.requiredAmenities.length > 0) payload.required_amenities = ride.requiredAmenities;
 
       let res = await sb.from('rides').insert([payload]);
       if (res?.error) {
-        console.warn('Tentativa de inserção com coordenadas falhou, tentando campos essenciais:', res.error);
+        console.warn('Tentativa de inserção com campos estendidos falhou, tentando fallback:', res.error);
         // Fallback imediato: remove colunas adicionais caso o schema do Supabase ainda não as tenha
         delete payload.origin_lat;
         delete payload.origin_lng;
         delete payload.dest_lat;
         delete payload.dest_lng;
+        delete payload.is_scheduled;
+        delete payload.scheduled_for;
+        delete payload.required_amenities;
         res = await sb.from('rides').insert([payload]);
+      }
+
+      // Persiste metadados estendidos na ponte global em tempo real
+      if (ride.isScheduled || (ride.requiredAmenities && ride.requiredAmenities.length > 0)) {
+        await dbSetRideSubstatus(ride.id, ride.status || 'searching', {
+          isScheduled: ride.isScheduled,
+          scheduledFor: ride.scheduledFor,
+          requiredAmenities: ride.requiredAmenities
+        });
       }
 
       if (res?.error) {
@@ -695,7 +713,13 @@ export const dbGetRidesSubstatusMap = async (): Promise<Record<string, { substat
 export const dbSetRideSubstatus = async (
   rideId: string,
   substatus: string,
-  extra?: { cancellationReason?: string; cancelledBy?: string }
+  extra?: { 
+    cancellationReason?: string; 
+    cancelledBy?: string;
+    isScheduled?: boolean;
+    scheduledFor?: string;
+    requiredAmenities?: string[];
+  }
 ): Promise<void> => {
   try {
     const map = await dbGetRidesSubstatusMap();

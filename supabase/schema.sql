@@ -36,8 +36,10 @@ ALTER TABLE public.drivers ADD COLUMN IF NOT EXISTS neighborhood TEXT;
 ALTER TABLE public.drivers ADD COLUMN IF NOT EXISTS city TEXT;
 ALTER TABLE public.drivers ADD COLUMN IF NOT EXISTS state TEXT;
 ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS fcm_token TEXT;
-ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS full_name TEXT;
 ALTER TABLE public.rides ADD COLUMN IF NOT EXISTS driver_acknowledged_at TIMESTAMPTZ;
+ALTER TABLE public.rides ADD COLUMN IF NOT EXISTS is_scheduled BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.rides ADD COLUMN IF NOT EXISTS scheduled_for TIMESTAMPTZ;
+ALTER TABLE public.rides ADD COLUMN IF NOT EXISTS required_amenities TEXT[];
 
 -- 2. Tabela de Passageiros / Clientes (clients)
 CREATE TABLE IF NOT EXISTS public.clients (

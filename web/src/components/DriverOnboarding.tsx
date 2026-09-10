@@ -21,6 +21,7 @@ interface DriverOnboardingProps {
 
 // Lista de comodidades padrão com ícones e descrições
 const AVAILABLE_AMENITIES = [
+  { id: 'acessibilidade_pcd', label: 'Adaptado PCD / Acessibilidade', icon: '♿', desc: 'Carro adaptado ou suporte a passageiros com deficiência / mobilidade reduzida' },
   { id: 'ar_condicionado', label: 'Ar-Condicionado', icon: '❄️', desc: 'Climatização sempre ligada' },
   { id: 'carregador_usb', label: 'Carregador USB / Tipo-C', icon: '🔌', desc: 'Cabos para Android e iPhone' },
   { id: 'wifi', label: 'Wi-Fi 5G a Bordo', icon: '📶', desc: 'Internet rápida para o passageiro' },

@@ -6,7 +6,8 @@ import {
   X, Check, LogOut, MapPin, Crown, AlertTriangle, UserCheck,
   BellRing, Volume2, VolumeX, Ban, AlertOctagon, Heart, ShieldAlert, RotateCcw,
   Filter, Archive, ArchiveRestore, Trash2, CreditCard,
-  ChevronDown, ChevronUp, AlertCircle, Headphones
+  ChevronDown, ChevronUp, AlertCircle, Headphones,
+  Calendar, Zap
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import confetti from 'canvas-confetti';
@@ -196,6 +197,16 @@ export function App() {
   const [isRequesting, setIsRequesting] = useState(false);
   const [isLocatingGPS, setIsLocatingGPS] = useState(false);
   const [clientOriginCoords, setClientOriginCoords] = useState<{ lat: number; lng: number } | null>(null);
+
+  // Modalidade de corrida: Viagem Imediata vs Corrida Agendada
+  const [isScheduledRide, setIsScheduledRide] = useState(false);
+  const [scheduledDate, setScheduledDate] = useState(() => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return tomorrow.toISOString().split('T')[0];
+  });
+  const [scheduledTime, setScheduledTime] = useState('09:00');
+  const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
 
   // Cliente: Sub-aba (Solicitar Corrida, Radar, Favoritos VIP, Histórico ou Meus Dados/CPF)
   const [clientSubTab, setClientSubTab] = useState<'request' | 'nearby_radar' | 'favorites' | 'history' | 'profile'>('request');
@@ -498,22 +509,32 @@ export function App() {
   ).length;
 
   // Identificar solicitação de corrida pendente em busca de motorista
-  const incomingRide = rides.find(r => r.status === 'searching');
+  // Aplica filtro de comodidades: apenas motoristas com todas as comodidades exigidas recebem o chamado
+  const incomingRide = rides.find(r => {
+    if (r.status !== 'searching') return false;
+    if (r.requiredAmenities && r.requiredAmenities.length > 0) {
+      const driverAmenities = driverProfile?.amenities || [];
+      const hasAll = r.requiredAmenities.every(req => driverAmenities.includes(req));
+      if (!hasAll) return false;
+    }
+    return true;
+  });
 
-  // Tempo limite para o motorista aceitar a corrida (30 segundos)
+  // Tempo limite para o motorista aceitar a corrida (30s APENAS para viagens imediatas)
   const DRIVER_ACCEPT_TIMEOUT_SECS = 30;
+  const isIncomingScheduled = Boolean(incomingRide?.isScheduled);
   const driverSecondsRemaining = incomingRide 
-    ? Math.max(0, DRIVER_ACCEPT_TIMEOUT_SECS - Math.floor((now - (incomingRide.createdAt || now)) / 1000))
+    ? (isIncomingScheduled ? 9999 : Math.max(0, DRIVER_ACCEPT_TIMEOUT_SECS - Math.floor((now - (incomingRide.createdAt || now)) / 1000)))
     : 0;
 
-  // Auto-dispensar chamada caso o tempo de resposta do motorista expire
+  // Auto-dispensar chamada caso o tempo de resposta do motorista expire (apenas para corridas imediatas)
   useEffect(() => {
-    if (isDriverOnline && incomingRide && incomingRide.id !== dismissedRideId) {
+    if (isDriverOnline && incomingRide && !incomingRide.isScheduled && incomingRide.id !== dismissedRideId) {
       if (driverSecondsRemaining <= 0) {
         setDismissedRideId(incomingRide.id);
       }
     }
-  }, [isDriverOnline, incomingRide?.id, dismissedRideId, driverSecondsRemaining]);
+  }, [isDriverOnline, incomingRide?.id, incomingRide?.isScheduled, dismissedRideId, driverSecondsRemaining]);
 
   // Sintetizador Web Audio API de Alerta Sonoro de Chamado
   const playRideAlertSound = () => {
@@ -834,7 +855,10 @@ export function App() {
               createdAt: new Date(d.created_at).getTime(),
               acceptedAt: d.accepted_at ? new Date(d.accepted_at).getTime() : undefined,
               startedAt: d.started_at ? new Date(d.started_at).getTime() : undefined,
-              finishedAt: d.finished_at ? new Date(d.finished_at).getTime() : undefined
+              finishedAt: d.finished_at ? new Date(d.finished_at).getTime() : undefined,
+              isScheduled: Boolean((sub as any)?.isScheduled ?? d.is_scheduled ?? d.isScheduled),
+              scheduledFor: (sub as any)?.scheduledFor || d.scheduled_for || d.scheduledFor,
+              requiredAmenities: (sub as any)?.requiredAmenities || d.required_amenities || d.requiredAmenities || []
             };
           });
           setRides(formatted);
@@ -870,7 +894,10 @@ export function App() {
             status: effectiveStatus,
             cancellationReason: sub?.cancellationReason || d.cancellationReason,
             cancelledBy: sub?.cancelledBy || d.cancelledBy,
-            driverAcknowledgedAt: d.driverAcknowledgedAt ? Number(d.driverAcknowledgedAt) : (d.driver_acknowledged_at ? new Date(d.driver_acknowledged_at).getTime() : undefined)
+            driverAcknowledgedAt: d.driverAcknowledgedAt ? Number(d.driverAcknowledgedAt) : (d.driver_acknowledged_at ? new Date(d.driver_acknowledged_at).getTime() : undefined),
+            isScheduled: Boolean((sub as any)?.isScheduled ?? d.is_scheduled ?? d.isScheduled),
+            scheduledFor: (sub as any)?.scheduledFor || d.scheduled_for || d.scheduledFor,
+            requiredAmenities: (sub as any)?.requiredAmenities || d.required_amenities || d.requiredAmenities || []
           };
         });
         setRides(mapped);
@@ -1110,7 +1137,10 @@ export function App() {
       paymentExternalId: pixDataResult?.externalId,
       pixQrCodeUrl: pixDataResult?.pixQrCodeUrl,
       pixCopiaECola: pixDataResult?.pixCopiaECola,
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      isScheduled: isScheduledRide,
+      scheduledFor: isScheduledRide ? `${scheduledDate}T${scheduledTime}` : undefined,
+      requiredAmenities: selectedAmenities.length > 0 ? selectedAmenities : undefined
     };
 
     // 1. Atualização imediata no estado local do cliente
@@ -1491,7 +1521,15 @@ export function App() {
     (currentRideId ? rides.find(r => r.id === currentRideId && isRideActive(r.status)) : null) || 
     rides.find(r => currentUser && r.clientId === currentUser.id && isRideActive(r.status)) ||
     null;
-  const pendingRides = rides.filter(r => r.status === 'searching');
+  const pendingRides = rides.filter(r => {
+    if (r.status !== 'searching') return false;
+    if (r.requiredAmenities && r.requiredAmenities.length > 0) {
+      const driverAmenities = driverProfile?.amenities || [];
+      const hasAll = r.requiredAmenities.every(req => driverAmenities.includes(req));
+      if (!hasAll) return false;
+    }
+    return true;
+  });
   const myDriverRides = rides.filter(r => (r.status === 'accepted' || r.status === 'to_pickup' || r.status === 'arrived_at_pickup' || r.status === 'in_progress') && (r.driverId === currentUser?.id || !r.driverId));
 
   // Corrida cancelada recente para alertar o motorista (apenas se recente e não descartada no banco/local)
@@ -1533,6 +1571,9 @@ export function App() {
     if (activeClientRide && activeClientRide.status === 'searching') {
       // Não auto-cancelar enquanto o passageiro ainda estiver no modal de pagamento Pix
       if (pixModalData) return;
+
+      // Não auto-cancelar corridas agendadas (sem tempo de cancelamento por timeout para motorista planejar agenda)
+      if (activeClientRide.isScheduled) return;
 
       // Caso 1: Passou de 10 minutos de busca
       if (searchElapsedSeconds >= MAX_SEARCH_DURATION_SECS) {
@@ -2172,7 +2213,7 @@ export function App() {
             position: 'relative',
             overflow: 'hidden'
           }}>
-            {/* Barra superior de contagem regressiva animada */}
+            {/* Barra superior de contagem regressiva animada (apenas para imediatas) */}
             <div style={{
               position: 'absolute',
               top: 0,
@@ -2183,8 +2224,10 @@ export function App() {
             }}>
               <div style={{
                 height: '100%',
-                width: `${(driverSecondsRemaining / DRIVER_ACCEPT_TIMEOUT_SECS) * 100}%`,
-                background: driverSecondsRemaining <= 10 
+                width: incomingRide.isScheduled ? '100%' : `${(driverSecondsRemaining / DRIVER_ACCEPT_TIMEOUT_SECS) * 100}%`,
+                background: incomingRide.isScheduled 
+                  ? 'linear-gradient(90deg, #3b82f6, #6366f1)' 
+                  : driverSecondsRemaining <= 10 
                   ? 'linear-gradient(90deg, #ef4444, #f97316)' 
                   : 'linear-gradient(90deg, #10b981, #6366f1)',
                 transition: 'width 1s linear'
@@ -2201,7 +2244,7 @@ export function App() {
                     width: '100%',
                     height: '100%',
                     borderRadius: '50%',
-                    border: '2px solid rgba(239, 68, 68, 0.7)'
+                    border: `2px solid ${incomingRide.isScheduled ? 'rgba(59, 130, 246, 0.7)' : 'rgba(239, 68, 68, 0.7)'}`
                   }}></div>
                   <div className="animate-sonar-ring-2" style={{
                     position: 'absolute',
@@ -2214,12 +2257,14 @@ export function App() {
                     width: '42px',
                     height: '42px',
                     borderRadius: '50%',
-                    background: 'radial-gradient(circle, rgba(239, 68, 68, 0.3) 0%, rgba(99, 102, 241, 0.4) 100%)',
-                    border: '1.5px solid rgba(239, 68, 68, 0.6)',
+                    background: incomingRide.isScheduled
+                      ? 'radial-gradient(circle, rgba(59, 130, 246, 0.3) 0%, rgba(99, 102, 241, 0.4) 100%)'
+                      : 'radial-gradient(circle, rgba(239, 68, 68, 0.3) 0%, rgba(99, 102, 241, 0.4) 100%)',
+                    border: `1.5px solid ${incomingRide.isScheduled ? 'rgba(59, 130, 246, 0.6)' : 'rgba(239, 68, 68, 0.6)'}`,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    color: '#ef4444'
+                    color: incomingRide.isScheduled ? '#60a5fa' : '#ef4444'
                   }}>
                     <BellRing size={22} className="animate-bounce" />
                   </div>
@@ -2227,32 +2272,51 @@ export function App() {
 
                 <div>
                   <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#fff', margin: 0, letterSpacing: '-0.02em' }}>
-                    NOVA SOLICITAÇÃO!
+                    {incomingRide.isScheduled ? '📅 CORRIDA AGENDADA!' : 'NOVA SOLICITAÇÃO!'}
                   </h3>
-                  <span style={{ fontSize: '0.8rem', color: '#a5b4fc', fontWeight: 600 }}>
-                    Aceite antes do tempo esgotar
+                  <span style={{ fontSize: '0.8rem', color: incomingRide.isScheduled ? '#93c5fd' : '#a5b4fc', fontWeight: 600 }}>
+                    {incomingRide.isScheduled 
+                      ? `Prevista para: ${incomingRide.scheduledFor ? new Date(incomingRide.scheduledFor).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : 'Data marcada'}`
+                      : 'Aceite antes do tempo esgotar'}
                   </span>
                 </div>
               </div>
 
               {/* Badges de Contagem Regressiva e Controle de Som */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                {/* Contador Circular de Segundos */}
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '6px 12px',
-                  borderRadius: '16px',
-                  background: driverSecondsRemaining <= 10 ? 'rgba(239, 68, 68, 0.25)' : 'rgba(99, 102, 241, 0.25)',
-                  border: `1.5px solid ${driverSecondsRemaining <= 10 ? '#ef4444' : '#6366f1'}`,
-                  color: driverSecondsRemaining <= 10 ? '#fca5a5' : '#c7d2fe',
-                  fontWeight: 800,
-                  fontSize: '0.9rem'
-                }}>
-                  <Clock size={16} className={driverSecondsRemaining <= 10 ? 'animate-spin' : ''} />
-                  <span>{driverSecondsRemaining}s</span>
-                </div>
+                {incomingRide.isScheduled ? (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '6px 12px',
+                    borderRadius: '16px',
+                    background: 'rgba(59, 130, 246, 0.25)',
+                    border: '1.5px solid #3b82f6',
+                    color: '#93c5fd',
+                    fontWeight: 800,
+                    fontSize: '0.85rem'
+                  }}>
+                    <Calendar size={15} />
+                    <span>Na Agenda</span>
+                  </div>
+                ) : (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '6px 12px',
+                    borderRadius: '16px',
+                    background: driverSecondsRemaining <= 10 ? 'rgba(239, 68, 68, 0.25)' : 'rgba(99, 102, 241, 0.25)',
+                    border: `1.5px solid ${driverSecondsRemaining <= 10 ? '#ef4444' : '#6366f1'}`,
+                    color: driverSecondsRemaining <= 10 ? '#fca5a5' : '#c7d2fe',
+                    fontWeight: 800,
+                    fontSize: '0.9rem'
+                  }}>
+                    <Clock size={16} className={driverSecondsRemaining <= 10 ? 'animate-spin' : ''} />
+                    <span>{driverSecondsRemaining}s</span>
+                  </div>
+                )}
 
                 <button
                   type="button"
@@ -2293,10 +2357,34 @@ export function App() {
                 </div>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px', borderTop: '1px solid rgba(255, 255, 255, 0.06)', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px', borderTop: '1px solid rgba(255, 255, 255, 0.06)', fontSize: '0.8rem', color: 'var(--text-secondary)', flexWrap: 'wrap', gap: '6px' }}>
                 <span>👤 Passageiro: <strong>{incomingRide.clientName || 'Passageiro DriveHora'}</strong></span>
                 <span>⏱️ Tempo: <strong>{incomingRide.hours} Horas</strong> ({formatCurrency(incomingRide.hourlyRate)}/h)</span>
               </div>
+
+              {/* Comodidades Requeridas (se houver) */}
+              {incomingRide.requiredAmenities && incomingRide.requiredAmenities.length > 0 && (
+                <div style={{
+                  padding: '8px 12px',
+                  borderRadius: '10px',
+                  background: 'rgba(59, 130, 246, 0.12)',
+                  border: '1px solid rgba(59, 130, 246, 0.3)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontSize: '0.75rem',
+                  color: '#93c5fd'
+                }}>
+                  <span>✨ <strong>Comodidades Requeridas:</strong></span>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    {incomingRide.requiredAmenities.map(am => (
+                      <span key={am} style={{ background: 'rgba(59, 130, 246, 0.25)', padding: '2px 8px', borderRadius: '6px', fontWeight: 700 }}>
+                        {am === 'acessibilidade_pcd' ? '♿ Adaptado PCD' : am === 'ar_condicionado' ? '❄️ Ar-Condicionado' : am === 'pet_friendly' ? '🐾 Pet Friendly' : am}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Forma de Pagamento */}
               <div style={{
@@ -2373,7 +2461,7 @@ export function App() {
                 }}
               >
                 <CheckCircle2 size={22} />
-                <span>ACEITAR ({formatCurrency(incomingRide.driverNet)}) • {driverSecondsRemaining}s</span>
+                <span>{incomingRide.isScheduled ? 'ACEITAR NA MINHA AGENDA' : 'ACEITAR'} ({formatCurrency(incomingRide.driverNet)}){!incomingRide.isScheduled ? ` • ${driverSecondsRemaining}s` : ''}</span>
               </button>
 
               <button
@@ -2382,7 +2470,7 @@ export function App() {
                 className="btn-outline"
                 style={{ flex: 1, padding: '16px', fontSize: '0.9rem', color: 'var(--text-muted)' }}
               >
-                Dispensar
+                {incomingRide.isScheduled ? 'Dispensar' : 'Dispensar'}
               </button>
             </div>
           </div>
@@ -2723,46 +2811,143 @@ export function App() {
                         </div>
                       )}
 
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <div style={{
-                            background: 'rgba(99, 102, 241, 0.15)',
-                            padding: '10px',
-                            borderRadius: '12px',
-                            color: '#818cf8'
-                          }}>
-                            <Navigation size={22} />
+                    {/* Seletor de Modalidade: Viagem Imediata vs Corrida Agendada */}
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr',
+                      background: 'rgba(15, 23, 42, 0.65)',
+                      padding: '4px',
+                      borderRadius: '12px',
+                      border: '1px solid rgba(255, 255, 255, 0.08)',
+                      marginBottom: '16px'
+                    }}>
+                      <button
+                        type="button"
+                        onClick={() => setIsScheduledRide(false)}
+                        style={{
+                          padding: '9px 12px',
+                          borderRadius: '8px',
+                          border: 'none',
+                          background: !isScheduledRide ? 'linear-gradient(135deg, #6366f1, #4f46e5)' : 'transparent',
+                          color: '#fff',
+                          fontWeight: 700,
+                          fontSize: '0.84rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '6px',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease'
+                        }}
+                      >
+                        <Zap size={15} color={!isScheduledRide ? '#fef08a' : '#94a3b8'} />
+                        <span>Viagem Agora</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsScheduledRide(true)}
+                        style={{
+                          padding: '9px 12px',
+                          borderRadius: '8px',
+                          border: 'none',
+                          background: isScheduledRide ? 'linear-gradient(135deg, #3b82f6, #1d4ed8)' : 'transparent',
+                          color: '#fff',
+                          fontWeight: 700,
+                          fontSize: '0.84rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '6px',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease'
+                        }}
+                      >
+                        <Calendar size={15} color={isScheduledRide ? '#93c5fd' : '#94a3b8'} />
+                        <span>Agendar Corrida</span>
+                      </button>
+                    </div>
+
+                    {/* Campos Específicos para Corrida Agendada */}
+                    {isScheduledRide && (
+                      <div style={{
+                        background: 'rgba(59, 130, 246, 0.08)',
+                        border: '1px solid rgba(59, 130, 246, 0.25)',
+                        borderRadius: '12px',
+                        padding: '14px',
+                        marginBottom: '16px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '10px'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#93c5fd', fontSize: '0.85rem', fontWeight: 700 }}>
+                          <Calendar size={16} />
+                          <span>Data e Horário Previsto para Embarque</span>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                          <div>
+                            <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Data da Viagem</label>
+                            <input
+                              type="date"
+                              className="custom-input"
+                              value={scheduledDate}
+                              min={new Date().toISOString().split('T')[0]}
+                              onChange={(e) => setScheduledDate(e.target.value)}
+                              required={isScheduledRide}
+                              style={{ padding: '8px 10px', fontSize: '0.85rem' }}
+                            />
                           </div>
                           <div>
-                            <h2 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Contratar Motorista</h2>
-                            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Defina o tempo que precisará do veículo</p>
+                            <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Horário do Embarque</label>
+                            <input
+                              type="time"
+                              className="custom-input"
+                              value={scheduledTime}
+                              onChange={(e) => setScheduledTime(e.target.value)}
+                              required={isScheduledRide}
+                              style={{ padding: '8px 10px', fontSize: '0.85rem' }}
+                            />
                           </div>
                         </div>
-
-                    {/* Botão de GPS */}
-                    <button
-                      type="button"
-                      onClick={handleGetGpsLocation}
-                      disabled={isLocatingGPS}
-                      className="btn-outline"
-                      style={{ fontSize: '0.75rem', padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}
-                      title="Preencher com localização GPS atual"
-                    >
-                      <MapPin size={14} color="#10b981" />
-                      <span>{isLocatingGPS ? 'Localizando...' : 'Usar meu GPS'}</span>
-                    </button>
-                  </div>
+                        <div style={{ fontSize: '0.72rem', color: '#cbd5e1', lineHeight: 1.4 }}>
+                          💡 <strong>Agenda do Parceiro:</strong> Os motoristas parceiros analisarão suas agendas para reservar o horário. Você receberá uma notificação quando um motorista aceitar!
+                        </div>
+                      </div>
+                    )}
 
                   <form onSubmit={handleRequestRide} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    {/* Campo Partida com Busca Automática ao Digitar */}
+                    {/* Campo Partida com Busca Automática ao Digitar e Botão GPS Integrado */}
                     <div className="input-group" style={{ position: 'relative' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <label>📍 Ponto de Partida</label>
-                        {isSearchingOrigin && (
-                          <span style={{ fontSize: '0.7rem', color: '#818cf8', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <RefreshCw size={10} className="animate-spin" /> Buscando locais...
-                          </span>
-                        )}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                        <label style={{ margin: 0, fontSize: '0.88rem', fontWeight: 600 }}>📍 Ponto de Partida</label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {isSearchingOrigin && (
+                            <span style={{ fontSize: '0.7rem', color: '#818cf8', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <RefreshCw size={10} className="animate-spin" /> Buscando...
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={handleGetGpsLocation}
+                            disabled={isLocatingGPS}
+                            style={{
+                              background: 'rgba(16, 185, 129, 0.15)',
+                              border: '1px solid rgba(16, 185, 129, 0.35)',
+                              borderRadius: '8px',
+                              padding: '4px 8px',
+                              color: '#10b981',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              fontSize: '0.72rem',
+                              fontWeight: 700
+                            }}
+                            title="Preencher com minha localização GPS atual"
+                          >
+                            <MapPin size={13} className={isLocatingGPS ? 'animate-bounce' : ''} />
+                            <span>{isLocatingGPS ? 'Localizando...' : 'Meu GPS'}</span>
+                          </button>
+                        </div>
                       </div>
                       <input
                         type="text"
@@ -2773,7 +2958,7 @@ export function App() {
                           setOrigin(val);
                           if (val.trim().length >= 2) {
                             setIsSearchingOrigin(true);
-                            searchAddressPlaces(val).then(results => {
+                            searchAddressPlaces(val, clientOriginCoords).then(results => {
                               setOriginSuggestions(results);
                               setIsSearchingOrigin(false);
                             });
@@ -2783,7 +2968,7 @@ export function App() {
                         }}
                         onFocus={() => {
                           if (origin.trim().length >= 2) {
-                            searchAddressPlaces(origin).then(res => setOriginSuggestions(res));
+                            searchAddressPlaces(origin, clientOriginCoords).then(res => setOriginSuggestions(res));
                           }
                         }}
                         placeholder="Ex: Av. Paulista, 1000..."
@@ -2853,7 +3038,7 @@ export function App() {
                           setDestination(val);
                           if (val.trim().length >= 2) {
                             setIsSearchingDest(true);
-                            searchAddressPlaces(val).then(results => {
+                            searchAddressPlaces(val, clientOriginCoords).then(results => {
                               setDestSuggestions(results);
                               setIsSearchingDest(false);
                             });
@@ -2863,7 +3048,7 @@ export function App() {
                         }}
                         onFocus={() => {
                           if (destination.trim().length >= 2) {
-                            searchAddressPlaces(destination).then(res => setDestSuggestions(res));
+                            searchAddressPlaces(destination, clientOriginCoords).then(res => setDestSuggestions(res));
                           }
                         }}
                         placeholder="Digite o destino ou local (ex: Aeroporto, Paulista, Shopping...)"
@@ -2910,6 +3095,73 @@ export function App() {
                               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sug}</span>
                             </div>
                           ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Seletor de Comodidades Especiais (Ex: PCD, Ar-condicionado, Pet Friendly, etc) */}
+                    <div className="input-group">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <label style={{ margin: 0, fontSize: '0.85rem', fontWeight: 600 }}>✨ Comodidades do Veículo (Opcional)</label>
+                        {selectedAmenities.length > 0 && (
+                          <span style={{ fontSize: '0.72rem', color: '#60a5fa', fontWeight: 700 }}>
+                            {selectedAmenities.length} {selectedAmenities.length === 1 ? 'selecionada' : 'selecionadas'}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                        {[
+                          { id: 'acessibilidade_pcd', label: 'Adaptado PCD', icon: '♿' },
+                          { id: 'ar_condicionado', label: 'Ar-Condicionado', icon: '❄️' },
+                          { id: 'porta_malas', label: 'Porta-Malas Grande', icon: '🧳' },
+                          { id: 'pet_friendly', label: 'Pet Friendly', icon: '🐾' },
+                          { id: 'cadeirinha', label: 'Cadeirinha Bebê', icon: '👶' },
+                          { id: 'wifi', label: 'Wi-Fi 5G', icon: '📶' }
+                        ].map((item) => {
+                          const isSelected = selectedAmenities.includes(item.id);
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedAmenities(prev =>
+                                  isSelected ? prev.filter(x => x !== item.id) : [...prev, item.id]
+                                );
+                              }}
+                              style={{
+                                background: isSelected ? 'rgba(59, 130, 246, 0.25)' : 'rgba(255, 255, 255, 0.04)',
+                                border: isSelected ? '1.5px solid #3b82f6' : '1px solid rgba(255, 255, 255, 0.1)',
+                                borderRadius: '10px',
+                                padding: '6px 12px',
+                                color: isSelected ? '#93c5fd' : '#cbd5e1',
+                                fontSize: '0.78rem',
+                                fontWeight: isSelected ? 700 : 500,
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                transition: 'all 0.15s ease'
+                              }}
+                            >
+                              <span>{item.icon}</span>
+                              <span>{item.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {selectedAmenities.includes('acessibilidade_pcd') && (
+                        <div style={{
+                          marginTop: '6px',
+                          fontSize: '0.72rem',
+                          color: '#60a5fa',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          background: 'rgba(59, 130, 246, 0.1)',
+                          padding: '6px 10px',
+                          borderRadius: '8px'
+                        }}>
+                          ♿ <span>Buscando apenas motoristas com veículo adaptado para PCD ou suporte a cadeirantes.</span>
                         </div>
                       )}
                     </div>
@@ -3174,105 +3426,176 @@ export function App() {
                           : 'var(--primary-gradient)'
                       }} />
 
-                      {/* Animação Circular de Radar e Busca (Visível quando procurando motorista) */}
+                      {/* Animação de Busca / Radar ou Agendamento (Visível quando procurando motorista) */}
                       {activeClientRide.status === 'searching' && (
-                        <div style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '16px',
-                          background: 'radial-gradient(ellipse at center, rgba(99, 102, 241, 0.22) 0%, rgba(15, 23, 42, 0.4) 100%)',
-                          border: '1px solid rgba(99, 102, 241, 0.35)',
-                          borderRadius: '18px',
-                          padding: '16px 20px',
-                          marginBottom: '20px',
-                          position: 'relative',
-                          overflow: 'hidden'
-                        }}>
-                          {/* Ondas de Sonar Concêntricas */}
+                        activeClientRide.isScheduled ? (
                           <div style={{
-                            position: 'relative',
-                            width: '56px',
-                            height: '56px',
                             display: 'flex',
                             alignItems: 'center',
-                            justifyContent: 'center',
-                            flexShrink: 0
+                            gap: '16px',
+                            background: 'linear-gradient(135deg, rgba(14, 165, 233, 0.18) 0%, rgba(30, 41, 59, 0.5) 100%)',
+                            border: '1px solid rgba(14, 165, 233, 0.4)',
+                            borderRadius: '18px',
+                            padding: '16px 20px',
+                            marginBottom: '20px',
+                            position: 'relative'
                           }}>
-                            <div className="animate-sonar-ring-1" style={{
-                              position: 'absolute',
-                              width: '100%',
-                              height: '100%',
-                              borderRadius: '50%',
-                              border: '2px solid rgba(99, 102, 241, 0.8)'
-                            }} />
-                            <div className="animate-sonar-ring-2" style={{
-                              position: 'absolute',
-                              width: '100%',
-                              height: '100%',
-                              borderRadius: '50%',
-                              border: '2px solid rgba(129, 140, 248, 0.6)'
-                            }} />
-                            <div className="animate-sonar-ring-3" style={{
-                              position: 'absolute',
-                              width: '100%',
-                              height: '100%',
-                              borderRadius: '50%',
-                              border: '2px solid rgba(165, 180, 252, 0.4)'
-                            }} />
-                            
-                            {/* Núcleo Central do Radar */}
                             <div style={{
-                              width: '42px',
-                              height: '42px',
+                              width: '50px',
+                              height: '50px',
                               borderRadius: '50%',
-                              background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
-                              boxShadow: '0 0 20px rgba(99, 102, 241, 0.8)',
+                              background: 'linear-gradient(135deg, #0ea5e9, #0284c7)',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
-                              color: '#fff',
-                              zIndex: 2
+                              fontSize: '24px',
+                              flexShrink: 0,
+                              boxShadow: '0 0 20px rgba(14, 165, 233, 0.5)'
                             }}>
-                              <Radio size={22} className="animate-radar-sweep" />
+                              📅
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+                                <strong style={{ fontSize: '0.95rem', color: '#38bdf8' }}>
+                                  Corrida Agendada Aberta no Mural
+                                </strong>
+                                {activeClientRide.scheduledFor && (
+                                  <span style={{
+                                    fontSize: '0.78rem',
+                                    color: '#38bdf8',
+                                    background: 'rgba(14, 165, 233, 0.2)',
+                                    padding: '3px 10px',
+                                    borderRadius: '12px',
+                                    fontWeight: 700
+                                  }}>
+                                    🗓️ {new Date(activeClientRide.scheduledFor).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+                                  </span>
+                                )}
+                              </div>
+                              <p style={{ margin: '6px 0 0 0', fontSize: '0.82rem', color: '#bae6fd', lineHeight: 1.4 }}>
+                                Sua solicitação foi publicada no Mural de Agendamentos dos motoristas parceiros. Como se trata de agendamento prévio, não há prazo limite de cancelamento automático.
+                              </p>
+                              {activeClientRide.requiredAmenities && activeClientRide.requiredAmenities.length > 0 && (
+                                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '8px' }}>
+                                  {activeClientRide.requiredAmenities.map(amenityId => (
+                                    <span key={amenityId} style={{
+                                      fontSize: '0.72rem',
+                                      padding: '2px 8px',
+                                      borderRadius: '8px',
+                                      background: 'rgba(255, 255, 255, 0.1)',
+                                      color: '#e2e8f0'
+                                    }}>
+                                      {amenityId === 'acessibilidade_pcd' ? '♿ Adaptado PCD' :
+                                       amenityId === 'ar_condicionado' ? '❄️ Ar-Condicionado' :
+                                       amenityId === 'porta_malas' ? '🧳 Porta-Malas Grande' :
+                                       amenityId === 'pet_friendly' ? '🐾 Pet Friendly' :
+                                       amenityId === 'cadeirinha' ? '👶 Cadeirinha Bebê' :
+                                       amenityId === 'wifi' ? '📶 Wi-Fi 5G' : amenityId}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           </div>
+                        ) : (
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '16px',
+                            background: 'radial-gradient(ellipse at center, rgba(99, 102, 241, 0.22) 0%, rgba(15, 23, 42, 0.4) 100%)',
+                            border: '1px solid rgba(99, 102, 241, 0.35)',
+                            borderRadius: '18px',
+                            padding: '16px 20px',
+                            marginBottom: '20px',
+                            position: 'relative',
+                            overflow: 'hidden'
+                          }}>
+                            {/* Ondas de Sonar Concêntricas */}
+                            <div style={{
+                              position: 'relative',
+                              width: '56px',
+                              height: '56px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0
+                            }}>
+                              <div className="animate-sonar-ring-1" style={{
+                                position: 'absolute',
+                                width: '100%',
+                                height: '100%',
+                                borderRadius: '50%',
+                                border: '2px solid rgba(99, 102, 241, 0.8)'
+                              }} />
+                              <div className="animate-sonar-ring-2" style={{
+                                position: 'absolute',
+                                width: '100%',
+                                height: '100%',
+                                borderRadius: '50%',
+                                border: '2px solid rgba(129, 140, 248, 0.6)'
+                              }} />
+                              <div className="animate-sonar-ring-3" style={{
+                                position: 'absolute',
+                                width: '100%',
+                                height: '100%',
+                                borderRadius: '50%',
+                                border: '2px solid rgba(165, 180, 252, 0.4)'
+                              }} />
+                              
+                              {/* Núcleo Central do Radar */}
+                              <div style={{
+                                width: '42px',
+                                height: '42px',
+                                borderRadius: '50%',
+                                background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
+                                boxShadow: '0 0 20px rgba(99, 102, 241, 0.8)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: '#fff',
+                                zIndex: 2
+                              }}>
+                                <Radio size={22} className="animate-radar-sweep" />
+                              </div>
+                            </div>
 
-                          {/* Mensagem e Alerta de Busca Ativa com Contador de 10 min */}
-                          <div style={{ flex: 1 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            {/* Mensagem e Alerta de Busca Ativa com Contador de 10 min */}
+                            <div style={{ flex: 1 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <span style={{
+                                    display: 'inline-block',
+                                    width: '8px',
+                                    height: '8px',
+                                    borderRadius: '50%',
+                                    background: onlineDriversCount > 0 ? '#10b981' : '#f59e0b',
+                                    boxShadow: `0 0 8px ${onlineDriversCount > 0 ? '#10b981' : '#f59e0b'}`
+                                  }} className="animate-pulse" />
+                                  <strong style={{ fontSize: '0.95rem', color: '#fff', letterSpacing: '-0.01em' }}>
+                                    {onlineDriversCount > 0 
+                                      ? `Radar Ativo • Notificando ${onlineDriversCount} Motorista${onlineDriversCount > 1 ? 's' : ''} Online`
+                                      : 'Aguardando Motoristas Ficarem Online...'}
+                                  </strong>
+                                </div>
+
                                 <span style={{
-                                  display: 'inline-block',
-                                  width: '8px',
-                                  height: '8px',
-                                  borderRadius: '50%',
-                                  background: onlineDriversCount > 0 ? '#10b981' : '#f59e0b',
-                                  boxShadow: `0 0 8px ${onlineDriversCount > 0 ? '#10b981' : '#f59e0b'}`
-                                }} className="animate-pulse" />
-                                <strong style={{ fontSize: '0.95rem', color: '#fff', letterSpacing: '-0.01em' }}>
-                                  {onlineDriversCount > 0 
-                                    ? `Radar Ativo • Notificando ${onlineDriversCount} Motorista${onlineDriversCount > 1 ? 's' : ''} Online`
-                                    : 'Aguardando Motoristas Ficarem Online...'}
-                                </strong>
+                                  fontSize: '0.75rem',
+                                  color: '#a5b4fc',
+                                  background: 'rgba(99, 102, 241, 0.25)',
+                                  padding: '2px 8px',
+                                  borderRadius: '10px',
+                                  fontWeight: 700
+                                }}>
+                                  ⏱️ Tempo restante: {formattedSearchCountdown}
+                                </span>
                               </div>
 
-                              <span style={{
-                                fontSize: '0.75rem',
-                                color: '#a5b4fc',
-                                background: 'rgba(99, 102, 241, 0.25)',
-                                padding: '2px 8px',
-                                borderRadius: '10px',
-                                fontWeight: 700
-                              }}>
-                                ⏱️ Tempo restante: {formattedSearchCountdown}
-                              </span>
+                              <p style={{ margin: '6px 0 0 0', fontSize: '0.8rem', color: '#c7d2fe', lineHeight: 1.4 }}>
+                                A solicitação permanece ativa enquanto houver motoristas disponíveis. Se não houver resposta dentro de 10 minutos, a busca será cancelada automaticamente.
+                              </p>
                             </div>
-
-                            <p style={{ margin: '6px 0 0 0', fontSize: '0.8rem', color: '#c7d2fe', lineHeight: 1.4 }}>
-                              A solicitação permanece ativa enquanto houver motoristas disponíveis. Se não houver resposta dentro de 10 minutos, a busca será cancelada automaticamente.
-                            </p>
                           </div>
-                        </div>
+                        )
                       )}
 
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px', gap: '10px' }}>
@@ -3280,10 +3603,19 @@ export function App() {
                           <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600 }}>Status da Solicitação</span>
                           <h3 style={{ fontSize: '0.96rem', display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', lineHeight: 1.35, flexWrap: 'wrap' }}>
                             {activeClientRide.status === 'searching' && (
-                              <>
-                                <span className="animate-pulse-soft" style={{ color: '#818cf8', fontSize: '1.1rem' }}>📡</span>
-                                <span style={{ fontSize: '0.95rem', fontWeight: 700 }}>Procurando motorista...</span>
-                              </>
+                              activeClientRide.isScheduled ? (
+                                <>
+                                  <span className="animate-pulse-soft" style={{ color: '#38bdf8', fontSize: '1.1rem' }}>📅</span>
+                                  <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#38bdf8' }}>
+                                    Agendamento Aberto para Motoristas
+                                  </span>
+                                </>
+                              ) : (
+                                <>
+                                  <span className="animate-pulse-soft" style={{ color: '#818cf8', fontSize: '1.1rem' }}>📡</span>
+                                  <span style={{ fontSize: '0.95rem', fontWeight: 700 }}>Procurando motorista...</span>
+                                </>
+                              )
                             )}
                             {activeClientRide.status === 'accepted' && (
                               <>
@@ -4629,27 +4961,86 @@ export function App() {
                               <div
                                 key={r.id}
                                 style={{
-                                  background: 'rgba(15, 23, 42, 0.7)',
-                                  border: '1px solid var(--border-subtle)',
+                                  background: r.isScheduled 
+                                    ? 'linear-gradient(135deg, rgba(14, 165, 233, 0.12) 0%, rgba(15, 23, 42, 0.8) 100%)' 
+                                    : 'rgba(15, 23, 42, 0.7)',
+                                  border: r.isScheduled 
+                                    ? '1.5px solid rgba(14, 165, 233, 0.45)' 
+                                    : '1px solid var(--border-subtle)',
                                   borderRadius: '14px',
-                                  padding: '16px'
+                                  padding: '16px',
+                                  position: 'relative'
                                 }}
                               >
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-                                  <span style={{
-                                    fontSize: '0.75rem',
-                                    background: 'rgba(16, 185, 129, 0.15)',
-                                    color: '#10b981',
-                                    padding: '2px 8px',
-                                    borderRadius: '8px',
-                                    fontWeight: 700
-                                  }}>
-                                    ⏱️ {r.hours}h de serviço
-                                  </span>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                    <span style={{
+                                      fontSize: '0.75rem',
+                                      background: r.isScheduled ? 'rgba(14, 165, 233, 0.2)' : 'rgba(16, 185, 129, 0.15)',
+                                      color: r.isScheduled ? '#38bdf8' : '#10b981',
+                                      border: r.isScheduled ? '1px solid rgba(14, 165, 233, 0.4)' : 'none',
+                                      padding: '3px 8px',
+                                      borderRadius: '8px',
+                                      fontWeight: 700
+                                    }}>
+                                      {r.isScheduled ? '📅 CORRIDA AGENDADA' : '⚡ VIAGEM AGORA'}
+                                    </span>
+                                    <span style={{
+                                      fontSize: '0.75rem',
+                                      background: 'rgba(16, 185, 129, 0.15)',
+                                      color: '#10b981',
+                                      padding: '3px 8px',
+                                      borderRadius: '8px',
+                                      fontWeight: 700
+                                    }}>
+                                      ⏱️ {r.hours}h de serviço
+                                    </span>
+                                  </div>
+
                                   <strong style={{ color: '#10b981', fontSize: '1.1rem' }}>
                                     Ganho Líquido: {formatCurrency(r.driverNet)}
                                   </strong>
                                 </div>
+
+                                {r.isScheduled && r.scheduledFor && (
+                                  <div style={{
+                                    fontSize: '0.82rem',
+                                    color: '#38bdf8',
+                                    marginBottom: '8px',
+                                    background: 'rgba(14, 165, 233, 0.15)',
+                                    padding: '6px 10px',
+                                    borderRadius: '8px',
+                                    fontWeight: 700,
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '6px'
+                                  }}>
+                                    🗓️ Data/Hora Agendada: {new Date(r.scheduledFor).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+                                  </div>
+                                )}
+
+                                {r.requiredAmenities && r.requiredAmenities.length > 0 && (
+                                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '10px' }}>
+                                    {r.requiredAmenities.map(am => (
+                                      <span key={am} style={{
+                                        fontSize: '0.72rem',
+                                        padding: '2px 8px',
+                                        borderRadius: '6px',
+                                        background: am === 'acessibilidade_pcd' ? 'rgba(59, 130, 246, 0.25)' : 'rgba(255, 255, 255, 0.08)',
+                                        color: am === 'acessibilidade_pcd' ? '#93c5fd' : '#cbd5e1',
+                                        border: am === 'acessibilidade_pcd' ? '1px solid #3b82f6' : 'none',
+                                        fontWeight: 600
+                                      }}>
+                                        {am === 'acessibilidade_pcd' ? '♿ Adaptado PCD' :
+                                         am === 'ar_condicionado' ? '❄️ Ar-Condicionado' :
+                                         am === 'porta_malas' ? '🧳 Porta-Malas Grande' :
+                                         am === 'pet_friendly' ? '🐾 Pet Friendly' :
+                                         am === 'cadeirinha' ? '👶 Cadeirinha Bebê' :
+                                         am === 'wifi' ? '📶 Wi-Fi 5G' : am}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
 
                                 <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', marginBottom: '4px' }}>
                                   <strong>Passageiro:</strong> {r.clientName || 'Cliente'}
@@ -4668,9 +5059,13 @@ export function App() {
                                   <button
                                     onClick={() => handleAcceptRide(r.id)}
                                     className="btn-success"
-                                    style={{ padding: '8px 16px', fontSize: '0.85rem' }}
+                                    style={{
+                                      padding: '8px 16px',
+                                      fontSize: '0.85rem',
+                                      background: r.isScheduled ? 'linear-gradient(135deg, #0ea5e9, #0284c7)' : undefined
+                                    }}
                                   >
-                                    Aceitar Corrida
+                                    {r.isScheduled ? '🗓️ Aceitar na Minha Agenda' : 'Aceitar Corrida'}
                                   </button>
                                 </div>
                               </div>
@@ -4748,6 +5143,46 @@ export function App() {
                                           : 'CONFIRMADA'}
                                       </span>
                                     </div>
+
+                                    {r.isScheduled && r.scheduledFor && (
+                                      <div style={{
+                                        fontSize: '0.78rem',
+                                        color: '#38bdf8',
+                                        background: 'rgba(14, 165, 233, 0.15)',
+                                        border: '1px solid rgba(14, 165, 233, 0.35)',
+                                        padding: '4px 10px',
+                                        borderRadius: '8px',
+                                        fontWeight: 700,
+                                        marginBottom: '10px',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '6px'
+                                      }}>
+                                        📅 Corrida Agendada para: {new Date(r.scheduledFor).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+                                      </div>
+                                    )}
+
+                                    {r.requiredAmenities && r.requiredAmenities.length > 0 && (
+                                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '10px' }}>
+                                        {r.requiredAmenities.map(am => (
+                                          <span key={am} style={{
+                                            fontSize: '0.7rem',
+                                            padding: '2px 8px',
+                                            borderRadius: '6px',
+                                            background: 'rgba(255, 255, 255, 0.08)',
+                                            color: '#cbd5e1',
+                                            fontWeight: 600
+                                          }}>
+                                            {am === 'acessibilidade_pcd' ? '♿ Adaptado PCD' :
+                                             am === 'ar_condicionado' ? '❄️ Ar-Condicionado' :
+                                             am === 'porta_malas' ? '🧳 Porta-Malas Grande' :
+                                             am === 'pet_friendly' ? '🐾 Pet Friendly' :
+                                             am === 'cadeirinha' ? '👶 Cadeirinha Bebê' :
+                                             am === 'wifi' ? '📶 Wi-Fi 5G' : am}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    )}
 
                                     <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                       <div>👤 <strong>Passageiro:</strong> <span style={{ color: '#fff' }}>{r.clientName || 'Passageiro'}</span></div>

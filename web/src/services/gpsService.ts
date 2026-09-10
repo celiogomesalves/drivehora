@@ -71,27 +71,56 @@ export const reverseGeocode = async (coords: Coordinates): Promise<string> => {
   }
 };
 
-// 3. Busca Inteligente de Endereços / Lugares ao digitar (Autocomplete Multi-Provedor)
-export const searchAddressPlaces = async (query: string): Promise<string[]> => {
+// 3. Busca Inteligente de Endereços / Lugares ao digitar (Autocomplete Multi-Provedor com Suporte a Número Predial)
+export const searchAddressPlaces = async (
+  query: string,
+  userCoords?: Coordinates | { lat: number; lng: number } | null
+): Promise<string[]> => {
   const clean = query.trim();
   if (clean.length < 2) return [];
 
+  // Detecta número predial digitado (ex: "Rua Norma, 174", "Av Brasil 500", "Rua das Flores nº 12")
+  const numberMatch = clean.match(/(?:,\s*|\s+n[º°]?\s*|\s+)(\d+[a-zA-Z]?)(?:[,\s]|$)/i);
+  const typedNumber = numberMatch ? numberMatch[1] : null;
+  // Nome da rua sem o número para buscar caso a base OSM não tenha o número indexado
+  const streetOnly = typedNumber 
+    ? clean.replace(new RegExp(`(?:,\\s*|\\s+n[º°]?\\s*|\\s+)${typedNumber}(?:[,\\s]|$)`, 'i'), ' ').trim()
+    : clean;
+
   const results: string[] = [];
 
-  // Provedor 1: Photon OpenStreetMap (Excelente para busca por similaridade e nomes parciais de POIs, aeroportos, shoppings, etc.)
+  // Coordenadas de ancoragem para priorizar a região do usuário (padrão RMBH / MG / Brasil)
+  const rawLat = userCoords && ('latitude' in userCoords ? userCoords.latitude : userCoords.lat);
+  const rawLng = userCoords && ('longitude' in userCoords ? userCoords.longitude : userCoords.lng);
+  const biasLat = rawLat || -19.9245;
+  const biasLng = rawLng || -43.9352;
+
+  // Provedor 1: Photon OpenStreetMap (Com filtro por país BR e proximidade por coordenadas)
   try {
-    const encoded = encodeURIComponent(clean);
-    // Photon API usa bbox/limit, não passar parâmetro lang=pt que causa erro 400
-    const photonUrl = `https://photon.komoot.io/api/?q=${encoded}&limit=10`;
+    const queryToSearch = streetOnly.length >= 2 ? streetOnly : clean;
+    const encoded = encodeURIComponent(queryToSearch);
+    const photonUrl = `https://photon.komoot.io/api/?q=${encoded}&lat=${biasLat}&lon=${biasLng}&limit=12`;
     const res = await fetch(photonUrl);
     if (res.ok) {
       const data = await res.json();
       if (data && data.features && data.features.length > 0) {
         data.features.forEach((feat: any) => {
           const p = feat.properties || {};
+          
+          // Ignorar resultados fora do Brasil (ex: Buenos Aires, outros países)
+          const country = (p.country || '').toLowerCase();
+          const countryCode = (p.countrycode || '').toLowerCase();
+          if (countryCode && countryCode !== 'br') return;
+          if (country && !country.includes('brasil') && !country.includes('brazil')) return;
+
           const name = p.name || '';
           const street = p.street || '';
-          const housenumber = p.housenumber ? `, ${p.housenumber}` : '';
+          // Se a base OSM tiver housenumber usa ele, senão usa o número digitado pelo usuário
+          const housenumber = p.housenumber 
+            ? `, ${p.housenumber}` 
+            : typedNumber 
+            ? `, ${typedNumber}` 
+            : '';
           const district = p.district || p.suburb || p.locality || '';
           const city = p.city || '';
           const state = p.state || '';
@@ -115,7 +144,7 @@ export const searchAddressPlaces = async (query: string): Promise<string[]> => {
     console.warn('Busca Photon fallback:', e);
   }
 
-  // Provedor 2: Nominatim OpenStreetMap (Garante cobertura de ruas específicas, cidades e pontos no Brasil)
+  // Provedor 2: Nominatim OpenStreetMap (Restrito a countrycodes=br com suporte a número)
   if (results.length < 8) {
     try {
       const encoded = encodeURIComponent(clean);
@@ -133,7 +162,11 @@ export const searchAddressPlaces = async (query: string): Promise<string[]> => {
             const addr = item.address || {};
             const name = item.name || '';
             const road = addr.road || addr.pedestrian || addr.street || '';
-            const houseNumber = addr.house_number ? `, ${addr.house_number}` : '';
+            const houseNumber = addr.house_number 
+              ? `, ${addr.house_number}` 
+              : typedNumber 
+              ? `, ${typedNumber}` 
+              : '';
             const suburb = addr.suburb || addr.neighbourhood || addr.city_district || '';
             const city = addr.city || addr.town || addr.municipality || addr.village || '';
             const state = addr.state || '';
@@ -157,6 +190,13 @@ export const searchAddressPlaces = async (query: string): Promise<string[]> => {
       }
     } catch (e) {
       console.warn('Busca Nominatim fallback:', e);
+    }
+  }
+
+  // Se o usuário digitou um número, mas nenhuma das sugestões veio com o número exato, adiciona o endereço digitado no topo
+  if (typedNumber && clean.length > 5) {
+    if (!results.some(r => r.includes(typedNumber))) {
+      results.unshift(clean);
     }
   }
 
