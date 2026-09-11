@@ -228,55 +228,230 @@ html.theme-light .admin-subnav-desktop button:hover {
   color: #0f172a !important;
 }
 
-/* Superfícies de Cards e Contraste Automático no Tema Claro */
-html.theme-light div[style*="background: 'rgba(15, 23, 42"],
-html.theme-light div[style*="background: rgba(15, 23, 42"],
-html.theme-light div[style*="background: 'rgba(10, 15, 30"],
-html.theme-light div[style*="background: rgba(10, 15, 30"] {
-  background: #ffffff !important;
-  border-color: #e2e8f0 !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+/* Chips de Comodidades do Veículo */
+.amenity-chip-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #cbd5e1;
+  border-radius: 10px;
+  padding: 6px 12px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease;
 }
 
-html.theme-light div[style*="background: 'rgba(255, 255, 255, 0.03)'"],
-html.theme-light div[style*="background: rgba(255, 255, 255, 0.03)"],
-html.theme-light div[style*="background: 'rgba(255, 255, 255, 0.04)'"],
-html.theme-light div[style*="background: rgba(255, 255, 255, 0.04)"],
-html.theme-light div[style*="background: 'rgba(255, 255, 255, 0.05)'"],
-html.theme-light div[style*="background: rgba(255, 255, 255, 0.05)"],
-html.theme-light div[style*="background: 'rgba(255, 255, 255, 0.08)'"],
-html.theme-light div[style*="background: rgba(255, 255, 255, 0.08)"] {
+.amenity-chip-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.amenity-chip-btn.selected {
+  background: rgba(59, 130, 246, 0.25);
+  border: 1.5px solid #3b82f6;
+  color: #93c5fd;
+  font-weight: 700;
+}
+
+/* No Tema Claro: textos das comodidades ficam pretos/grafite de alto contraste */
+html.theme-light .amenity-chip-btn {
   background: #f8fafc !important;
-  border-color: #e2e8f0 !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #0f172a !important;
+  font-weight: 600;
 }
 
-/* Contraste de Texto Branco em Cards Claros */
-html.theme-light .glass-panel div[style*="color: #fff"],
-html.theme-light .glass-panel div[style*="color: '#fff'"],
-html.theme-light .glass-panel span[style*="color: #fff"],
-html.theme-light .glass-panel span[style*="color: '#fff'"],
-html.theme-light .glass-panel strong[style*="color: #fff"],
-html.theme-light .glass-panel strong[style*="color: '#fff'"],
-html.theme-light .glass-panel h1,
-html.theme-light .glass-panel h2,
-html.theme-light .glass-panel h3,
-html.theme-light .glass-panel h4,
-html.theme-light .app-header span[style*="color: #fff"],
-html.theme-light .app-header div[style*="color: #fff"] {
+html.theme-light .amenity-chip-btn:hover {
+  background: #f1f5f9 !important;
+  border-color: #94a3b8 !important;
+}
+
+html.theme-light .amenity-chip-btn.selected {
+  background: #eff6ff !important;
+  border: 1.5px solid #2563eb !important;
+  color: #1d4ed8 !important;
+  font-weight: 800;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.12) !important;
+}
+
+/* Pílulas de Filtro (Todas, Hoje, 7 dias, etc.) */
+.filter-pill-btn {
+  padding: 5px 12px;
+  border-radius: 16px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.filter-pill-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.filter-pill-btn.active {
+  background: var(--primary-gradient) !important;
+  color: #ffffff !important;
+  border-color: var(--primary) !important;
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.3);
+}
+
+/* Filtros no Tema Claro: fundo branco/gelo, borda sutil e texto escuro nítido */
+html.theme-light .filter-pill-btn {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #334155 !important;
+}
+
+html.theme-light .filter-pill-btn:hover {
+  background: #f1f5f9 !important;
+  border-color: #94a3b8 !important;
   color: #0f172a !important;
 }
 
-html.theme-light div[style*="background: 'rgba(15, 23, 42"] div[style*="color: #fff"],
-html.theme-light div[style*="background: 'rgba(15, 23, 42"] span[style*="color: #fff"],
-html.theme-light div[style*="background: 'rgba(15, 23, 42"] strong[style*="color: #fff"],
-html.theme-light div[style*="background: rgba(15, 23, 42"] div[style*="color: #fff"],
-html.theme-light div[style*="background: rgba(15, 23, 42"] span[style*="color: #fff"],
-html.theme-light div[style*="background: rgba(15, 23, 42"] strong[style*="color: #fff"],
-html.theme-light div[style*="background: 'rgba(255, 255, 255, 0.03)'"] div[style*="color: #fff"],
-html.theme-light div[style*="background: rgba(255, 255, 255, 0.03)"] div[style*="color: #fff"],
-html.theme-light div[style*="background: 'rgba(255, 255, 255, 0.05)'"] div[style*="color: #fff"],
-html.theme-light div[style*="background: rgba(255, 255, 255, 0.05)"] div[style*="color: #fff"] {
+html.theme-light .filter-pill-btn.active {
+  background: #2563eb !important;
+  color: #ffffff !important;
+  border-color: #2563eb !important;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25) !important;
+}
+
+/* Botões de Exclusão / Ações Destrutivas (Cor Vermelha Elegante) */
+.btn-danger {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: #ffffff !important;
+  border: none;
+  font-weight: 700;
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+  transition: all 0.2s ease;
+}
+
+.btn-danger:hover {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+}
+
+.btn-danger-outline {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444 !important;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  transition: all 0.15s ease;
+  font-size: 0.75rem;
+}
+
+.btn-danger-outline:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: #ef4444;
+}
+
+/* No Tema Claro */
+html.theme-light .btn-danger-outline {
+  background: #fef2f2 !important;
+  border: 1.5px solid #fca5a5 !important;
+  color: #dc2626 !important;
+}
+
+html.theme-light .btn-danger-outline:hover {
+  background: #fee2e2 !important;
+  border-color: #ef4444 !important;
+  color: #b91c1c !important;
+}
+
+/* Cards do Histórico de Corridas */
+.ride-history-card {
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  overflow: hidden;
+  transition: all 0.2s ease-in-out;
+}
+
+html.theme-light .ride-history-card {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+}
+
+html.theme-light .ride-history-card:hover {
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05) !important;
+}
+
+.ride-title-text {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #fff;
+}
+
+html.theme-light .ride-title-text {
   color: #0f172a !important;
+}
+
+.ride-price-text {
+  font-weight: 800;
+  color: #fff;
+  font-size: 1rem;
+}
+
+html.theme-light .ride-price-text {
+  color: #0f172a !important;
+}
+
+/* Corpo Expandido do Card de Corrida */
+.ride-card-expanded {
+  padding: 14px 16px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(10, 15, 30, 0.6);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+html.theme-light .ride-card-expanded {
+  background: #f8fafc !important;
+  border-top: 1px solid #e2e8f0 !important;
+}
+
+.ride-card-details-box {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+}
+
+html.theme-light .ride-card-details-box {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03) !important;
+}
+
+/* Badges de Comodidades dentro do card no Tema Claro */
+html.theme-light .amenity-badge-tag {
+  background: #f1f5f9 !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
 }
 
 /* Transição global suave entre temas */

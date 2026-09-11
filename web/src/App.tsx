@@ -2208,38 +2208,59 @@ export function App() {
                 </button>
               )}
 
-              {/* Botão Alternador de Tema (Dark / Light) */}
-              <button
-                type="button"
+              {/* Alternador de Tema Segmentado Moderno */}
+              <div
                 onClick={toggleTheme}
+                role="button"
+                tabIndex={0}
                 style={{
-                  display: 'flex',
+                  display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '6px',
-                  fontSize: '0.75rem',
-                  padding: '6px 12px',
-                  background: theme === 'light' ? 'rgba(37, 99, 235, 0.1)' : 'rgba(255, 255, 255, 0.06)',
-                  color: theme === 'light' ? '#2563eb' : '#cbd5e1',
-                  border: `1px solid ${theme === 'light' ? '#bfdbfe' : 'var(--border-subtle)'}`,
+                  background: theme === 'light' ? '#f1f5f9' : 'rgba(255, 255, 255, 0.06)',
+                  padding: '3px',
                   borderRadius: '20px',
                   cursor: 'pointer',
-                  fontWeight: 700,
-                  transition: 'all 0.2s ease'
+                  border: `1px solid ${theme === 'light' ? '#cbd5e1' : 'var(--border-subtle)'}`,
+                  userSelect: 'none',
+                  transition: 'all 0.2s ease',
+                  gap: '2px'
                 }}
-                title={theme === 'light' ? 'Alternar para Modo Escuro' : 'Alternar para Modo Claro (Clean Modern SaaS)'}
+                title={theme === 'light' ? 'Modo Claro ativo (clique para alternar para Escuro)' : 'Modo Escuro ativo (clique para alternar para Claro)'}
               >
-                {theme === 'light' ? (
-                  <>
-                    <Sun size={14} color="#f59e0b" />
-                    <span>Modo Claro</span>
-                  </>
-                ) : (
-                  <>
-                    <Moon size={14} color="#a5b4fc" />
-                    <span>Modo Escuro</span>
-                  </>
-                )}
-              </button>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '3px 8px',
+                  borderRadius: '16px',
+                  fontSize: '0.7rem',
+                  fontWeight: 700,
+                  background: theme === 'light' ? '#ffffff' : 'transparent',
+                  color: theme === 'light' ? '#2563eb' : 'var(--text-muted)',
+                  boxShadow: theme === 'light' ? '0 1px 3px rgba(0, 0, 0, 0.1)' : 'none',
+                  transition: 'all 0.2s ease'
+                }}>
+                  <Sun size={12} color={theme === 'light' ? '#f59e0b' : 'currentColor'} />
+                  <span>Claro</span>
+                </div>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '3px 8px',
+                  borderRadius: '16px',
+                  fontSize: '0.7rem',
+                  fontWeight: 700,
+                  background: theme === 'dark' ? 'rgba(99, 102, 241, 0.25)' : 'transparent',
+                  color: theme === 'dark' ? '#a5b4fc' : '#64748b',
+                  boxShadow: theme === 'dark' ? '0 1px 3px rgba(0, 0, 0, 0.2)' : 'none',
+                  border: theme === 'dark' ? '1px solid rgba(99, 102, 241, 0.4)' : '1px solid transparent',
+                  transition: 'all 0.2s ease'
+                }}>
+                  <Moon size={12} color={theme === 'dark' ? '#818cf8' : 'currentColor'} />
+                  <span>Escuro</span>
+                </div>
+              </div>
 
               <div style={{
                 display: 'flex',
@@ -3317,12 +3338,10 @@ export function App() {
                                     <button
                                       type="button"
                                       onClick={() => handleCancelRideByClient(r.id)}
-                                      className="btn-outline"
+                                      className="btn-danger-outline"
                                       style={{
                                         padding: '7px 14px',
                                         fontSize: '0.8rem',
-                                        color: '#ef4444',
-                                        borderColor: 'rgba(239, 68, 68, 0.4)',
                                         display: 'flex',
                                         alignItems: 'center',
                                         gap: '6px'
@@ -3553,10 +3572,10 @@ export function App() {
                     <div style={{
                       display: 'grid',
                       gridTemplateColumns: '1fr 1fr',
-                      background: 'rgba(15, 23, 42, 0.65)',
+                      background: theme === 'light' ? '#f1f5f9' : 'rgba(15, 23, 42, 0.65)',
                       padding: '4px',
                       borderRadius: '12px',
-                      border: '1px solid rgba(255, 255, 255, 0.08)',
+                      border: theme === 'light' ? '1px solid #e2e8f0' : '1px solid rgba(255, 255, 255, 0.08)',
                       marginBottom: '16px'
                     }}>
                       <button
@@ -3567,7 +3586,7 @@ export function App() {
                           borderRadius: '8px',
                           border: 'none',
                           background: !isScheduledRide ? 'linear-gradient(135deg, #6366f1, #4f46e5)' : 'transparent',
-                          color: '#fff',
+                          color: !isScheduledRide ? '#fff' : (theme === 'light' ? '#475569' : '#94a3b8'),
                           fontWeight: 700,
                           fontSize: '0.84rem',
                           display: 'flex',
@@ -3575,10 +3594,11 @@ export function App() {
                           justifyContent: 'center',
                           gap: '6px',
                           cursor: 'pointer',
-                          transition: 'all 0.2s ease'
+                          transition: 'all 0.2s ease',
+                          boxShadow: (!isScheduledRide && theme === 'light') ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
                         }}
                       >
-                        <Zap size={15} color={!isScheduledRide ? '#fef08a' : '#94a3b8'} />
+                        <Zap size={15} color={!isScheduledRide ? '#fef08a' : (theme === 'light' ? '#64748b' : '#94a3b8')} />
                         <span>Viagem Agora</span>
                       </button>
                       <button
@@ -3589,7 +3609,7 @@ export function App() {
                           borderRadius: '8px',
                           border: 'none',
                           background: isScheduledRide ? 'linear-gradient(135deg, #3b82f6, #1d4ed8)' : 'transparent',
-                          color: '#fff',
+                          color: isScheduledRide ? '#fff' : (theme === 'light' ? '#475569' : '#94a3b8'),
                           fontWeight: 700,
                           fontSize: '0.84rem',
                           display: 'flex',
@@ -3597,10 +3617,11 @@ export function App() {
                           justifyContent: 'center',
                           gap: '6px',
                           cursor: 'pointer',
-                          transition: 'all 0.2s ease'
+                          transition: 'all 0.2s ease',
+                          boxShadow: (isScheduledRide && theme === 'light') ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
                         }}
                       >
-                        <Calendar size={15} color={isScheduledRide ? '#93c5fd' : '#94a3b8'} />
+                        <Calendar size={15} color={isScheduledRide ? '#93c5fd' : (theme === 'light' ? '#64748b' : '#94a3b8')} />
                         <span>Agendar Corrida</span>
                       </button>
                     </div>
@@ -3866,20 +3887,7 @@ export function App() {
                                   isSelected ? prev.filter(x => x !== item.id) : [...prev, item.id]
                                 );
                               }}
-                              style={{
-                                background: isSelected ? 'rgba(59, 130, 246, 0.25)' : 'rgba(255, 255, 255, 0.04)',
-                                border: isSelected ? '1.5px solid #3b82f6' : '1px solid rgba(255, 255, 255, 0.1)',
-                                borderRadius: '10px',
-                                padding: '6px 12px',
-                                color: isSelected ? '#93c5fd' : '#cbd5e1',
-                                fontSize: '0.78rem',
-                                fontWeight: isSelected ? 700 : 500,
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '6px',
-                                transition: 'all 0.15s ease'
-                              }}
+                              className={`amenity-chip-btn ${isSelected ? 'selected' : ''}`}
                             >
                               <span>{item.icon}</span>
                               <span>{item.label}</span>
@@ -4952,30 +4960,20 @@ export function App() {
                           flexWrap: 'wrap',
                           gap: '6px',
                           padding: '8px 12px',
-                          background: 'rgba(255, 255, 255, 0.03)',
+                          background: theme === 'light' ? '#f8fafc' : 'rgba(255, 255, 255, 0.03)',
                           borderRadius: '10px',
-                          border: '1px solid var(--border-subtle)',
+                          border: theme === 'light' ? '1px solid #e2e8f0' : '1px solid var(--border-subtle)',
                           marginBottom: '16px'
                         }}>
                           <span style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px', marginRight: '4px', whiteSpace: 'nowrap' }}>
-                            <Filter size={13} color="#818cf8" />
+                            <Filter size={13} color="#2563eb" />
                             Filtrar:
                           </span>
 
                           <button
                             type="button"
                             onClick={() => setClientDateFilter('all')}
-                            style={{
-                              padding: '4px 10px',
-                              borderRadius: '16px',
-                              fontSize: '0.75rem',
-                              fontWeight: 600,
-                              whiteSpace: 'nowrap',
-                              border: '1px solid var(--border-subtle)',
-                              background: clientDateFilter === 'all' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
-                              color: clientDateFilter === 'all' ? '#fff' : 'var(--text-secondary)',
-                              cursor: 'pointer'
-                            }}
+                            className={`filter-pill-btn ${clientDateFilter === 'all' ? 'active' : ''}`}
                           >
                             Todas
                           </button>
@@ -4983,17 +4981,7 @@ export function App() {
                           <button
                             type="button"
                             onClick={() => setClientDateFilter('today')}
-                            style={{
-                              padding: '4px 10px',
-                              borderRadius: '16px',
-                              fontSize: '0.75rem',
-                              fontWeight: 600,
-                              whiteSpace: 'nowrap',
-                              border: '1px solid var(--border-subtle)',
-                              background: clientDateFilter === 'today' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
-                              color: clientDateFilter === 'today' ? '#fff' : 'var(--text-secondary)',
-                              cursor: 'pointer'
-                            }}
+                            className={`filter-pill-btn ${clientDateFilter === 'today' ? 'active' : ''}`}
                           >
                             Hoje
                           </button>
@@ -5001,17 +4989,7 @@ export function App() {
                           <button
                             type="button"
                             onClick={() => setClientDateFilter('week')}
-                            style={{
-                              padding: '4px 10px',
-                              borderRadius: '16px',
-                              fontSize: '0.75rem',
-                              fontWeight: 600,
-                              whiteSpace: 'nowrap',
-                              border: '1px solid var(--border-subtle)',
-                              background: clientDateFilter === 'week' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
-                              color: clientDateFilter === 'week' ? '#fff' : 'var(--text-secondary)',
-                              cursor: 'pointer'
-                            }}
+                            className={`filter-pill-btn ${clientDateFilter === 'week' ? 'active' : ''}`}
                           >
                             7 dias
                           </button>
@@ -5019,17 +4997,7 @@ export function App() {
                           <button
                             type="button"
                             onClick={() => setClientDateFilter('15days')}
-                            style={{
-                              padding: '4px 10px',
-                              borderRadius: '16px',
-                              fontSize: '0.75rem',
-                              fontWeight: 600,
-                              whiteSpace: 'nowrap',
-                              border: '1px solid var(--border-subtle)',
-                              background: clientDateFilter === '15days' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
-                              color: clientDateFilter === '15days' ? '#fff' : 'var(--text-secondary)',
-                              cursor: 'pointer'
-                            }}
+                            className={`filter-pill-btn ${clientDateFilter === '15days' ? 'active' : ''}`}
                           >
                             15 dias
                           </button>
@@ -5037,17 +5005,7 @@ export function App() {
                           <button
                             type="button"
                             onClick={() => setClientDateFilter('30days')}
-                            style={{
-                              padding: '4px 10px',
-                              borderRadius: '16px',
-                              fontSize: '0.75rem',
-                              fontWeight: 600,
-                              whiteSpace: 'nowrap',
-                              border: '1px solid var(--border-subtle)',
-                              background: clientDateFilter === '30days' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
-                              color: clientDateFilter === '30days' ? '#fff' : 'var(--text-secondary)',
-                              cursor: 'pointer'
-                            }}
+                            className={`filter-pill-btn ${clientDateFilter === '30days' ? 'active' : ''}`}
                           >
                             30 dias
                           </button>
@@ -5055,17 +5013,7 @@ export function App() {
                           <button
                             type="button"
                             onClick={() => setClientDateFilter('custom')}
-                            style={{
-                              padding: '4px 10px',
-                              borderRadius: '16px',
-                              fontSize: '0.75rem',
-                              fontWeight: 600,
-                              whiteSpace: 'nowrap',
-                              border: '1px solid var(--border-subtle)',
-                              background: clientDateFilter === 'custom' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
-                              color: clientDateFilter === 'custom' ? '#fff' : 'var(--text-secondary)',
-                              cursor: 'pointer'
-                            }}
+                            className={`filter-pill-btn ${clientDateFilter === 'custom' ? 'active' : ''}`}
                           >
                             Personalizado
                           </button>
@@ -5119,9 +5067,9 @@ export function App() {
                               return (
                                 <div
                                   key={r.id}
+                                  className="ride-history-card"
                                   style={{
-                                    background: 'rgba(15, 23, 42, 0.85)',
-                                    border: isExpanded ? '1px solid rgba(99, 102, 241, 0.4)' : '1px solid var(--border-subtle)',
+                                    border: isExpanded ? '1px solid rgba(99, 102, 241, 0.5)' : undefined,
                                     borderRadius: '14px',
                                     overflow: 'hidden',
                                     transition: 'all 0.2s ease-in-out'
@@ -5143,15 +5091,17 @@ export function App() {
                                   >
                                     <div style={{ flex: 1, minWidth: 0 }}>
                                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
-                                        <span style={{
-                                          fontWeight: 700,
-                                          fontSize: '0.9rem',
-                                          color: '#fff',
-                                          whiteSpace: 'nowrap',
-                                          overflow: 'hidden',
-                                          textOverflow: 'ellipsis',
-                                          maxWidth: '220px'
-                                        }}>
+                                        <span
+                                          className="ride-title-text"
+                                          style={{
+                                            fontWeight: 700,
+                                            fontSize: '0.9rem',
+                                            whiteSpace: 'nowrap',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                            maxWidth: '220px'
+                                          }}
+                                        >
                                           {r.origin?.split(',')[0] || r.origin} ➔ {r.destination?.split(',')[0] || r.destination}
                                         </span>
                                         <span style={{
@@ -5206,7 +5156,7 @@ export function App() {
 
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
                                       <div style={{ textAlign: 'right' }}>
-                                        <div style={{ fontWeight: 800, color: '#fff', fontSize: '1rem', whiteSpace: 'nowrap' }}>
+                                        <div className="ride-price-text" style={{ fontWeight: 800, fontSize: '1rem', whiteSpace: 'nowrap' }}>
                                           {formatCurrency(r.total)}
                                         </div>
                                         <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
@@ -5232,23 +5182,13 @@ export function App() {
 
                                   {/* Corpo Expandido com Detalhamento Completo */}
                                   {isExpanded && (
-                                    <div style={{
-                                      padding: '14px 16px 16px',
-                                      borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-                                      background: 'rgba(10, 15, 30, 0.6)',
-                                      display: 'flex',
-                                      flexDirection: 'column',
-                                      gap: '12px'
-                                    }}>
+                                    <div className="ride-card-expanded">
                                       {/* Grid de Detalhes da Corrida */}
-                                      <div style={{
+                                      <div className="ride-card-details-box" style={{
                                         display: 'grid',
                                         gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
                                         gap: '8px',
-                                        background: 'rgba(15, 23, 42, 0.6)',
-                                        padding: '12px',
-                                        borderRadius: '10px',
-                                        border: '1px solid var(--border-subtle)'
+                                        padding: '12px'
                                       }}>
                                         <div>
                                           <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>Total Pago:</span>
@@ -5256,7 +5196,7 @@ export function App() {
                                         </div>
                                         <div>
                                           <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>Horas Contratadas:</span>
-                                          <strong style={{ fontSize: '0.9rem', color: '#fff' }}>{r.hours}h de serviço</strong>
+                                          <strong className="ride-title-text" style={{ fontSize: '0.9rem' }}>{r.hours}h de serviço</strong>
                                         </div>
                                         <div>
                                           <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>Valor Hora:</span>
@@ -5460,9 +5400,9 @@ export function App() {
                               return (
                                 <div
                                   key={r.id}
+                                  className="ride-history-card"
                                   style={{
-                                    background: 'rgba(15, 23, 42, 0.85)',
-                                    border: isExpanded ? '1px solid rgba(245, 158, 11, 0.4)' : '1px solid rgba(245, 158, 11, 0.25)',
+                                    border: isExpanded ? '1px solid rgba(245, 158, 11, 0.5)' : '1px solid rgba(245, 158, 11, 0.3)',
                                     borderRadius: '14px',
                                     overflow: 'hidden',
                                     transition: 'all 0.2s ease-in-out'
@@ -5484,15 +5424,17 @@ export function App() {
                                   >
                                     <div style={{ flex: 1, minWidth: 0 }}>
                                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
-                                        <span style={{
-                                          fontWeight: 700,
-                                          fontSize: '0.9rem',
-                                          color: '#fff',
-                                          whiteSpace: 'nowrap',
-                                          overflow: 'hidden',
-                                          textOverflow: 'ellipsis',
-                                          maxWidth: '220px'
-                                        }}>
+                                        <span
+                                          className="ride-title-text"
+                                          style={{
+                                            fontWeight: 700,
+                                            fontSize: '0.9rem',
+                                            whiteSpace: 'nowrap',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                            maxWidth: '220px'
+                                          }}
+                                        >
                                           {r.origin?.split(',')[0] || r.origin} ➔ {r.destination?.split(',')[0] || r.destination}
                                         </span>
                                         <span style={{
@@ -5549,7 +5491,7 @@ export function App() {
 
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
                                       <div style={{ textAlign: 'right' }}>
-                                        <div style={{ fontWeight: 800, color: '#fff', fontSize: '1rem', whiteSpace: 'nowrap' }}>
+                                        <div className="ride-price-text" style={{ fontWeight: 800, fontSize: '1rem', whiteSpace: 'nowrap' }}>
                                           {formatCurrency(r.total)}
                                         </div>
                                         <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
@@ -5575,23 +5517,13 @@ export function App() {
 
                                   {/* Corpo Expandido com Detalhamento Completo */}
                                   {isExpanded && (
-                                    <div style={{
-                                      padding: '14px 16px 16px',
-                                      borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-                                      background: 'rgba(10, 15, 30, 0.6)',
-                                      display: 'flex',
-                                      flexDirection: 'column',
-                                      gap: '12px'
-                                    }}>
+                                    <div className="ride-card-expanded">
                                       {/* Grid de Detalhes da Corrida */}
-                                      <div style={{
+                                      <div className="ride-card-details-box" style={{
                                         display: 'grid',
                                         gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
                                         gap: '8px',
-                                        background: 'rgba(15, 23, 42, 0.6)',
-                                        padding: '12px',
-                                        borderRadius: '10px',
-                                        border: '1px solid var(--border-subtle)'
+                                        padding: '12px'
                                       }}>
                                         <div>
                                           <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>Total Pago:</span>
@@ -5599,7 +5531,7 @@ export function App() {
                                         </div>
                                         <div>
                                           <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>Horas Contratadas:</span>
-                                          <strong style={{ fontSize: '0.9rem', color: '#fff' }}>{r.hours}h de serviço</strong>
+                                          <strong className="ride-title-text" style={{ fontSize: '0.9rem' }}>{r.hours}h de serviço</strong>
                                         </div>
                                         <div>
                                           <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>Valor Hora:</span>
@@ -5772,14 +5704,11 @@ export function App() {
                                               e.stopPropagation();
                                               handleDeleteArchivedRide(r.id);
                                             }}
-                                            className="btn-outline"
+                                            className="btn-danger-outline"
                                             style={{
                                               fontSize: '0.72rem',
                                               padding: '5px 12px',
-                                              borderRadius: '8px',
-                                              background: 'rgba(239, 68, 68, 0.15)',
-                                              borderColor: 'rgba(239, 68, 68, 0.4)',
-                                              color: '#ef4444'
+                                              borderRadius: '8px'
                                             }}
                                             title="Excluir permanentemente"
                                           >
