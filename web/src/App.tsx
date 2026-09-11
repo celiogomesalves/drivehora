@@ -7,7 +7,7 @@ import {
   BellRing, Volume2, VolumeX, Ban, AlertOctagon, Heart, ShieldAlert, RotateCcw,
   Filter, Archive, ArchiveRestore, Trash2, CreditCard,
   ChevronDown, ChevronUp, AlertCircle, Headphones,
-  Calendar, Zap, Share2, Copy
+  Calendar, Zap, Share2, Copy, Sun, Moon
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import confetti from 'canvas-confetti';
@@ -49,6 +49,34 @@ import { useSystemDialog } from './components/SystemDialog';
 export function App() {
   const { showAlert, showConfirm, showToast } = useSystemDialog();
   const [systemSettings, setSystemSettings] = useState<SystemSettings>(getSystemSettings);
+
+  // Tema da Interface: 'dark' (Escuro Futurista) vs 'light' (Claro Clean Modern SaaS)
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    try {
+      const saved = localStorage.getItem('drivehora_theme');
+      if (saved === 'light' || saved === 'dark') return saved;
+      return 'dark'; // Padrão seguro para preservar a experiência atual
+    } catch {
+      return 'dark';
+    }
+  });
+
+  useEffect(() => {
+    if (theme === 'light') {
+      document.documentElement.classList.add('theme-light');
+    } else {
+      document.documentElement.classList.remove('theme-light');
+    }
+    try {
+      localStorage.setItem('drivehora_theme', theme);
+    } catch {}
+  }, [theme]);
+
+  const toggleTheme = () => {
+    const nextTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(nextTheme);
+    showToast(nextTheme === 'light' ? '☀️ Modo Claro (Clean Modern SaaS) ativado!' : '🌙 Modo Escuro ativado!', 'info');
+  };
   
   // Autenticação & Sessão (Inicialização imediata síncrona para evitar tela em branco na primeira chamada)
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
@@ -2179,6 +2207,39 @@ export function App() {
                   <span>{supabaseConnected ? 'Supabase ✅' : 'Supabase'}</span>
                 </button>
               )}
+
+              {/* Botão Alternador de Tema (Dark / Light) */}
+              <button
+                type="button"
+                onClick={toggleTheme}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontSize: '0.75rem',
+                  padding: '6px 12px',
+                  background: theme === 'light' ? 'rgba(37, 99, 235, 0.1)' : 'rgba(255, 255, 255, 0.06)',
+                  color: theme === 'light' ? '#2563eb' : '#cbd5e1',
+                  border: `1px solid ${theme === 'light' ? '#bfdbfe' : 'var(--border-subtle)'}`,
+                  borderRadius: '20px',
+                  cursor: 'pointer',
+                  fontWeight: 700,
+                  transition: 'all 0.2s ease'
+                }}
+                title={theme === 'light' ? 'Alternar para Modo Escuro' : 'Alternar para Modo Claro (Clean Modern SaaS)'}
+              >
+                {theme === 'light' ? (
+                  <>
+                    <Sun size={14} color="#f59e0b" />
+                    <span>Modo Claro</span>
+                  </>
+                ) : (
+                  <>
+                    <Moon size={14} color="#a5b4fc" />
+                    <span>Modo Escuro</span>
+                  </>
+                )}
+              </button>
 
               <div style={{
                 display: 'flex',

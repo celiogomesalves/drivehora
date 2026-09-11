@@ -33,6 +33,257 @@
   --shadow-glow: 0 0 25px rgba(99, 102, 241, 0.25);
 }
 
+/* ======================================================== */
+/* TEMA CLARO - CLEAN MODERN SAAS (ESTILO MEMODONTO)        */
+/* ======================================================== */
+html.theme-light,
+.theme-light {
+  --bg-primary: #f8fafc;
+  --bg-secondary: #ffffff;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f1f5f9;
+  --bg-glass: rgba(255, 255, 255, 0.95);
+  --border-subtle: #e2e8f0;
+  --border-focus: #2563eb;
+
+  --primary: #2563eb;
+  --primary-glow: rgba(37, 99, 235, 0.2);
+  --primary-gradient: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  --secondary-gradient: linear-gradient(135deg, #10b981 0%, #059669 100%);
+
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
+  --shadow-glow: 0 0 15px rgba(37, 99, 235, 0.15);
+}
+
+html.theme-light body {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+  background-image:
+    radial-gradient(at 0% 0%, rgba(37, 99, 235, 0.04) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.03) 0px, transparent 50%) !important;
+}
+
+/* Adaptação de componentes ao Tema Claro */
+html.theme-light .glass-panel {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.02) !important;
+  color: #0f172a;
+}
+
+html.theme-light .glass-panel:hover {
+  border-color: #cbd5e1 !important;
+}
+
+html.theme-light .app-header {
+  background: rgba(255, 255, 255, 0.96) !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03) !important;
+}
+
+html.theme-light .app-header span,
+html.theme-light .app-header div {
+  color: inherit;
+}
+
+html.theme-light .custom-input,
+html.theme-light input[type="text"],
+html.theme-light input[type="email"],
+html.theme-light input[type="password"],
+html.theme-light input[type="number"],
+html.theme-light input[type="tel"],
+html.theme-light input[type="date"],
+html.theme-light select,
+html.theme-light textarea {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border: 1px solid #cbd5e1 !important;
+}
+
+html.theme-light .custom-input:focus,
+html.theme-light input:focus,
+html.theme-light textarea:focus,
+html.theme-light select:focus {
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15) !important;
+}
+
+html.theme-light .custom-input::placeholder,
+html.theme-light input::placeholder,
+html.theme-light textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+html.theme-light .btn-outline {
+  background: #ffffff !important;
+  color: #334155 !important;
+  border: 1px solid #cbd5e1 !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+html.theme-light .btn-outline:hover {
+  background: #f8fafc !important;
+  border-color: #94a3b8 !important;
+  color: #0f172a !important;
+}
+
+html.theme-light .btn-primary {
+  background: #2563eb !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25) !important;
+}
+
+html.theme-light .btn-primary:hover:not(:disabled) {
+  background: #1d4ed8 !important;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35) !important;
+}
+
+/* Header, Subnav e Navegação Mobile no Tema Claro */
+html.theme-light .header-nav-container {
+  background: #f1f5f9 !important;
+  border: 1px solid #e2e8f0 !important;
+}
+
+html.theme-light .header-tab-btn {
+  color: #64748b !important;
+}
+
+html.theme-light .header-tab-btn:hover {
+  color: #1e293b !important;
+}
+
+html.theme-light .header-saldo-badge {
+  background: #eff6ff !important;
+  border: 1px solid #bfdbfe !important;
+}
+
+html.theme-light .header-saldo-badge .saldo-label {
+  color: #3b82f6 !important;
+}
+
+html.theme-light .header-saldo-badge .saldo-value {
+  color: #1d4ed8 !important;
+}
+
+html.theme-light .mobile-bottom-nav {
+  background: rgba(255, 255, 255, 0.96) !important;
+  border-top: 1px solid #e2e8f0 !important;
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.04) !important;
+}
+
+html.theme-light .mobile-nav-item {
+  color: #64748b !important;
+}
+
+html.theme-light .mobile-nav-item .icon-wrapper {
+  color: #64748b !important;
+}
+
+html.theme-light .mobile-nav-item.active {
+  color: #2563eb !important;
+}
+
+html.theme-light .mobile-nav-item.active .icon-wrapper {
+  background: #eff6ff !important;
+  color: #2563eb !important;
+  border: 1px solid #bfdbfe !important;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.15) !important;
+}
+
+html.theme-light .mobile-nav-item.active.driver-active {
+  color: #059669 !important;
+}
+
+html.theme-light .mobile-nav-item.active.driver-active .icon-wrapper {
+  background: #ecfdf5 !important;
+  color: #059669 !important;
+  border: 1px solid #a7f3d0 !important;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.15) !important;
+}
+
+/* Modais e Diálogos no Tema Claro */
+html.theme-light .dialog-backdrop,
+html.theme-light div[style*="background: 'rgba(0, 0, 0, 0.85)'"],
+html.theme-light div[style*="background: rgba(0, 0, 0, 0.85)"] {
+  background: rgba(15, 23, 42, 0.5) !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+/* Subnavegação e Abas do Admin no Tema Claro */
+html.theme-light .admin-subnav-desktop {
+  background: #f1f5f9 !important;
+  border: 1px solid #e2e8f0 !important;
+}
+
+html.theme-light .admin-subnav-desktop button {
+  color: #64748b !important;
+}
+
+html.theme-light .admin-subnav-desktop button:hover {
+  color: #0f172a !important;
+}
+
+/* Superfícies de Cards e Contraste Automático no Tema Claro */
+html.theme-light div[style*="background: 'rgba(15, 23, 42"],
+html.theme-light div[style*="background: rgba(15, 23, 42"],
+html.theme-light div[style*="background: 'rgba(10, 15, 30"],
+html.theme-light div[style*="background: rgba(10, 15, 30"] {
+  background: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+html.theme-light div[style*="background: 'rgba(255, 255, 255, 0.03)'"],
+html.theme-light div[style*="background: rgba(255, 255, 255, 0.03)"],
+html.theme-light div[style*="background: 'rgba(255, 255, 255, 0.04)'"],
+html.theme-light div[style*="background: rgba(255, 255, 255, 0.04)"],
+html.theme-light div[style*="background: 'rgba(255, 255, 255, 0.05)'"],
+html.theme-light div[style*="background: rgba(255, 255, 255, 0.05)"],
+html.theme-light div[style*="background: 'rgba(255, 255, 255, 0.08)'"],
+html.theme-light div[style*="background: rgba(255, 255, 255, 0.08)"] {
+  background: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+
+/* Contraste de Texto Branco em Cards Claros */
+html.theme-light .glass-panel div[style*="color: #fff"],
+html.theme-light .glass-panel div[style*="color: '#fff'"],
+html.theme-light .glass-panel span[style*="color: #fff"],
+html.theme-light .glass-panel span[style*="color: '#fff'"],
+html.theme-light .glass-panel strong[style*="color: #fff"],
+html.theme-light .glass-panel strong[style*="color: '#fff'"],
+html.theme-light .glass-panel h1,
+html.theme-light .glass-panel h2,
+html.theme-light .glass-panel h3,
+html.theme-light .glass-panel h4,
+html.theme-light .app-header span[style*="color: #fff"],
+html.theme-light .app-header div[style*="color: #fff"] {
+  color: #0f172a !important;
+}
+
+html.theme-light div[style*="background: 'rgba(15, 23, 42"] div[style*="color: #fff"],
+html.theme-light div[style*="background: 'rgba(15, 23, 42"] span[style*="color: #fff"],
+html.theme-light div[style*="background: 'rgba(15, 23, 42"] strong[style*="color: #fff"],
+html.theme-light div[style*="background: rgba(15, 23, 42"] div[style*="color: #fff"],
+html.theme-light div[style*="background: rgba(15, 23, 42"] span[style*="color: #fff"],
+html.theme-light div[style*="background: rgba(15, 23, 42"] strong[style*="color: #fff"],
+html.theme-light div[style*="background: 'rgba(255, 255, 255, 0.03)'"] div[style*="color: #fff"],
+html.theme-light div[style*="background: rgba(255, 255, 255, 0.03)"] div[style*="color: #fff"],
+html.theme-light div[style*="background: 'rgba(255, 255, 255, 0.05)'"] div[style*="color: #fff"],
+html.theme-light div[style*="background: rgba(255, 255, 255, 0.05)"] div[style*="color: #fff"] {
+  color: #0f172a !important;
+}
+
+/* Transição global suave entre temas */
+body, .glass-panel, .app-header, .custom-input, .btn-outline, .btn-primary, .mobile-bottom-nav, .header-nav-container {
+  transition: background-color 0.25s ease, border-color 0.25s ease, color 0.25s ease, box-shadow 0.25s ease;
+}
+
 * {
   margin: 0;
   padding: 0;
