@@ -271,20 +271,15 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
 
       <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
         {/* Dados Pessoais & Fiscais Obrigatórios */}
-        <div style={{
-          background: 'rgba(255, 255, 255, 0.03)',
-          border: '1px solid rgba(255, 255, 255, 0.07)',
-          borderRadius: '12px',
-          padding: '14px 16px'
-        }}>
-          <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#e2e8f0', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <div className="profile-section-card">
+          <div className="profile-section-title">
             <FileText size={14} color="#818cf8" />
             <span>1. Dados Pessoais Obrigatórios</span>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
             <div>
-              <label style={{ fontSize: '0.76rem', color: '#cbd5e1', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
+              <label className="profile-field-label">
                 Nome Completo *
               </label>
               <input
@@ -304,7 +299,7 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
             </div>
 
             <div>
-              <label style={{ fontSize: '0.76rem', color: '#cbd5e1', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
+              <label className="profile-field-label">
                 CPF (Obrigatório para emissão Pix) *
               </label>
               <div style={{ position: 'relative' }}>
@@ -341,7 +336,7 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
             </div>
 
             <div>
-              <label style={{ fontSize: '0.76rem', color: '#cbd5e1', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
+              <label className="profile-field-label">
                 Celular / WhatsApp com DDD *
               </label>
               <div style={{ position: 'relative' }}>
@@ -378,7 +373,7 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
             </div>
 
             <div>
-              <label style={{ fontSize: '0.76rem', color: '#cbd5e1', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
+              <label className="profile-field-label">
                 E-mail Cadastrado
               </label>
               <input
@@ -393,20 +388,15 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
         </div>
 
         {/* Endereço Residencial (Para Faturamento e Embarque) */}
-        <div style={{
-          background: 'rgba(255, 255, 255, 0.03)',
-          border: '1px solid rgba(255, 255, 255, 0.07)',
-          borderRadius: '12px',
-          padding: '14px 16px'
-        }}>
-          <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#e2e8f0', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <div className="profile-section-card">
+          <div className="profile-section-title">
             <MapPin size={14} color="#38bdf8" />
             <span>2. Endereço Residencial</span>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
             <div>
-              <label style={{ fontSize: '0.76rem', color: '#cbd5e1', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
+              <label className="profile-field-label">
                 CEP
               </label>
               <div style={{ position: 'relative' }}>
@@ -433,7 +423,7 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
             </div>
 
             <div style={{ gridColumn: 'span 2' }}>
-              <label style={{ fontSize: '0.76rem', color: '#cbd5e1', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
+              <label className="profile-field-label">
                 Rua / Logradouro
               </label>
               <input
@@ -452,7 +442,7 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
             </div>
 
             <div>
-              <label style={{ fontSize: '0.76rem', color: '#cbd5e1', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
+              <label className="profile-field-label">
                 Número
               </label>
               <input
@@ -471,7 +461,7 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
             </div>
 
             <div>
-              <label style={{ fontSize: '0.76rem', color: '#cbd5e1', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
+              <label className="profile-field-label">
                 Complemento
               </label>
               <input
@@ -490,7 +480,7 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
             </div>
 
             <div>
-              <label style={{ fontSize: '0.76rem', color: '#cbd5e1', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
+              <label className="profile-field-label">
                 Bairro
               </label>
               <input
@@ -509,7 +499,7 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
             </div>
 
             <div>
-              <label style={{ fontSize: '0.76rem', color: '#cbd5e1', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
+              <label className="profile-field-label">
                 Cidade
               </label>
               <input
@@ -528,7 +518,7 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
             </div>
 
             <div>
-              <label style={{ fontSize: '0.76rem', color: '#cbd5e1', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
+              <label className="profile-field-label">
                 Estado (UF)
               </label>
               <input

@@ -807,30 +807,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {rides.slice(0, 5).map(r => (
-                  <div key={r.id} style={{
+                  <div key={r.id} className="ride-history-card" style={{
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                    background: 'rgba(15, 23, 42, 0.7)',
                     padding: '12px 16px',
-                    borderRadius: '12px',
-                    border: '1px solid var(--border-subtle)'
+                    borderRadius: '12px'
                   }}>
                     <div>
-                      <strong style={{ fontSize: '0.9rem' }}>{r.origin} ➔ {r.destination}</strong>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                        Passageiro: {r.clientName || r.clientId} • {r.hours} horas
+                      <strong className="ride-title-text" style={{ fontSize: '0.9rem', display: 'block' }}>{r.origin} ➔ {r.destination}</strong>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                        Passageiro: <strong>{r.clientName || r.clientId}</strong> • {r.hours} horas
                       </div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontWeight: 700, color: '#818cf8' }}>{formatCurrency(r.total)}</div>
+                      <div className="ride-price-text" style={{ fontWeight: 700 }}>{formatCurrency(r.total)}</div>
                       <span style={{
                         fontSize: '0.7rem',
                         textTransform: 'uppercase',
                         fontWeight: 700,
                         color: r.status === 'finished' ? '#10b981' : r.status === 'in_progress' ? '#3b82f6' : '#f59e0b'
                       }}>
-                        {r.status}
+                        {r.status === 'finished' ? 'CONCLUÍDA' : r.status === 'in_progress' ? 'EM ANDAMENTO' : r.status === 'accepted' ? 'CONFIRMADA' : r.status === 'searching' ? 'BUSCANDO' : 'CANCELADA'}
                       </span>
                     </div>
                   </div>
@@ -1789,10 +1787,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 {filteredRides.map(r => {
                   const rideTime = r.createdAt || (r as any).created_at ? new Date(r.createdAt || (r as any).created_at) : null;
                   return (
-                    <div key={r.id} style={{
-                      background: 'rgba(15, 23, 42, 0.85)',
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: '14px',
+                    <div key={r.id} className="ride-history-card" style={{
                       padding: '16px',
                       display: 'flex',
                       justifyContent: 'space-between',
@@ -1802,7 +1797,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     }}>
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                          <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>{r.origin} ➔ {r.destination}</span>
+                          <span className="ride-title-text" style={{ fontWeight: 700, fontSize: '0.95rem' }}>{r.origin} ➔ {r.destination}</span>
                           <span style={{
                             fontSize: '0.7rem',
                             fontWeight: 700,
@@ -1825,7 +1820,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
 
                       <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontWeight: 800, color: '#fff' }}>Total: {formatCurrency(r.total)}</div>
+                        <div className="ride-price-text" style={{ fontWeight: 800 }}>Total: {formatCurrency(r.total)}</div>
                         <div style={{ fontSize: '0.75rem', color: '#818cf8' }}>Plataforma (15%): {formatCurrency(r.commission)}</div>
                         <div style={{ fontSize: '0.75rem', color: '#10b981' }}>Motorista (85%): {formatCurrency(r.driverNet)}</div>
                       </div>

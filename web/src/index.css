@@ -477,6 +477,103 @@ html.theme-light .amenity-badge-tag {
   border-radius: 20px;
   border: 1px solid var(--border-subtle);
   transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+html.theme-light .user-header-card {
+  background: #f1f5f9 !important;
+  border: 1px solid #cbd5e1 !important;
+}
+
+html.theme-light .user-header-card .user-name {
+  color: #0f172a !important;
+}
+
+html.theme-light .user-header-card .user-role {
+  color: #64748b !important;
+}
+
+/* Marca / Nome do Sistema no Topo */
+.app-brand-title {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #fff;
+}
+
+html.theme-light .app-brand-title {
+  color: #0f172a !important;
+}
+
+/* Abas de Histórico (Principal / Arquivadas) */
+.history-subnav-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 14px;
+  background: rgba(15, 23, 42, 0.8);
+  padding: 3px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  width: fit-content;
+}
+
+html.theme-light .history-subnav-box {
+  background: #f1f5f9 !important;
+  border: 1px solid #cbd5e1 !important;
+}
+
+html.theme-light .history-subnav-btn {
+  color: #64748b !important;
+}
+
+html.theme-light .history-subnav-btn.active {
+  color: #ffffff !important;
+}
+
+html.theme-light .history-subnav-btn.archived-active {
+  color: #000000 !important;
+}
+
+/* Seções do Perfil do Passageiro */
+.profile-section-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+
+html.theme-light .profile-section-card {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03) !important;
+}
+
+.profile-section-title {
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: #e2e8f0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+html.theme-light .profile-section-title {
+  color: #1d4ed8 !important;
+}
+
+.profile-field-label {
+  font-size: 0.76rem;
+  color: #cbd5e1;
+  font-weight: 600;
+  display: block;
+  margin-bottom: 4px;
+}
+
+html.theme-light .profile-field-label {
+  color: #1e293b !important;
 }
 
 html.theme-light .user-header-card {
