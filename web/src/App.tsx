@@ -2262,15 +2262,7 @@ export function App() {
                 </div>
               </div>
 
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                background: 'rgba(15, 23, 42, 0.85)',
-                padding: '5px 10px',
-                borderRadius: '20px',
-                border: '1px solid var(--border-subtle)'
-              }}>
+              <div className="user-header-card">
                 <div style={{
                   width: '24px',
                   height: '24px',
@@ -2287,10 +2279,10 @@ export function App() {
                   {isUserAdmin ? '👑' : currentUser.fullName.charAt(0)}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 700, maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <span className="user-name" style={{ fontSize: '0.75rem', fontWeight: 700, maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {currentUser.fullName.split(' ')[0]}
                   </span>
-                  <span style={{ fontSize: '0.6rem', color: isUserAdmin ? '#f59e0b' : 'var(--text-muted)' }}>
+                  <span className="user-role" style={{ fontSize: '0.6rem', color: isUserAdmin ? '#f59e0b' : undefined }}>
                     {isUserAdmin ? 'Admin' : currentUser.role === 'client' ? 'Passageiro' : 'Motorista'}
                   </span>
                 </div>
@@ -2307,15 +2299,13 @@ export function App() {
 
           {/* Linha 2: Navegação Horizontal Responsiva (Sem Quebras ou Informações Cortadas) */}
           <nav className="header-nav-container" style={{
-            background: 'rgba(15, 23, 42, 0.95)',
             padding: '4px 6px',
-            borderRadius: '12px',
-            border: '1px solid var(--border-subtle)'
+            borderRadius: '12px'
           }}>
             {isUserAdmin && (
               <button
                 onClick={() => setActiveTab('admin')}
-                className="header-tab-btn"
+                className={`header-tab-btn ${activeTab === 'admin' ? 'active admin' : ''}`}
                 style={{
                   background: activeTab === 'admin' ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'transparent',
                   color: activeTab === 'admin' ? '#000' : '#f59e0b',
@@ -2332,10 +2322,10 @@ export function App() {
             {(currentUser.role === 'client' || isUserAdmin) && (
               <button
                 onClick={() => setActiveTab('client')}
-                className="header-tab-btn"
+                className={`header-tab-btn ${activeTab === 'client' ? 'active' : ''}`}
                 style={{
                   background: activeTab === 'client' ? 'var(--primary-gradient)' : 'transparent',
-                  color: activeTab === 'client' ? '#fff' : 'var(--text-secondary)'
+                  color: activeTab === 'client' ? '#fff' : undefined
                 }}
               >
                 <Users size={14} />
@@ -2350,10 +2340,10 @@ export function App() {
                   setActiveTab('driver');
                   setShowDriverProfileEdit(false);
                 }}
-                className="header-tab-btn"
+                className={`header-tab-btn ${activeTab === 'driver' ? 'active driver' : ''}`}
                 style={{
                   background: activeTab === 'driver' ? 'linear-gradient(135deg, #10b981, #059669)' : 'transparent',
-                  color: activeTab === 'driver' ? '#fff' : 'var(--text-secondary)'
+                  color: activeTab === 'driver' ? '#fff' : undefined
                 }}
               >
                 <Car size={14} />
@@ -2372,10 +2362,10 @@ export function App() {
 
             <button
               onClick={() => setActiveTab('mobile')}
-              className="header-tab-btn"
+              className={`header-tab-btn ${activeTab === 'mobile' ? 'active mobile' : ''}`}
               style={{
                 background: activeTab === 'mobile' ? '#f59e0b' : 'transparent',
-                color: activeTab === 'mobile' ? '#000' : 'var(--text-secondary)'
+                color: activeTab === 'mobile' ? '#000' : undefined
               }}
             >
               <Share2 size={14} />
@@ -3628,17 +3618,8 @@ export function App() {
 
                     {/* Campos Específicos para Corrida Agendada */}
                     {isScheduledRide && (
-                      <div style={{
-                        background: 'rgba(59, 130, 246, 0.08)',
-                        border: '1px solid rgba(59, 130, 246, 0.25)',
-                        borderRadius: '12px',
-                        padding: '14px',
-                        marginBottom: '16px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '10px'
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#93c5fd', fontSize: '0.85rem', fontWeight: 700 }}>
+                      <div className="scheduled-ride-card">
+                        <div className="schedule-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', fontWeight: 700 }}>
                           <Calendar size={16} />
                           <span>Data e Horário Previsto para Embarque</span>
                         </div>
@@ -3667,7 +3648,7 @@ export function App() {
                             />
                           </div>
                         </div>
-                        <div style={{ fontSize: '0.72rem', color: '#cbd5e1', lineHeight: 1.4 }}>
+                        <div className="schedule-hint" style={{ fontSize: '0.72rem', lineHeight: 1.4 }}>
                           💡 <strong>Agenda do Parceiro:</strong> Os motoristas parceiros analisarão suas agendas para reservar o horário. Você receberá uma notificação quando um motorista aceitar!
                         </div>
                       </div>
@@ -4007,41 +3988,23 @@ export function App() {
                             key={m.id}
                             type="button"
                             onClick={() => setSelectedPaymentMethod(m.id as any)}
-                            style={{
-                              padding: '10px 12px',
-                              borderRadius: '12px',
-                              border: selectedPaymentMethod === m.id ? '2px solid #10b981' : '1px solid var(--border-subtle)',
-                              background: selectedPaymentMethod === m.id ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255, 255, 255, 0.03)',
-                              color: selectedPaymentMethod === m.id ? '#10b981' : 'var(--text-secondary)',
-                              textAlign: 'left',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: '2px',
-                              transition: 'all 0.2s ease'
-                            }}
+                            className={`payment-method-card ${selectedPaymentMethod === m.id ? 'selected' : ''}`}
                           >
-                            <strong style={{ fontSize: '0.8rem', color: selectedPaymentMethod === m.id ? '#10b981' : '#fff' }}>{m.label}</strong>
-                            <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{m.desc}</span>
+                            <strong style={{ fontSize: '0.8rem' }}>{m.label}</strong>
+                            <span style={{ fontSize: '0.68rem' }}>{m.desc}</span>
                           </button>
                         ))}
                       </div>
                     </div>
 
                     {/* Card de Resumo da Contratação */}
-                    <div style={{
-                      background: 'rgba(15, 23, 42, 0.85)',
-                      border: '1px solid rgba(99, 102, 241, 0.25)',
-                      borderRadius: '14px',
-                      padding: '16px',
-                      marginTop: '4px'
-                    }}>
+                    <div className="ride-checkout-summary-card">
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Total da Contratação:</span>
-                        <strong style={{ fontSize: '1.35rem', color: '#10b981', fontWeight: 800 }}>{formatCurrency(totalAmount)}</strong>
+                        <span className="summary-label" style={{ fontSize: '0.9rem', fontWeight: 600 }}>Total da Contratação:</span>
+                        <strong className="summary-price" style={{ fontSize: '1.35rem', fontWeight: 800 }}>{formatCurrency(totalAmount)}</strong>
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '6px' }}>
-                        <span>Período: {hours} {hours === 1 ? 'hora' : 'horas'} contratadas</span>
+                      <div className="summary-subtext" style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginTop: '6px' }}>
+                        <span>Período: <strong>{hours} {hours === 1 ? 'hora' : 'horas'} contratadas</strong></span>
                         <span>Valor: {formatCurrency(hourlyRate)}/h</span>
                       </div>
                     </div>
@@ -4244,18 +4207,7 @@ export function App() {
                             </div>
                           </div>
                         ) : (
-                          <div style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '16px',
-                            background: 'radial-gradient(ellipse at center, rgba(99, 102, 241, 0.22) 0%, rgba(15, 23, 42, 0.4) 100%)',
-                            border: '1px solid rgba(99, 102, 241, 0.35)',
-                            borderRadius: '18px',
-                            padding: '16px 20px',
-                            marginBottom: '20px',
-                            position: 'relative',
-                            overflow: 'hidden'
-                          }}>
+                          <div className="passenger-radar-box">
                             {/* Ondas de Sonar Concêntricas */}
                             <div style={{
                               position: 'relative',
@@ -5933,14 +5885,7 @@ export function App() {
                     </div>
 
                     <div className="driver-subnav-desktop" style={{ alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                      <div style={{
-                        display: 'flex',
-                        background: 'rgba(15, 23, 42, 0.8)',
-                        padding: '3px',
-                        borderRadius: '10px',
-                        border: '1px solid var(--border-subtle)',
-                        marginRight: '6px'
-                      }}>
+                      <div className="driver-subnav-box">
                         <button
                           type="button"
                           onClick={() => setDriverSubTab('radar')}
@@ -6111,38 +6056,28 @@ export function App() {
 
                     return (
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '24px' }}>
-                        <div style={{
-                          background: 'rgba(15, 23, 42, 0.8)',
-                          padding: '16px',
-                          borderRadius: '14px',
-                          border: '1px solid var(--border-subtle)'
-                        }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+                        <div className="driver-metric-card">
+                          <div className="metric-label" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem' }}>
                             <DollarSign size={16} color="#10b981" />
                             <span>Ganhos Líquidos</span>
                           </div>
-                          <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#10b981', marginTop: '6px' }}>
+                          <div className="metric-value earnings" style={{ fontSize: '1.4rem', fontWeight: 800, marginTop: '6px' }}>
                             {formatCurrency(myDriverAccumulatedEarnings)}
                           </div>
-                          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                          <div className="metric-desc" style={{ fontSize: '0.7rem' }}>
                             Repasse de 85% ({formatCurrency(myDriverTodayEarnings)} hoje)
                           </div>
                         </div>
 
-                        <div style={{
-                          background: 'rgba(15, 23, 42, 0.8)',
-                          padding: '16px',
-                          borderRadius: '14px',
-                          border: '1px solid var(--border-subtle)'
-                        }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+                        <div className="driver-metric-card">
+                          <div className="metric-label" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem' }}>
                             <Award size={16} color="#f59e0b" />
                             <span>Corridas Feitas</span>
                           </div>
-                          <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#fff', marginTop: '6px' }}>
+                          <div className="metric-value" style={{ fontSize: '1.4rem', fontWeight: 800, marginTop: '6px' }}>
                             {myDriverCompletedToday.length}
                           </div>
-                          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                          <div className="metric-desc" style={{ fontSize: '0.7rem' }}>
                             Completadas hoje ({myDriverCompletedRides.length} no total)
                           </div>
                         </div>
@@ -6205,13 +6140,11 @@ export function App() {
                             {pendingRides.map(r => (
                               <div
                                 key={r.id}
+                                className="driver-pending-ride-card"
                                 style={{
-                                  background: r.isScheduled 
-                                    ? 'linear-gradient(135deg, rgba(14, 165, 233, 0.12) 0%, rgba(15, 23, 42, 0.8) 100%)' 
-                                    : 'rgba(15, 23, 42, 0.7)',
                                   border: r.isScheduled 
                                     ? '1.5px solid rgba(14, 165, 233, 0.45)' 
-                                    : '1px solid var(--border-subtle)',
+                                    : undefined,
                                   borderRadius: '14px',
                                   padding: '16px',
                                   position: 'relative'
@@ -6267,7 +6200,7 @@ export function App() {
                                 {safeAmenitiesArray(r.requiredAmenities).length > 0 && (
                                   <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '10px' }}>
                                     {safeAmenitiesArray(r.requiredAmenities).map(am => (
-                                      <span key={am} style={{
+                                      <span key={am} className="amenity-badge-tag" style={{
                                         fontSize: '0.72rem',
                                         padding: '2px 8px',
                                         borderRadius: '6px',
@@ -6347,8 +6280,8 @@ export function App() {
                                 return (
                                   <div
                                     key={r.id}
+                                    className="driver-active-ride-card"
                                     style={{
-                                      background: isCurrentActive ? 'rgba(99, 102, 241, 0.08)' : 'rgba(255, 255, 255, 0.03)',
                                       border: `1.5px solid ${isCurrentActive ? '#6366f1' : 'var(--border-subtle)'}`,
                                       borderRadius: '16px',
                                       padding: '16px',
@@ -6370,7 +6303,7 @@ export function App() {
                                         }}>
                                           {isCurrentActive ? '🟢 Em Atendimento Agora' : `🕒 ${index + 1}ª na Fila de Espera`}
                                         </span>
-                                        <strong style={{ fontSize: '0.85rem', color: '#fff' }}>#{r.id.slice(-6)}</strong>
+                                        <strong className="ride-title-text" style={{ fontSize: '0.85rem' }}>#{r.id.slice(-6)}</strong>
                                       </div>
 
                                       <span style={{
@@ -6410,12 +6343,10 @@ export function App() {
                                     {safeAmenitiesArray(r.requiredAmenities).length > 0 && (
                                       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '10px' }}>
                                         {safeAmenitiesArray(r.requiredAmenities).map(am => (
-                                          <span key={am} style={{
+                                          <span key={am} className="amenity-badge-tag" style={{
                                             fontSize: '0.7rem',
                                             padding: '2px 8px',
                                             borderRadius: '6px',
-                                            background: 'rgba(255, 255, 255, 0.08)',
-                                            color: '#cbd5e1',
                                             fontWeight: 600
                                           }}>
                                             {am === 'acessibilidade_pcd' ? '♿ Adaptado PCD' :
@@ -6430,7 +6361,7 @@ export function App() {
                                     )}
 
                                     <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                      <div>👤 <strong>Passageiro:</strong> <span style={{ color: '#fff' }}>{r.clientName || 'Passageiro'}</span></div>
+                                      <div>👤 <strong>Passageiro:</strong> <span className="ride-title-text">{r.clientName || 'Passageiro'}</span></div>
                                       <div>📍 <strong>Embarque:</strong> {r.origin}</div>
                                       <div>🏁 <strong>Destino:</strong> {r.destination}</div>
                                       <div style={{ color: '#10b981', fontWeight: 700, marginTop: '2px' }}>
@@ -7100,35 +7031,15 @@ export function App() {
               </div>
 
               {/* Card de Link Direto Sem Quebra de Linha */}
-              <div style={{
-                background: 'rgba(15, 23, 42, 0.85)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: '14px',
-                padding: '14px 16px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '10px',
-                margin: '0 auto 20px',
-                maxWidth: '460px'
-              }}>
+              <div className="share-link-card">
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
                   <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600 }}>Link de Acesso Rápido</span>
                   <span style={{ fontSize: '0.72rem', color: '#10b981', fontWeight: 700 }}>● Online</span>
                 </div>
 
-                <div style={{
-                  background: 'rgba(0, 0, 0, 0.35)',
-                  border: '1px solid rgba(255, 255, 255, 0.08)',
-                  borderRadius: '10px',
-                  padding: '8px 12px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '8px'
-                }}>
-                  <span style={{
+                <div className="link-box">
+                  <span className="link-url-text" style={{
                     fontSize: '0.85rem',
-                    color: '#818cf8',
                     fontWeight: 700,
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
@@ -7144,7 +7055,7 @@ export function App() {
                       navigator.clipboard.writeText(appAccessUrl);
                       showToast('Link copiado para a área de transferência!', 'success');
                     }}
-                    className="btn-outline"
+                    className="btn-outline btn-copy-link"
                     style={{
                       padding: '5px 10px',
                       fontSize: '0.76rem',
@@ -7153,10 +7064,7 @@ export function App() {
                       alignItems: 'center',
                       gap: '4px',
                       whiteSpace: 'nowrap',
-                      flexShrink: 0,
-                      background: 'rgba(99, 102, 241, 0.15)',
-                      borderColor: 'rgba(99, 102, 241, 0.4)',
-                      color: '#a5b4fc'
+                      flexShrink: 0
                     }}
                   >
                     <Copy size={12} />
@@ -7222,15 +7130,7 @@ export function App() {
               </div>
 
               {/* Guia Rápido de Instalação no Smartphone */}
-              <div style={{
-                textAlign: 'left',
-                background: 'rgba(15, 23, 42, 0.5)',
-                padding: '16px 18px',
-                borderRadius: '14px',
-                border: '1px solid var(--border-subtle)',
-                maxWidth: '460px',
-                margin: '0 auto'
-              }}>
+              <div className="share-instructions-card">
                 <h4 style={{ fontSize: '0.88rem', fontWeight: 700, marginBottom: '10px', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Smartphone size={15} color="#38bdf8" />
                   <span>Como instalar como atalho no smartphone:</span>
