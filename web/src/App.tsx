@@ -411,6 +411,31 @@ export function App() {
     });
   };
 
+  // Preferência do motorista para ocultar ganhos líquidos com toque (Eye)
+  const [hideDriverEarnings, setHideDriverEarnings] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('drivehora_hide_driver_earnings');
+      if (saved !== null) return saved === 'true';
+      return localStorage.getItem('drivehora_hide_balance') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleHideDriverEarnings = (e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    setHideDriverEarnings(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('drivehora_hide_driver_earnings', String(next));
+      } catch {}
+      return next;
+    });
+  };
+
   const [activeRatingRide, setActiveRatingRide] = useState<DbRide | null>(null);
   const [driverCancelModalRide, setDriverCancelModalRide] = useState<DbRide | null>(null);
   const [showDebtSupportModal, setShowDebtSupportModal] = useState<boolean>(false);
@@ -6173,13 +6198,23 @@ export function App() {
 
                     return (
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '24px' }}>
-                        <div className="driver-metric-card">
-                          <div className="metric-label" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem' }}>
-                            <DollarSign size={16} color="#10b981" />
-                            <span>Ganhos Líquidos</span>
+                        <div 
+                          className="driver-metric-card"
+                          onClick={toggleHideDriverEarnings}
+                          style={{ cursor: 'pointer', userSelect: 'none' }}
+                          title={hideDriverEarnings ? "Clique para exibir os ganhos de hoje" : "Clique para ocultar os ganhos de hoje"}
+                        >
+                          <div className="metric-label" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', fontSize: '0.8rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <DollarSign size={16} color="#10b981" />
+                              <span>Ganhos Líquidos</span>
+                            </div>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', color: 'var(--text-muted)', opacity: 0.85 }}>
+                              {hideDriverEarnings ? <EyeOff size={13} /> : <Eye size={13} />}
+                            </span>
                           </div>
                           <div className="metric-value earnings" style={{ fontSize: '1.4rem', fontWeight: 800, marginTop: '6px' }}>
-                            {formatCurrency(myDriverTodayEarnings)}
+                            {hideDriverEarnings ? '••••••' : formatCurrency(myDriverTodayEarnings)}
                           </div>
                           <div className="metric-desc" style={{ fontSize: '0.7rem' }}>
                             Hoje
@@ -6762,15 +6797,26 @@ export function App() {
                               </p>
                             </div>
 
-                            <div style={{
-                              background: theme === 'light' ? '#ecfdf5' : 'rgba(16, 185, 129, 0.12)',
-                              border: theme === 'light' ? '1px solid #a7f3d0' : '1px solid rgba(16, 185, 129, 0.3)',
-                              padding: '10px 18px',
-                              borderRadius: '12px',
-                              textAlign: 'right'
-                            }}>
-                              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: theme === 'light' ? '#065f46' : '#a7f3d0' }}>Ganho Líquido no Período</div>
-                              <div style={{ fontSize: '1.25rem', fontWeight: 900, color: theme === 'light' ? '#047857' : '#10b981' }}>{formatCurrency(totalNetEarned)}</div>
+                            <div 
+                              onClick={toggleHideDriverEarnings}
+                              style={{
+                                background: theme === 'light' ? '#ecfdf5' : 'rgba(16, 185, 129, 0.12)',
+                                border: theme === 'light' ? '1px solid #a7f3d0' : '1px solid rgba(16, 185, 129, 0.3)',
+                                padding: '10px 18px',
+                                borderRadius: '12px',
+                                textAlign: 'right',
+                                cursor: 'pointer',
+                                userSelect: 'none'
+                              }}
+                              title={hideDriverEarnings ? "Clique para exibir o valor" : "Clique para ocultar o valor"}
+                            >
+                              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: theme === 'light' ? '#065f46' : '#a7f3d0', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px' }}>
+                                <span>Ganho Líquido no Período</span>
+                                {hideDriverEarnings ? <EyeOff size={12} /> : <Eye size={12} />}
+                              </div>
+                              <div style={{ fontSize: '1.25rem', fontWeight: 900, color: theme === 'light' ? '#047857' : '#10b981' }}>
+                                {hideDriverEarnings ? '••••••' : formatCurrency(totalNetEarned)}
+                              </div>
                             </div>
                           </div>
 
