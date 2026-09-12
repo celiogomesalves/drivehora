@@ -605,8 +605,8 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
           padding: '20px'
         }}>
           <div style={{
-            background: '#0d1527',
-            border: '1px solid rgba(99, 102, 241, 0.35)',
+            background: 'var(--bg-secondary)',
+            border: '1px solid var(--border-subtle)',
             borderRadius: '20px',
             padding: '24px 20px',
             maxWidth: '480px',
@@ -614,11 +614,11 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
             display: 'flex',
             flexDirection: 'column',
             gap: '14px',
-            boxShadow: '0 20px 40px rgba(0,0,0,0.6)'
+            boxShadow: '0 20px 40px rgba(0,0,0,0.3)'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
-                <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#fff', margin: 0 }}>
+                <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
                   📝 Solicitar Alteração de Dados
                 </h3>
                 <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
@@ -665,11 +665,11 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
                   style={{
                     width: '100%',
                     minHeight: '120px',
-                    background: 'rgba(255,255,255,0.04)',
+                    background: 'var(--bg-primary)',
                     border: '1px solid var(--border-subtle)',
                     borderRadius: '10px',
                     padding: '12px',
-                    color: '#fff',
+                    color: 'var(--text-primary)',
                     fontSize: '0.85rem',
                     resize: 'vertical',
                     fontFamily: 'inherit',
@@ -681,7 +681,15 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
                     type="button"
                     onClick={() => setShowChangeRequest(false)}
                     className="btn-outline"
-                    style={{ flex: 1, padding: '9px', fontSize: '0.82rem', justifyContent: 'center', borderRadius: '8px' }}
+                    style={{
+                      flex: 1,
+                      padding: '9px',
+                      fontSize: '0.82rem',
+                      justifyContent: 'center',
+                      borderRadius: '8px',
+                      color: 'var(--text-primary)',
+                      borderColor: 'var(--border-subtle)'
+                    }}
                   >
                     Cancelar
                   </button>

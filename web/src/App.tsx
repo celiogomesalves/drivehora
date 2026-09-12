@@ -7,7 +7,7 @@ import {
   BellRing, Volume2, VolumeX, Ban, AlertOctagon, Heart, ShieldAlert, RotateCcw,
   Filter, Archive, ArchiveRestore, Trash2, CreditCard,
   ChevronDown, ChevronUp, AlertCircle, Headphones,
-  Calendar, Zap, Share2, Copy, Sun, Moon
+  Calendar, Zap, Share2, Copy, Sun, Moon, Eye, EyeOff
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import confetti from 'canvas-confetti';
@@ -388,6 +388,29 @@ export function App() {
 
   // Carteira, Avaliações e Cancelamento com Justificativa
   const [clientWallet, setClientWallet] = useState<UserWallet | null>(null);
+  // Preferência do passageiro para ocultar saldo / valores confidenciais na tela
+  const [hideBalance, setHideBalance] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('drivehora_hide_balance') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleHideBalance = (e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    setHideBalance(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('drivehora_hide_balance', String(next));
+      } catch {}
+      return next;
+    });
+  };
+
   const [activeRatingRide, setActiveRatingRide] = useState<DbRide | null>(null);
   const [driverCancelModalRide, setDriverCancelModalRide] = useState<DbRide | null>(null);
   const [showDebtSupportModal, setShowDebtSupportModal] = useState<boolean>(false);
@@ -2420,22 +2443,33 @@ export function App() {
               <span>Compartilhar</span>
             </button>
 
-            {/* Saldo Discreto do Passageiro */}
+            {/* Saldo Discreto do Passageiro com Toggle de Ocultar/Exibir (Eye) */}
             {clientWallet && (currentUser.role === 'client' || (isUserAdmin && activeTab === 'client')) && (
               <div
                 className="header-saldo-badge"
+                onClick={toggleHideBalance}
                 style={{
-                  background: clientWallet.balance >= 0 ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
-                  border: `1px solid ${clientWallet.balance >= 0 ? 'rgba(16, 185, 129, 0.35)' : 'rgba(239, 68, 68, 0.35)'}`
+                  background: clientWallet.balance >= 0 ? (theme === 'light' ? 'rgba(16, 185, 129, 0.08)' : 'rgba(16, 185, 129, 0.12)') : 'rgba(239, 68, 68, 0.12)',
+                  border: `1px solid ${clientWallet.balance >= 0 ? (theme === 'light' ? 'rgba(16, 185, 129, 0.25)' : 'rgba(16, 185, 129, 0.35)') : 'rgba(239, 68, 68, 0.35)'}`,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  userSelect: 'none'
                 }}
-                title="Saldo em créditos disponível na carteira"
+                title={hideBalance ? "Clique para exibir o saldo" : "Clique para ocultar o saldo"}
               >
-                <span className="saldo-label" style={{ fontSize: '0.72rem', color: clientWallet.balance >= 0 ? '#a7f3d0' : '#fca5a5', fontWeight: 600 }}>
+                <span className="saldo-label" style={{ fontSize: '0.72rem', color: clientWallet.balance >= 0 ? (theme === 'light' ? '#047857' : '#a7f3d0') : '#ef4444', fontWeight: 600 }}>
                   Saldo
                 </span>
-                <strong className="saldo-value" style={{ fontSize: '0.82rem', color: clientWallet.balance >= 0 ? '#10b981' : '#ef4444', fontWeight: 800 }}>
-                  {formatCurrency(clientWallet.balance)}
+                <strong className="saldo-value" style={{ fontSize: '0.82rem', color: clientWallet.balance >= 0 ? (theme === 'light' ? '#059669' : '#10b981') : '#ef4444', fontWeight: 800 }}>
+                  {hideBalance ? '••••••' : formatCurrency(clientWallet.balance)}
                 </strong>
+                {hideBalance ? (
+                  <EyeOff size={13} style={{ color: clientWallet.balance >= 0 ? (theme === 'light' ? '#059669' : '#10b981') : '#ef4444', opacity: 0.8 }} />
+                ) : (
+                  <Eye size={13} style={{ color: clientWallet.balance >= 0 ? (theme === 'light' ? '#059669' : '#10b981') : '#ef4444', opacity: 0.8 }} />
+                )}
               </div>
             )}
           </nav>
@@ -4887,7 +4921,7 @@ export function App() {
                           <Clock size={18} color="#818cf8" />
                         </div>
                         <div>
-                          <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#fff', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
                             Histórico de Corridas
                           </h3>
                           <p style={{ fontSize: '0.76rem', color: 'var(--text-secondary)', margin: '2px 0 0 0' }}>
@@ -4897,16 +4931,37 @@ export function App() {
                       </div>
 
                       {historyViewTab === 'active' && (
-                        <div style={{
-                          background: 'rgba(99, 102, 241, 0.12)',
-                          border: '1px solid rgba(99, 102, 241, 0.3)',
-                          padding: '6px 12px',
-                          borderRadius: '10px',
-                          textAlign: 'right',
-                          flexShrink: 0
-                        }}>
-                          <div style={{ fontSize: '0.65rem', color: '#a5b4fc' }}>Total no Período</div>
-                          <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#818cf8' }}>{formatCurrency(totalSpent)}</div>
+                        <div
+                          onClick={toggleHideBalance}
+                          title={hideBalance ? "Clique para exibir valor" : "Clique para ocultar valor"}
+                          style={{
+                            background: theme === 'light' ? 'rgba(99, 102, 241, 0.08)' : 'rgba(99, 102, 241, 0.12)',
+                            border: theme === 'light' ? '1px solid rgba(99, 102, 241, 0.25)' : '1px solid rgba(99, 102, 241, 0.3)',
+                            padding: '6px 12px',
+                            borderRadius: '10px',
+                            textAlign: 'right',
+                            flexShrink: 0,
+                            cursor: 'pointer',
+                            userSelect: 'none',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'flex-end'
+                          }}
+                        >
+                          <div style={{
+                            fontSize: '0.65rem',
+                            color: theme === 'light' ? '#4f46e5' : '#a5b4fc',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            fontWeight: 600
+                          }}>
+                            <span>Total no Período</span>
+                            {hideBalance ? <EyeOff size={11} /> : <Eye size={11} />}
+                          </div>
+                          <div style={{ fontSize: '1.05rem', fontWeight: 800, color: theme === 'light' ? '#4338ca' : '#818cf8' }}>
+                            {hideBalance ? '••••••' : formatCurrency(totalSpent)}
+                          </div>
                         </div>
                       )}
                     </div>

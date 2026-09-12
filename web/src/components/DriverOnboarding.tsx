@@ -1807,19 +1807,20 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
           padding: '20px'
         }}>
           <div style={{
-            background: '#0d1527',
-            border: '1px solid rgba(99, 102, 241, 0.35)',
+            background: 'var(--bg-secondary)',
+            border: '1px solid var(--border-subtle)',
             borderRadius: '24px',
             padding: '28px 24px',
             maxWidth: '500px',
             width: '100%',
             display: 'flex',
             flexDirection: 'column',
-            gap: '16px'
+            gap: '16px',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.3)'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#fff', margin: 0 }}>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
                   📝 Solicitar Alteração de Dados
                 </h3>
                 <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
@@ -1866,11 +1867,11 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
                   style={{
                     width: '100%',
                     minHeight: '130px',
-                    background: 'rgba(255,255,255,0.04)',
+                    background: 'var(--bg-primary)',
                     border: '1px solid var(--border-subtle)',
                     borderRadius: '12px',
                     padding: '12px',
-                    color: '#fff',
+                    color: 'var(--text-primary)',
                     fontSize: '0.875rem',
                     resize: 'vertical',
                     fontFamily: 'inherit',
@@ -1882,7 +1883,14 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
                     type="button"
                     onClick={() => setShowChangeRequest(false)}
                     className="btn-outline"
-                    style={{ flex: 1, padding: '10px', fontSize: '0.85rem', justifyContent: 'center' }}
+                    style={{
+                      flex: 1,
+                      padding: '10px',
+                      fontSize: '0.85rem',
+                      justifyContent: 'center',
+                      color: 'var(--text-primary)',
+                      borderColor: 'var(--border-subtle)'
+                    }}
                   >
                     Cancelar
                   </button>
