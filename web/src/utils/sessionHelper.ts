@@ -43,3 +43,21 @@ export function setLocalSessionToken(token: string): void {
 export function clearLocalSessionToken(): void {
   localStorage.removeItem('drivehora_session_token');
 }
+
+/**
+ * Sanitiza o nome do dispositivo cadastrado, prevenindo exibição de objetos JSON legados de carteira/usuário
+ */
+export function formatDeviceName(raw?: string | null): string {
+  if (!raw) return 'Outro Dispositivo';
+  const trimmed = raw.trim();
+  if (
+    trimmed.startsWith('{') || 
+    trimmed.startsWith('[') || 
+    trimmed.includes('"wallet"') || 
+    trimmed.includes('"userId"') || 
+    trimmed.includes('usr_')
+  ) {
+    return 'Outro Dispositivo';
+  }
+  return trimmed;
+}

@@ -3,14 +3,17 @@ import type { UserRole, UserProfile } from '../types/auth';
 import { isSuperAdminEmail } from '../types/auth';
 import { 
   Users, Car, LogIn, Mail, Lock, User, Phone, ShieldCheck, 
-  Sparkles, Clock, DollarSign, LogOut, X, ShieldAlert 
+  Clock, DollarSign, LogOut, X, ShieldAlert 
 } from 'lucide-react';
 import { formatPhone } from '../utils/formatters';
 import { 
   dbSaveProfile, dbFindProfileByEmail, generateUserIdFromEmail, 
   dbForceDisconnectOtherSessions, dbUpdateUserSession 
 } from '../services/dbService';
-import { getDeviceName, getLocalSessionToken, setLocalSessionToken, generateSessionToken } from '../utils/sessionHelper';
+import { 
+  getDeviceName, getLocalSessionToken, setLocalSessionToken, 
+  generateSessionToken, formatDeviceName 
+} from '../utils/sessionHelper';
 
 interface LoginPageProps {
   onLoginSuccess: (user: UserProfile) => void;
@@ -85,7 +88,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       setIsLoading(false);
       setConcurrentSessionData({
         user,
-        existingDevice: existingProfile.activeDeviceName || 'Outro Dispositivo'
+        existingDevice: formatDeviceName(existingProfile.activeDeviceName)
       });
       return;
     }
@@ -150,17 +153,17 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
           </div>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '1.35rem', fontWeight: 800, color: '#fff' }}>DriveHora</span>
+              <span style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--text-primary)' }}>DriveHora</span>
               <span style={{
                 fontSize: '0.65rem',
                 textTransform: 'uppercase',
                 fontWeight: 700,
                 letterSpacing: '0.05em',
-                background: 'rgba(99, 102, 241, 0.2)',
-                color: '#818cf8',
+                background: 'rgba(99, 102, 241, 0.12)',
+                color: 'var(--primary-color)',
                 padding: '2px 8px',
                 borderRadius: '12px',
-                border: '1px solid rgba(99, 102, 241, 0.3)'
+                border: '1px solid rgba(99, 102, 241, 0.25)'
               }}>Oficial</span>
             </div>
             <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Motorista particular sob demanda por hora</p>
@@ -183,20 +186,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         {/* Lado Esquerdo: Apresentação e Benefícios */}
         <div>
           <div style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '6px 14px',
-            background: 'rgba(99, 102, 241, 0.15)',
-            borderRadius: '20px',
-            border: '1px solid rgba(99, 102, 241, 0.3)',
-            color: '#818cf8',
-            fontSize: '0.8rem',
+            fontSize: '0.85rem',
             fontWeight: 700,
-            marginBottom: '18px'
+            color: 'var(--primary-color)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+            marginBottom: '16px'
           }}>
-            <Sparkles size={16} />
-            <span>A Revolução do Transporte por Hora</span>
+            A Revolução do Transporte por Hora
           </div>
 
           <h1 style={{ fontSize: '2.5rem', fontWeight: 800, lineHeight: 1.15, marginBottom: '16px', letterSpacing: '-0.03em' }}>

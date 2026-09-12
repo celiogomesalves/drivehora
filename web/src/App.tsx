@@ -637,6 +637,24 @@ export function App() {
     }
   };
 
+  // Retorna a data local atual no formato YYYY-MM-DD
+  const getTodayLocalDateStr = (): string => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  // Retorna o horário mínimo permitido para hoje com margem de segurança (HH:MM)
+  const getMinScheduledTimeStr = (): string => {
+    const d = new Date();
+    d.setMinutes(d.getMinutes() + 5);
+    const hours = String(d.getHours()).padStart(2, '0');
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
+  };
+
   // Garante que comodidades sejam sempre tratadas como um array de strings seguro
   const safeAmenitiesArray = (val: any): string[] => {
     if (!val) return [];
@@ -1212,6 +1230,26 @@ export function App() {
     if (!origin.trim() || !destination.trim()) {
       showAlert('Por favor, informe o ponto de partida e o destino da corrida.', 'warning', 'Dados Incompletos');
       return;
+    }
+
+    // Validação estrita para corridas agendadas: não permitir dia e horário anteriores ao momento atual
+    if (isScheduledRide) {
+      if (!scheduledDate || !scheduledTime) {
+        showAlert('Por favor, informe a data e horário para a corrida agendada.', 'warning', 'Agendamento Incompleto');
+        return;
+      }
+      const [sYear, sMonth, sDay] = scheduledDate.split('-').map(Number);
+      const [sHour, sMin] = scheduledTime.split(':').map(Number);
+      const scheduledMoment = new Date(sYear, sMonth - 1, sDay, sHour, sMin, 0);
+      const nowMoment = new Date();
+      if (scheduledMoment.getTime() <= nowMoment.getTime()) {
+        showAlert(
+          'A data e o horário agendados não podem ser anteriores ao momento atual. Por favor, selecione uma data futura ou um horário posterior ao atual.',
+          'warning',
+          'Horário Agendado Inválido'
+        );
+        return;
+      }
     }
 
     // 1. Passageiro só pode fazer uma solicitação imediata por vez se houver uma aberta
@@ -3641,8 +3679,17 @@ export function App() {
                               type="date"
                               className="custom-input"
                               value={scheduledDate}
-                              min={new Date().toISOString().split('T')[0]}
-                              onChange={(e) => setScheduledDate(e.target.value)}
+                              min={getTodayLocalDateStr()}
+                              onChange={(e) => {
+                                const newDate = e.target.value;
+                                setScheduledDate(newDate);
+                                if (newDate === getTodayLocalDateStr()) {
+                                  const minTime = getMinScheduledTimeStr();
+                                  if (scheduledTime < minTime) {
+                                    setScheduledTime(minTime);
+                                  }
+                                }
+                              }}
                               required={isScheduledRide}
                               style={{ padding: '8px 10px', fontSize: '0.85rem' }}
                             />
@@ -3653,7 +3700,19 @@ export function App() {
                               type="time"
                               className="custom-input"
                               value={scheduledTime}
-                              onChange={(e) => setScheduledTime(e.target.value)}
+                              min={scheduledDate === getTodayLocalDateStr() ? getMinScheduledTimeStr() : undefined}
+                              onChange={(e) => {
+                                const newTime = e.target.value;
+                                if (scheduledDate === getTodayLocalDateStr()) {
+                                  const minTime = getMinScheduledTimeStr();
+                                  if (newTime < minTime) {
+                                    showToast('O horário agendado para hoje não pode ser anterior ao atual.', 'warning');
+                                    setScheduledTime(minTime);
+                                    return;
+                                  }
+                                }
+                                setScheduledTime(newTime);
+                              }}
                               required={isScheduledRide}
                               style={{ padding: '8px 10px', fontSize: '0.85rem' }}
                             />
@@ -3854,11 +3913,6 @@ export function App() {
                     <div className="input-group">
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                         <label style={{ margin: 0, fontSize: '0.85rem', fontWeight: 600 }}>✨ Comodidades do Veículo (Opcional)</label>
-                        {selectedAmenities.length > 0 && (
-                          <span style={{ fontSize: '0.72rem', color: '#60a5fa', fontWeight: 700 }}>
-                            {selectedAmenities.length} {selectedAmenities.length === 1 ? 'selecionada' : 'selecionadas'}
-                          </span>
-                        )}
                       </div>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                         {[
@@ -3889,14 +3943,16 @@ export function App() {
                       </div>
                       {selectedAmenities.includes('acessibilidade_pcd') && (
                         <div style={{
-                          marginTop: '6px',
-                          fontSize: '0.72rem',
-                          color: '#60a5fa',
+                          marginTop: '8px',
+                          fontSize: '0.78rem',
+                          fontWeight: 600,
+                          color: theme === 'light' ? '#1e3a8a' : '#93c5fd',
                           display: 'flex',
                           alignItems: 'center',
-                          gap: '6px',
-                          background: 'rgba(59, 130, 246, 0.1)',
-                          padding: '6px 10px',
+                          gap: '8px',
+                          background: theme === 'light' ? '#eff6ff' : 'rgba(59, 130, 246, 0.1)',
+                          border: theme === 'light' ? '1px solid #bfdbfe' : '1px solid rgba(59, 130, 246, 0.25)',
+                          padding: '8px 12px',
                           borderRadius: '8px'
                         }}>
                           ♿ <span>Buscando apenas motoristas com veículo adaptado para PCD ou suporte a cadeirantes.</span>
@@ -6048,12 +6104,14 @@ export function App() {
                       return d.getDate() === nowDate.getDate() && d.getMonth() === nowDate.getMonth() && d.getFullYear() === nowDate.getFullYear();
                     };
 
+                    const isRideCompleted = (r: any) => r.status === 'finished' || r.status === 'completed';
+
                     const myDriverCompletedRides = rides.filter(r => 
-                      r.status === 'finished' && 
+                      isRideCompleted(r) && 
                       (r.driverId === currentUser?.id || (!r.driverId && isUserAdmin))
                     );
                     const myDriverCompletedToday = myDriverCompletedRides.filter(r => 
-                      isDateToday(r.finishedAt || r.createdAt || (r as any).created_at)
+                      isDateToday(r.finishedAt || (r as any).finished_at || r.startedAt || r.createdAt || (r as any).created_at)
                     );
                     const myDriverAccumulatedEarnings = myDriverCompletedRides.reduce((acc, cur) => acc + (cur.driverNet || 0), 0);
                     const myDriverTodayEarnings = myDriverCompletedToday.reduce((acc, cur) => acc + (cur.driverNet || 0), 0);
@@ -6079,10 +6137,10 @@ export function App() {
                             <span>Corridas Feitas</span>
                           </div>
                           <div className="metric-value" style={{ fontSize: '1.4rem', fontWeight: 800, marginTop: '6px' }}>
-                            {myDriverCompletedToday.length}
+                            {myDriverCompletedRides.length}
                           </div>
                           <div className="metric-desc" style={{ fontSize: '0.7rem' }}>
-                            Completadas hoje ({myDriverCompletedRides.length} no total)
+                            {myDriverCompletedToday.length === 1 ? '1 completada hoje' : `${myDriverCompletedToday.length} completadas hoje`}
                           </div>
                         </div>
                       </div>

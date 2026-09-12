@@ -27,22 +27,34 @@ export async function getUserWallet(userId: string): Promise<UserWallet> {
     return { userId: '', balance: 0, transactions: [], hasPendingDebt: false };
   }
 
-  // 1. Tentar ler do Supabase (profiles ou system_settings)
+  // 1. Tentar ler do Supabase na tabela system_settings (ou legado de transição)
   const sb = getSupabase();
   let remoteWallet: UserWallet | null = null;
 
   if (sb) {
     try {
-      const res = await sb
-        .from('profiles')
-        .select('id, active_device_name')
-        .eq('id', userId)
+      // 1.1 Nova leitura da tabela global de configurações/dados
+      const resSetting = await sb
+        .from('system_settings')
+        .select('value')
+        .eq('key', `wallet_${userId}`)
         .maybeSingle();
 
-      if (res.data?.active_device_name && res.data.active_device_name.startsWith('{"wallet":')) {
-        const parsed = JSON.parse(res.data.active_device_name);
-        if (parsed.wallet) {
-          remoteWallet = parsed.wallet;
+      if (resSetting.data?.value?.wallet) {
+        remoteWallet = resSetting.data.value.wallet;
+      } else {
+        // 1.2 Fallback de transição apenas se ainda existir dado antigo
+        const resProf = await sb
+          .from('profiles')
+          .select('id, active_device_name')
+          .eq('id', userId)
+          .maybeSingle();
+
+        if (resProf.data?.active_device_name && resProf.data.active_device_name.startsWith('{"wallet":')) {
+          const parsed = JSON.parse(resProf.data.active_device_name);
+          if (parsed.wallet) {
+            remoteWallet = parsed.wallet;
+          }
         }
       }
     } catch (e) {
@@ -84,16 +96,16 @@ export async function saveUserWallet(wallet: UserWallet): Promise<void> {
   const sb = getSupabase();
   if (sb && wallet.userId) {
     try {
-      // Sincroniza estado da carteira na coluna segura active_device_name
+      // Sincroniza estado da carteira na tabela system_settings (chave isolada)
       await sb
-        .from('profiles')
-        .update({
-          active_device_name: JSON.stringify({ wallet }),
+        .from('system_settings')
+        .upsert({
+          key: `wallet_${wallet.userId}`,
+          value: { wallet },
           updated_at: new Date().toISOString()
-        })
-        .eq('id', wallet.userId);
+        });
     } catch (err) {
-      console.warn('Aviso ao sincronizar carteira no Supabase:', err);
+      console.warn('Aviso ao sincronizar carteira em system_settings:', err);
     }
   }
 }

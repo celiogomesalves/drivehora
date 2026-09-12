@@ -1,6 +1,7 @@
 import { getSupabase } from '../supabase';
 import type { UserProfile, ClientProfile, DriverProfile, DriverPublicProfile, DriverVerificationStatus } from '../types/auth';
 import { isSuperAdminEmail } from '../types/auth';
+import { formatDeviceName } from '../utils/sessionHelper';
 
 export interface DbRide {
   id: string;
@@ -96,7 +97,7 @@ export const dbFindProfileByEmail = async (email: string): Promise<UserProfile |
           avatarUrl: res.data.avatar_url,
           isAdmin: isSuperAdminEmail(res.data.email),
           activeSessionToken: res.data.active_session_token,
-          activeDeviceName: res.data.active_device_name,
+          activeDeviceName: formatDeviceName(res.data.active_device_name),
           lastActiveAt: res.data.last_active_at,
           createdAt: res.data.created_at
         };
@@ -222,7 +223,7 @@ export const dbCheckUserSession = async (
       if (serverToken !== localSessionToken) {
         return { 
           valid: false, 
-          activeDevice: res.data.active_device_name || 'Outro Dispositivo' 
+          activeDevice: formatDeviceName(res.data.active_device_name) 
         };
       }
     }
