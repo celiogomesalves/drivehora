@@ -7164,7 +7164,7 @@ export function App() {
         textAlign: 'center',
         fontSize: '0.8rem',
         color: 'var(--text-muted)',
-        background: 'rgba(9, 13, 22, 0.9)'
+        background: 'var(--card-bg)'
       }}>
         <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
           <span>© 2026 DriveHora — Todos os direitos reservados</span>

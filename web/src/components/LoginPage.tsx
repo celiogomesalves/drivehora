@@ -516,7 +516,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
 
       {/* Footer */}
       <footer style={{
-        maxWidth: '1200px',
+        maxWidth: '1100px',
         margin: '0 auto',
         width: '100%',
         textAlign: 'center',
@@ -525,7 +525,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         paddingTop: '20px',
         borderTop: '1px solid var(--border-subtle)'
       }}>
-        © 2026 DriveHora — Plataforma de Motoristas Particulares por Hora. Banco de Dados com Suporte a Realtime.
+        © 2026 DriveHora — Plataforma de Motoristas Particulares por Hora. Todos os direitos reservados.
       </footer>
     </div>
   );
