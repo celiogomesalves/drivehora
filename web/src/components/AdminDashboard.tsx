@@ -1683,7 +1683,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div className="glass-panel" style={{ padding: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px', marginBottom: '20px' }}>
               <div>
-                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Calendar size={22} color="#6366f1" />
                   Histórico Geral de Corridas ({filteredRides.length})
                 </h3>
@@ -1696,24 +1696,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div style={{
                 display: 'flex',
                 gap: '12px',
-                background: 'rgba(15, 23, 42, 0.8)',
-                border: '1px solid var(--border-subtle)',
+                background: theme === 'light' ? '#f8fafc' : 'rgba(15, 23, 42, 0.8)',
+                border: theme === 'light' ? '1px solid #e2e8f0' : '1px solid var(--border-subtle)',
                 padding: '10px 16px',
-                borderRadius: '12px'
+                borderRadius: '12px',
+                boxShadow: theme === 'light' ? '0 1px 3px rgba(0,0,0,0.05)' : 'none'
               }}>
                 <div>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Faturamento</div>
-                  <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#fff' }}>{formatCurrency(totalFilteredRevenue)}</div>
+                  <div style={{ fontSize: '0.7rem', color: theme === 'light' ? '#64748b' : 'var(--text-muted)' }}>Faturamento</div>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--text-primary)' }}>{formatCurrency(totalFilteredRevenue)}</div>
                 </div>
-                <div style={{ width: '1px', background: 'var(--border-subtle)' }} />
+                <div style={{ width: '1px', background: theme === 'light' ? '#e2e8f0' : 'var(--border-subtle)' }} />
                 <div>
-                  <div style={{ fontSize: '0.7rem', color: '#818cf8' }}>Plataforma (15%)</div>
-                  <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#818cf8' }}>{formatCurrency(totalFilteredCommission)}</div>
+                  <div style={{ fontSize: '0.7rem', color: theme === 'light' ? '#4f46e5' : '#818cf8' }}>Plataforma (15%)</div>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 800, color: theme === 'light' ? '#4338ca' : '#818cf8' }}>{formatCurrency(totalFilteredCommission)}</div>
                 </div>
-                <div style={{ width: '1px', background: 'var(--border-subtle)' }} />
+                <div style={{ width: '1px', background: theme === 'light' ? '#e2e8f0' : 'var(--border-subtle)' }} />
                 <div>
-                  <div style={{ fontSize: '0.7rem', color: '#10b981' }}>Repasse Motoristas</div>
-                  <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#10b981' }}>{formatCurrency(totalFilteredDriverNet)}</div>
+                  <div style={{ fontSize: '0.7rem', color: theme === 'light' ? '#059669' : '#10b981' }}>Repasse Motoristas</div>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 800, color: theme === 'light' ? '#047857' : '#10b981' }}>{formatCurrency(totalFilteredDriverNet)}</div>
                 </div>
               </div>
             </div>
@@ -1793,9 +1794,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     style={{
                       padding: '5px 10px',
                       fontSize: '0.8rem',
-                      background: 'rgba(15, 23, 42, 0.9)',
-                      color: '#fff',
-                      border: '1px solid #6366f1',
+                      background: theme === 'light' ? '#ffffff' : 'rgba(15, 23, 42, 0.9)',
+                      color: 'var(--text-primary)',
+                      border: theme === 'light' ? '1px solid #cbd5e1' : '1px solid #6366f1',
                       borderRadius: '8px'
                     }}
                   />
