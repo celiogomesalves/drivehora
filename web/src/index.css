@@ -2107,3 +2107,193 @@ html.theme-light .glass-panel span:not([style*="color: rgb"], [style*="color:#"]
   color: inherit;
 }
 
+
+
+/* ======================================================== */
+/* OCORRÊNCIAS - BADGES DE MÉTRICAS                         */
+/* ======================================================== */
+.admin-metric-badge {
+  padding: 14px 18px;
+  border-radius: 14px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.04);
+}
+.admin-metric-badge .metric-badge-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  display: block;
+}
+.admin-metric-badge .metric-badge-val {
+  font-size: 1.5rem;
+  font-weight: 800;
+  margin-top: 4px;
+}
+
+.admin-metric-badge.total .metric-badge-label { color: var(--text-muted); }
+.admin-metric-badge.total .metric-badge-val { color: var(--text-primary); }
+
+.admin-metric-badge.pending { background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.3); }
+.admin-metric-badge.pending .metric-badge-label { color: #fca5a5; }
+.admin-metric-badge.pending .metric-badge-val { color: #ef4444; }
+
+.admin-metric-badge.in-review { background: rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.3); }
+.admin-metric-badge.in-review .metric-badge-label { color: #fde68a; }
+.admin-metric-badge.in-review .metric-badge-val { color: #f59e0b; }
+
+.admin-metric-badge.resolved { background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.3); }
+.admin-metric-badge.resolved .metric-badge-label { color: #a7f3d0; }
+.admin-metric-badge.resolved .metric-badge-val { color: #10b981; }
+
+html.theme-light .admin-metric-badge.total {
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+}
+html.theme-light .admin-metric-badge.total .metric-badge-label { color: #64748b !important; }
+html.theme-light .admin-metric-badge.total .metric-badge-val { color: #0f172a !important; }
+
+html.theme-light .admin-metric-badge.pending {
+  background: #fef2f2 !important;
+  border: 1px solid #fecaca !important;
+}
+html.theme-light .admin-metric-badge.pending .metric-badge-label { color: #b91c1c !important; }
+html.theme-light .admin-metric-badge.pending .metric-badge-val { color: #dc2626 !important; }
+
+html.theme-light .admin-metric-badge.in-review {
+  background: #fffbeb !important;
+  border: 1px solid #fde68a !important;
+}
+html.theme-light .admin-metric-badge.in-review .metric-badge-label { color: #b45309 !important; }
+html.theme-light .admin-metric-badge.in-review .metric-badge-val { color: #d97706 !important; }
+
+html.theme-light .admin-metric-badge.resolved {
+  background: #f0fdf4 !important;
+  border: 1px solid #bbf7d0 !important;
+}
+html.theme-light .admin-metric-badge.resolved .metric-badge-label { color: #15803d !important; }
+html.theme-light .admin-metric-badge.resolved .metric-badge-val { color: #16a34a !important; }
+
+/* ======================================================== */
+/* BANNERS INFORMATIVOS (REQUISITO LEGAL, EDIÇÃO LIVRE)     */
+/* ======================================================== */
+.info-banner-blue {
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 0.8rem;
+  color: #c7d2fe;
+}
+html.theme-light .info-banner-blue {
+  background: #eff6ff !important;
+  border: 1px solid #bfdbfe !important;
+  color: #1e3a8a !important;
+}
+html.theme-light .info-banner-blue strong {
+  color: #1d4ed8 !important;
+}
+
+.info-banner-green {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-size: 0.8rem;
+  color: #a7f3d0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+html.theme-light .info-banner-green {
+  background: #ecfdf5 !important;
+  border: 1px solid #a7f3d0 !important;
+  color: #065f46 !important;
+}
+html.theme-light .info-banner-green strong {
+  color: #047857 !important;
+}
+
+/* ======================================================== */
+/* AUDITORIA DE DOCUMENTOS DO MOTORISTA NO ADMIN            */
+/* ======================================================== */
+.admin-audit-card {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+.admin-audit-card .audit-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+html.theme-light .admin-audit-card {
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+}
+html.theme-light .admin-audit-card .audit-title {
+  color: #1e293b !important;
+}
+html.theme-light .admin-audit-card button {
+  background: #eff6ff !important;
+  border: 1px solid #bfdbfe !important;
+  color: #1d4ed8 !important;
+}
+html.theme-light .admin-audit-card button:hover {
+  background: #dbeafe !important;
+  color: #1e40af !important;
+}
+
+/* ======================================================== */
+/* GARANTIA GERAL DE CONTRASTE NO TEMA CLARO                */
+/* ======================================================== */
+html.theme-light strong[style*="color: '#fff'"],
+html.theme-light strong[style*="color: #fff"],
+html.theme-light span[style*="color: '#fff'"],
+html.theme-light span[style*="color: #fff"],
+html.theme-light div[style*="color: '#fff'"],
+html.theme-light div[style*="color: #fff"],
+html.theme-light h1[style*="color: '#fff'"],
+html.theme-light h2[style*="color: '#fff'"],
+html.theme-light h3[style*="color: '#fff'"],
+html.theme-light h4[style*="color: '#fff'"] {
+  color: #0f172a !important;
+}
+
+html.theme-light div[style*="background: 'rgba(0, 0, 0, 0.3)'"],
+html.theme-light div[style*="background: rgba(0, 0, 0, 0.3)"] {
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+}
+
+html.theme-light div[style*="background: 'rgba(15, 23, 42"],
+html.theme-light div[style*="background: rgba(15, 23, 42"] {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+}
+
+html.theme-light div[style*="background: 'rgba(255, 255, 255, 0.02)'"],
+html.theme-light div[style*="background: 'rgba(255, 255, 255, 0.03)'"],
+html.theme-light div[style*="background: 'rgba(255, 255, 255, 0.04)'"],
+html.theme-light div[style*="background: rgba(255, 255, 255, 0.02)"],
+html.theme-light div[style*="background: rgba(255, 255, 255, 0.03)"],
+html.theme-light div[style*="background: rgba(255, 255, 255, 0.04)"] {
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+}
+
+html.theme-light div[style*="background: '#0f172a'"],
+html.theme-light div[style*="background: #0f172a"],
+html.theme-light div[style*="background: 'var(--bg-card, #0f172a)'"] {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05) !important;
+}
+

@@ -1139,16 +1139,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
 
                     {/* Documentos Anexados & Miniaturas */}
-                    <div style={{
-                      background: 'rgba(0, 0, 0, 0.3)',
-                      borderRadius: '10px',
-                      padding: '12px 14px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '8px',
-                      borderTop: '1px solid rgba(255, 255, 255, 0.05)'
-                    }}>
-                      <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    <div className="admin-audit-card">
+                      <div className="audit-title">
                         Documentos para Auditoria:
                       </div>
 
@@ -1813,24 +1805,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
             {/* Cards de Métricas / Resumo */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '20px' }}>
-              <div style={{ padding: '14px 18px', borderRadius: '14px', background: 'rgba(255, 255, 255, 0.04)', border: '1px solid var(--border-subtle)' }}>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Total de Registros</span>
-                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#fff', marginTop: '4px' }}>{reports.length}</div>
+              <div className="admin-metric-badge total">
+                <span className="metric-badge-label">Total de Registros</span>
+                <div className="metric-badge-val">{reports.length}</div>
               </div>
 
-              <div style={{ padding: '14px 18px', borderRadius: '14px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
-                <span style={{ fontSize: '0.75rem', color: '#fca5a5' }}>🚨 Pendentes de Ação</span>
-                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#ef4444', marginTop: '4px' }}>{pendingCount}</div>
+              <div className="admin-metric-badge pending">
+                <span className="metric-badge-label">🚨 Pendentes de Ação</span>
+                <div className="metric-badge-val">{pendingCount}</div>
               </div>
 
-              <div style={{ padding: '14px 18px', borderRadius: '14px', background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.3)' }}>
-                <span style={{ fontSize: '0.75rem', color: '#fde68a' }}>⏳ Em Análise / Contato</span>
-                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#f59e0b', marginTop: '4px' }}>{inReviewCount}</div>
+              <div className="admin-metric-badge in-review">
+                <span className="metric-badge-label">⏳ Em Análise / Contato</span>
+                <div className="metric-badge-val">{inReviewCount}</div>
               </div>
 
-              <div style={{ padding: '14px 18px', borderRadius: '14px', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
-                <span style={{ fontSize: '0.75rem', color: '#a7f3d0' }}>✅ Casos Resolvidos</span>
-                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#10b981', marginTop: '4px' }}>{resolvedCount}</div>
+              <div className="admin-metric-badge resolved">
+                <span className="metric-badge-label">✅ Casos Resolvidos</span>
+                <div className="metric-badge-val">{resolvedCount}</div>
               </div>
             </div>
 

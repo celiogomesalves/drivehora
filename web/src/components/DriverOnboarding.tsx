@@ -665,20 +665,24 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
         </div>
       )}
 
-      {/* HEADER DE ETAPAS — GRADE RESPONSIVA (todas as abas navegáveis diretamente) */}
-      <div className="glass-panel" style={{ padding: '12px 16px' }}>
+      {/* HEADER DE ETAPAS — BARRA HORIZONTAL RESPONSIVA SEM QUEBRA DE TEXTO */}
+      <div className="glass-panel" style={{ padding: '10px 14px' }}>
         <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(6, 1fr)',
-          gap: '4px'
+          display: 'flex',
+          gap: '8px',
+          overflowX: 'auto',
+          scrollbarWidth: 'none',
+          WebkitOverflowScrolling: 'touch',
+          padding: '2px 0',
+          alignItems: 'center'
         }}>
           {[
-            { num: 1, label: 'Identificação & CNH', short: 'Identificação' },
-            { num: 2, label: 'Veículo & Categoria', short: 'Veículo' },
-            { num: 3, label: 'Comodidades & Perfil', short: 'Comodidades' },
-            { num: 4, label: 'Formas de Recebimento', short: 'Recebimento' },
-            { num: 5, label: 'Documentos & Fotos', short: 'Documentos' },
-            { num: 6, label: 'Homologação', short: 'Homologação' }
+            { num: 1, label: 'Identificação' },
+            { num: 2, label: 'Veículo' },
+            { num: 3, label: 'Comodidades' },
+            { num: 4, label: 'Recebimento' },
+            { num: 5, label: 'Documentos' },
+            { num: 6, label: 'Homologação' }
           ].map(s => {
             const isActive = step === s.num;
             const isDone = isApproved || step > s.num;
@@ -689,16 +693,28 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
                 type="button"
                 onClick={() => setStep(s.num)}
                 className={`driver-step-tab-btn ${isActive ? 'active' : isDone ? 'done' : ''}`}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '7px 12px',
+                  borderRadius: '10px',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                  fontSize: '0.78rem',
+                  fontWeight: 700
+                }}
               >
                 <span style={{
-                  width: '22px', height: '22px', borderRadius: '50%',
-                  background: isActive ? '#6366f1' : isDone ? 'rgba(16,185,129,0.25)' : 'rgba(255,255,255,0.05)',
+                  width: '20px', height: '20px', borderRadius: '50%',
+                  background: isActive ? '#fff' : isDone ? '#10b981' : 'rgba(100, 116, 139, 0.25)',
+                  color: isActive ? '#2563eb' : isDone ? '#fff' : 'inherit',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '0.7rem', flexShrink: 0
+                  fontSize: '0.68rem', fontWeight: 800, flexShrink: 0
                 }}>
-                  {isDone && !isActive ? <Check size={12} /> : s.num}
+                  {isDone && !isActive ? <Check size={12} color="#fff" /> : s.num}
                 </span>
-                <span style={{ lineHeight: 1.2, wordBreak: 'break-word' }}>{s.short}</span>
+                <span>{s.label}</span>
               </button>
             );
           })}
@@ -830,14 +846,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
               </div>
             </div>
 
-            <div style={{
-              background: 'rgba(99, 102, 241, 0.1)',
-              border: '1px solid rgba(99, 102, 241, 0.25)',
-              borderRadius: '10px',
-              padding: '12px 14px',
-              fontSize: '0.8rem',
-              color: '#c7d2fe'
-            }}>
+            <div className="info-banner-blue">
               💡 <strong>Requisito Legal:</strong> Sua CNH deve conter a observação <em>"Exerce Atividade Remunerada" (EAR)</em> para prestação de serviços como motorista parceiro.
             </div>
 
@@ -1079,18 +1088,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
           </div>
 
           {isApproved && (
-            <div style={{
-              background: 'rgba(16, 185, 129, 0.1)',
-              border: '1px solid rgba(16, 185, 129, 0.25)',
-              borderRadius: '12px',
-              padding: '12px 16px',
-              marginBottom: '18px',
-              fontSize: '0.8rem',
-              color: '#a7f3d0',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px'
-            }}>
+            <div className="info-banner-green">
               <Sparkles size={18} color="#10b981" style={{ flexShrink: 0 }} />
               <span>
                 <strong>Edição Livre:</strong> Você pode atualizar suas comodidades e apresentação a qualquer momento para personalizar seu atendimento aos passageiros.
@@ -1215,18 +1213,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
             </p>
           </div>
 
-          <div style={{
-            background: 'rgba(16, 185, 129, 0.1)',
-            border: '1px solid rgba(16, 185, 129, 0.25)',
-            borderRadius: '12px',
-            padding: '12px 16px',
-            marginBottom: '20px',
-            fontSize: '0.8rem',
-            color: '#a7f3d0',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px'
-          }}>
+          <div className="info-banner-green">
             <Sparkles size={18} color="#10b981" style={{ flexShrink: 0 }} />
             <span>
               <strong>Acesso Livre:</strong> Suas preferências de recebimento e chave Pix podem ser atualizadas a qualquer momento, mesmo após a homologação da sua conta.
@@ -1659,32 +1646,21 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
           </div>
 
           {/* Resumo do Veículo e Comodidades */}
-          <div style={{
-            background: 'rgba(15, 23, 42, 0.8)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: '14px',
-            padding: '16px',
-            width: '100%',
-            maxWidth: '520px',
-            textAlign: 'left',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '8px'
-          }}>
+          <div className="driver-summary-card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <strong style={{ fontSize: '0.95rem' }}>{vehicleBrand} {vehicleModel} ({vehicleYear})</strong>
-              <span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '6px', background: 'rgba(255, 255, 255, 0.1)', color: '#cbd5e1' }}>
+              <span className="driver-plate-pill">
                 Placa: {vehiclePlate}
               </span>
             </div>
             <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
               Categoria: <strong>{categoriesList.find(c => c.id === vehicleCategory)?.name || vehicleCategory}</strong> • Cor: {vehicleColor}
             </div>
-            <div style={{ fontSize: '0.75rem', color: '#818cf8', display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '4px' }}>
+            <div style={{ fontSize: '0.75rem', display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '4px' }}>
               {selectedAmenities
                 .filter(a => !AVAILABLE_AMENITIES.some(m => m.id === a))
                 .map(a => (
-                  <span key={a} style={{ background: 'rgba(99, 102, 241, 0.15)', padding: '2px 6px', borderRadius: '4px' }}>
+                  <span key={a} className="amenity-badge-tag">
                     ✓ {a}
                   </span>
                 ))}
