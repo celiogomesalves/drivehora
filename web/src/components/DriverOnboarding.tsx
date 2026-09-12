@@ -696,11 +696,15 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
                 style={{
                   display: 'flex',
                   alignItems: 'center',
+                  justifyContent: 'center',
                   gap: '6px',
-                  padding: '7px 12px',
+                  padding: '8px 12px',
                   borderRadius: '10px',
                   whiteSpace: 'nowrap',
                   flexShrink: 0,
+                  flexGrow: 0,
+                  width: '142px',
+                  minWidth: '142px',
                   fontSize: '0.78rem',
                   fontWeight: 700
                 }}

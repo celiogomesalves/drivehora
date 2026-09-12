@@ -5956,9 +5956,10 @@ export function App() {
                 )}
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }}>
-                  {/* Painel do Motorista */}
-                  <div className="glass-panel" style={{ padding: '28px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
+                  {driverSubTab === 'radar' ? (
+                    /* Painel do Motorista (Exclusivo da Aba Radar) */
+                    <div className="glass-panel" style={{ padding: '28px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                         <h2 style={{ fontSize: '1.3rem', fontWeight: 700 }}>Painel do Motorista</h2>
@@ -6011,8 +6012,8 @@ export function App() {
                             fontSize: '0.75rem',
                             fontWeight: 700,
                             cursor: 'pointer',
-                            background: driverSubTab === 'radar' ? 'var(--primary-gradient)' : 'transparent',
-                            color: driverSubTab === 'radar' ? '#fff' : 'var(--text-secondary)'
+                            background: 'var(--primary-gradient)',
+                            color: '#fff'
                           }}
                         >
                           Radar & Chamados
@@ -6027,8 +6028,8 @@ export function App() {
                             fontSize: '0.75rem',
                             fontWeight: 700,
                             cursor: 'pointer',
-                            background: driverSubTab === 'history' ? 'var(--primary-gradient)' : 'transparent',
-                            color: driverSubTab === 'history' ? '#fff' : 'var(--text-secondary)'
+                            background: 'transparent',
+                            color: 'var(--text-secondary)'
                           }}
                         >
                           Meu Histórico
@@ -6149,7 +6150,7 @@ export function App() {
                     </div>
                   )}
 
-                  {/* Cards de Métricas */}
+                  {/* Cards de Métricas - Focado no dia de hoje */}
                   {(() => {
                     const isDateToday = (ts?: number | string | null) => {
                       if (!ts) return false;
@@ -6168,7 +6169,6 @@ export function App() {
                     const myDriverCompletedToday = myDriverCompletedRides.filter(r => 
                       isDateToday(r.finishedAt || (r as any).finished_at || r.startedAt || r.createdAt || (r as any).created_at)
                     );
-                    const myDriverAccumulatedEarnings = myDriverCompletedRides.reduce((acc, cur) => acc + (cur.driverNet || 0), 0);
                     const myDriverTodayEarnings = myDriverCompletedToday.reduce((acc, cur) => acc + (cur.driverNet || 0), 0);
 
                     return (
@@ -6179,10 +6179,10 @@ export function App() {
                             <span>Ganhos Líquidos</span>
                           </div>
                           <div className="metric-value earnings" style={{ fontSize: '1.4rem', fontWeight: 800, marginTop: '6px' }}>
-                            {formatCurrency(myDriverAccumulatedEarnings)}
+                            {formatCurrency(myDriverTodayEarnings)}
                           </div>
                           <div className="metric-desc" style={{ fontSize: '0.7rem' }}>
-                            Repasse de 85% ({formatCurrency(myDriverTodayEarnings)} hoje)
+                            Hoje
                           </div>
                         </div>
 
@@ -6192,7 +6192,7 @@ export function App() {
                             <span>Corridas Feitas</span>
                           </div>
                           <div className="metric-value" style={{ fontSize: '1.4rem', fontWeight: 800, marginTop: '6px' }}>
-                            {myDriverCompletedRides.length}
+                            {myDriverCompletedToday.length}
                           </div>
                           <div className="metric-desc" style={{ fontSize: '0.7rem' }}>
                             {myDriverCompletedToday.length === 1 ? '1 completada hoje' : `${myDriverCompletedToday.length} completadas hoje`}
@@ -6202,8 +6202,7 @@ export function App() {
                     );
                   })()}
 
-                  {driverSubTab === 'radar' ? (
-                    <>
+                  <>
                       {/* Status do Radar */}
                       <div style={{
                         padding: '14px',
@@ -6695,6 +6694,7 @@ export function App() {
                         )}
                       </div>
                     </>
+                    </div>
                   ) : (
                     /* SUB-ABA: HISTÓRICO DE CORRIDAS DO MOTORISTA COM FILTROS DE DATA (PADRÃO: ESTA SEMANA) */
                     (() => {
@@ -6735,24 +6735,42 @@ export function App() {
                         <div className="glass-panel" style={{ padding: '24px' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px', marginBottom: '20px' }}>
                             <div>
-                              <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <Clock size={22} color="#10b981" />
-                                Meu Histórico de Corridas Atendidas ({filteredDriverRides.length})
-                              </h3>
-                              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                                Acompanhe todas as corridas realizadas e seus repasses líquidos de 85%.
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                                  <Clock size={22} color="#10b981" />
+                                  Meu Histórico de Corridas Atendidas ({filteredDriverRides.length})
+                                </h3>
+                                <button
+                                  type="button"
+                                  onClick={() => setDriverSubTab('radar')}
+                                  className="btn-outline driver-subnav-desktop"
+                                  style={{
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    padding: '4px 10px',
+                                    borderRadius: '8px',
+                                    fontSize: '0.75rem',
+                                    fontWeight: 700,
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  <Radio size={14} color="#10b981" /> Ir para o Radar
+                                </button>
+                              </div>
+                              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px', marginBottom: 0 }}>
+                                Acompanhe todas as suas corridas realizadas e os ganhos líquidos no período.
                               </p>
                             </div>
 
                             <div style={{
-                              background: 'rgba(16, 185, 129, 0.12)',
-                              border: '1px solid rgba(16, 185, 129, 0.3)',
+                              background: theme === 'light' ? '#ecfdf5' : 'rgba(16, 185, 129, 0.12)',
+                              border: theme === 'light' ? '1px solid #a7f3d0' : '1px solid rgba(16, 185, 129, 0.3)',
                               padding: '10px 18px',
                               borderRadius: '12px',
                               textAlign: 'right'
                             }}>
-                              <div style={{ fontSize: '0.7rem', color: '#a7f3d0' }}>Ganho Líquido no Período</div>
-                              <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#10b981' }}>{formatCurrency(totalNetEarned)}</div>
+                              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: theme === 'light' ? '#065f46' : '#a7f3d0' }}>Ganho Líquido no Período</div>
+                              <div style={{ fontSize: '1.25rem', fontWeight: 900, color: theme === 'light' ? '#047857' : '#10b981' }}>{formatCurrency(totalNetEarned)}</div>
                             </div>
                           </div>
 
@@ -7047,7 +7065,6 @@ export function App() {
                       );
                     })()
                   )}
-                  </div>
                 </div>
               </div>
             )}
