@@ -75,7 +75,6 @@ export function App() {
   const toggleTheme = () => {
     const nextTheme = theme === 'dark' ? 'light' : 'dark';
     setTheme(nextTheme);
-    showToast(nextTheme === 'light' ? '☀️ Modo Claro (Clean Modern SaaS) ativado!' : '🌙 Modo Escuro ativado!', 'info');
   };
   
   // Autenticação & Sessão (Inicialização imediata síncrona para evitar tela em branco na primeira chamada)
@@ -2241,7 +2240,7 @@ export function App() {
                   transition: 'all 0.2s ease'
                 }}>
                   <Sun size={12} color={theme === 'light' ? '#f59e0b' : 'currentColor'} />
-                  <span>Claro</span>
+                  <span className="hide-on-mobile">Claro</span>
                 </div>
                 <div style={{
                   display: 'flex',
@@ -2258,7 +2257,7 @@ export function App() {
                   transition: 'all 0.2s ease'
                 }}>
                   <Moon size={12} color={theme === 'dark' ? '#818cf8' : 'currentColor'} />
-                  <span>Escuro</span>
+                  <span className="hide-on-mobile">Escuro</span>
                 </div>
               </div>
 
@@ -2807,6 +2806,7 @@ export function App() {
             onOpenSupabaseConfig={() => setShowConfigModal(true)}
             supabaseConnected={supabaseConnected}
             onReloadRides={fetchRides}
+            onLogout={handleLogout}
           />
         )}
 

@@ -6,7 +6,7 @@ import {
   TrendingUp, Database, Image, AlertTriangle, Eye, X, Check,
   Settings, Bell, CreditCard, Sliders, Send, Save, Trash2,
   Calendar, Filter, Globe, Key, Radio, Power, MessageSquare, Edit3,
-  EyeOff, LayoutDashboard, Star
+  EyeOff, LayoutDashboard, Star, LogOut
 } from 'lucide-react';
 import { formatCurrency, formatCurrencyInput, parseCurrencyInput, formatPhone, formatCpf, formatPlate } from '../utils/formatters';
 import { 
@@ -51,13 +51,15 @@ interface AdminDashboardProps {
   onOpenSupabaseConfig: () => void;
   supabaseConnected: boolean;
   onReloadRides?: () => void;
+  onLogout?: () => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ 
   rides, 
   onOpenSupabaseConfig, 
   supabaseConnected,
-  onReloadRides
+  onReloadRides,
+  onLogout
 }) => {
   const { showAlert, showConfirm, showToast } = useSystemDialog();
   const [activeSubTab, setActiveSubTab] = useState<'overview' | 'drivers' | 'clients' | 'rides' | 'reports' | 'ratings' | 'settings'>('overview');
@@ -553,12 +555,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <Database size={14} />
             <span>{supabaseConnected ? 'Banco Conectado' : 'Conectar Banco'}</span>
           </button>
+
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              className="btn-outline"
+              style={{ fontSize: '0.8rem', padding: '8px 14px', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.4)' }}
+              title="Sair do painel administrativo"
+            >
+              <LogOut size={14} />
+              <span>Sair</span>
+            </button>
+          )}
         </div>
       </div>
 
       {/* Navegação de Sub-Abas do Admin (Mobile Friendly com Scroll Lateral Suave) */}
       <div className="nav-scrollable admin-subnav-desktop" style={{
-        background: 'rgba(15, 23, 42, 0.95)',
+        background: undefined,
         padding: '6px',
         borderRadius: '14px',
         border: '1px solid var(--border-subtle)',
@@ -756,7 +770,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <Car size={18} />
                 </div>
               </div>
-              <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#fff', marginTop: '10px' }}>
+              <div className="admin-stat-num">
                 {drivers.length}
               </div>
               <div style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', flexWrap: 'wrap' }}>
@@ -789,7 +803,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <Users size={18} />
                 </div>
               </div>
-              <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#fff', marginTop: '10px' }}>
+              <div className="admin-stat-num">
                 {clients.length}
               </div>
               <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>
@@ -862,16 +876,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <button
                   key={f.key}
                   onClick={() => setDriverFilter(f.key as any)}
-                  style={{
-                    padding: '6px 12px',
-                    borderRadius: '8px',
-                    fontSize: '0.75rem',
-                    fontWeight: 600,
-                    border: '1px solid var(--border-subtle)',
-                    cursor: 'pointer',
-                    background: driverFilter === f.key ? 'rgba(99, 102, 241, 0.25)' : 'transparent',
-                    color: driverFilter === f.key ? '#fff' : 'var(--text-secondary)'
-                  }}
+                  className={`filter-pill-btn ${driverFilter === f.key ? 'active' : ''}`}
                 >
                   {f.label}
                 </button>
@@ -1315,37 +1320,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 <button
                   onClick={() => setClientTabFilter('active')}
-                  style={{
-                    padding: '8px 16px',
-                    borderRadius: '10px',
-                    border: clientTabFilter === 'active' ? '1px solid #6366f1' : '1px solid var(--border-subtle)',
-                    background: clientTabFilter === 'active' ? 'rgba(99, 102, 241, 0.2)' : 'rgba(255, 255, 255, 0.03)',
-                    color: clientTabFilter === 'active' ? '#fff' : 'var(--text-secondary)',
-                    fontSize: '0.85rem',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}
+                  className={`filter-pill-btn ${clientTabFilter === 'active' ? 'active' : ''}`}
                 >
                   <Users size={14} /> Ativos ({activeClients.length})
                 </button>
                 <button
                   onClick={() => setClientTabFilter('hidden')}
-                  style={{
-                    padding: '8px 16px',
-                    borderRadius: '10px',
-                    border: clientTabFilter === 'hidden' ? '1px solid #eab308' : '1px solid var(--border-subtle)',
-                    background: clientTabFilter === 'hidden' ? 'rgba(234, 179, 8, 0.2)' : 'rgba(255, 255, 255, 0.03)',
-                    color: clientTabFilter === 'hidden' ? '#fde047' : 'var(--text-secondary)',
-                    fontSize: '0.85rem',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}
+                  className={`filter-pill-btn ${clientTabFilter === 'hidden' ? 'active' : ''}`}
                 >
                   <EyeOff size={14} /> Ocultos / Excluídos Parcialmente ({hiddenClients.length})
                 </button>
@@ -1401,7 +1382,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {filteredList.map(c => (
                   <div key={c.id} style={{
-                    background: c.isHidden ? 'rgba(234, 179, 8, 0.05)' : 'rgba(15, 23, 42, 0.85)',
+                    background: c.isHidden ? 'rgba(234, 179, 8, 0.08)' : undefined,
                     border: c.isHidden ? '1px solid rgba(234, 179, 8, 0.3)' : '1px solid var(--border-subtle)',
                     borderRadius: '14px',
                     padding: '18px',
@@ -1635,17 +1616,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <button
                 type="button"
                 onClick={() => setRideDateFilter('all')}
-                style={{
-                  padding: '6px 14px',
-                  borderRadius: '20px',
-                  fontSize: '0.8rem',
-                  fontWeight: 600,
-                  border: '1px solid var(--border-subtle)',
-                  background: rideDateFilter === 'all' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
-                  color: rideDateFilter === 'all' ? '#fff' : 'var(--text-secondary)',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease'
-                }}
+                className={`filter-pill-btn ${rideDateFilter === 'all' ? 'active' : ''}`}
               >
                 Todas
               </button>
@@ -1653,17 +1624,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <button
                 type="button"
                 onClick={() => setRideDateFilter('today')}
-                style={{
-                  padding: '6px 14px',
-                  borderRadius: '20px',
-                  fontSize: '0.8rem',
-                  fontWeight: 600,
-                  border: '1px solid var(--border-subtle)',
-                  background: rideDateFilter === 'today' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
-                  color: rideDateFilter === 'today' ? '#fff' : 'var(--text-secondary)',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease'
-                }}
+                className={`filter-pill-btn ${rideDateFilter === 'today' ? 'active' : ''}`}
               >
                 Hoje
               </button>
@@ -1671,17 +1632,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <button
                 type="button"
                 onClick={() => setRideDateFilter('week')}
-                style={{
-                  padding: '6px 14px',
-                  borderRadius: '20px',
-                  fontSize: '0.8rem',
-                  fontWeight: 600,
-                  border: '1px solid var(--border-subtle)',
-                  background: rideDateFilter === 'week' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
-                  color: rideDateFilter === 'week' ? '#fff' : 'var(--text-secondary)',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease'
-                }}
+                className={`filter-pill-btn ${rideDateFilter === 'week' ? 'active' : ''}`}
               >
                 7 dias
               </button>
@@ -1689,17 +1640,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <button
                 type="button"
                 onClick={() => setRideDateFilter('15days')}
-                style={{
-                  padding: '6px 14px',
-                  borderRadius: '20px',
-                  fontSize: '0.8rem',
-                  fontWeight: 600,
-                  border: '1px solid var(--border-subtle)',
-                  background: rideDateFilter === '15days' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
-                  color: rideDateFilter === '15days' ? '#fff' : 'var(--text-secondary)',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease'
-                }}
+                className={`filter-pill-btn ${rideDateFilter === '15days' ? 'active' : ''}`}
               >
                 15 dias
               </button>
@@ -1707,17 +1648,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <button
                 type="button"
                 onClick={() => setRideDateFilter('30days')}
-                style={{
-                  padding: '6px 14px',
-                  borderRadius: '20px',
-                  fontSize: '0.8rem',
-                  fontWeight: 600,
-                  border: '1px solid var(--border-subtle)',
-                  background: rideDateFilter === '30days' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
-                  color: rideDateFilter === '30days' ? '#fff' : 'var(--text-secondary)',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease'
-                }}
+                className={`filter-pill-btn ${rideDateFilter === '30days' ? 'active' : ''}`}
               >
                 30 dias
               </button>
@@ -1725,17 +1656,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <button
                 type="button"
                 onClick={() => setRideDateFilter('custom')}
-                style={{
-                  padding: '6px 14px',
-                  borderRadius: '20px',
-                  fontSize: '0.8rem',
-                  fontWeight: 600,
-                  border: '1px solid var(--border-subtle)',
-                  background: rideDateFilter === 'custom' ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
-                  color: rideDateFilter === 'custom' ? '#fff' : 'var(--text-secondary)',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease'
-                }}
+                className={`filter-pill-btn ${rideDateFilter === 'custom' ? 'active' : ''}`}
               >
                 Data Específica
               </button>
@@ -1926,16 +1847,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     key={f.key}
                     type="button"
                     onClick={() => setReportFilter(f.key as any)}
-                    style={{
-                      padding: '7px 14px',
-                      borderRadius: '10px',
-                      fontSize: '0.8rem',
-                      fontWeight: 700,
-                      border: '1px solid var(--border-subtle)',
-                      background: reportFilter === f.key ? 'var(--primary-gradient)' : 'rgba(15, 23, 42, 0.6)',
-                      color: reportFilter === f.key ? '#fff' : 'var(--text-secondary)',
-                      cursor: 'pointer'
-                    }}
+                    className={`filter-pill-btn ${reportFilter === f.key ? 'active' : ''}`}
                   >
                     {f.label}
                   </button>
@@ -2021,10 +1933,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <div style={{
                         padding: '12px 14px',
                         borderRadius: '10px',
-                        background: 'rgba(15, 23, 42, 0.7)',
+                        background: 'var(--bg-glass)',
                         border: '1px solid var(--border-subtle)',
                         fontSize: '0.85rem',
-                        color: '#e2e8f0',
+                        color: 'var(--text-primary)',
                         lineHeight: 1.5
                       }}>
                         <strong style={{ color: '#94a3b8', fontSize: '0.75rem', display: 'block', marginBottom: '4px' }}>
@@ -2484,12 +2396,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                       {/* Comentário */}
                       <div style={{
-                        background: 'rgba(15, 23, 42, 0.5)',
-                        border: '1px solid rgba(255, 255, 255, 0.06)',
+                        background: 'var(--bg-glass)',
+                        border: '1px solid var(--border-subtle)',
                         borderRadius: '12px',
                         padding: '12px 14px',
                         fontSize: '0.86rem',
-                        color: item.comment ? '#cbd5e1' : '#64748b',
+                        color: item.comment ? 'var(--text-primary)' : 'var(--text-muted)',
                         fontStyle: item.comment ? 'normal' : 'italic'
                       }}>
                         {item.comment ? `"${item.comment}"` : 'Sem comentário adicional por escrito.'}
@@ -4518,6 +4430,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
           <span>Config</span>
         </button>
+
+        {onLogout && (
+          <button
+            onClick={onLogout}
+            className="mobile-nav-item"
+            style={{ color: '#ef4444' }}
+            title="Sair da Conta"
+          >
+            <div className="icon-wrapper" style={{ color: '#ef4444' }}>
+              <LogOut size={17} />
+            </div>
+            <span style={{ color: '#ef4444', fontWeight: 700 }}>Sair</span>
+          </button>
+        )}
       </nav>
     </div>
   );

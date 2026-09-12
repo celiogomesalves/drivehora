@@ -1,4 +1,5 @@
 :root {
+  color-scheme: dark;
   --bg-primary: #090d16;
   --bg-secondary: #0f172a;
   --bg-card: rgba(19, 29, 49, 0.75);
@@ -38,6 +39,7 @@
 /* ======================================================== */
 html.theme-light,
 .theme-light {
+  color-scheme: light;
   --bg-primary: #f8fafc;
   --bg-secondary: #ffffff;
   --bg-card: #ffffff;
@@ -1723,3 +1725,385 @@ h1, h2, h3, h4, h5, h6 {
     opacity: 0.8;
   }
 }
+
+
+/* Reset global de botão: garante que botões herdem cores do tema e nunca fiquem pretos no modo escuro */
+button {
+  font-family: inherit;
+  color: var(--text-primary);
+}
+
+.header-tab-btn {
+  color: var(--text-secondary);
+}
+
+.header-tab-btn:hover {
+  color: var(--text-primary);
+}
+
+.admin-subnav-desktop button {
+  color: var(--text-secondary);
+}
+
+.admin-subnav-desktop button:hover {
+  color: var(--text-primary);
+}
+
+.driver-subnav-btn {
+  color: var(--text-secondary);
+}
+
+.driver-subnav-btn:hover {
+  color: var(--text-primary);
+}
+
+.history-subnav-btn {
+  color: var(--text-secondary);
+}
+
+.history-subnav-btn:hover {
+  color: var(--text-primary);
+}
+
+/* ======================================================== */
+/* COMPONENTES DO MOTORISTA (VEÍCULO/DOC & HOMOLOGAÇÃO)     */
+/* ======================================================== */
+.driver-step-tab-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 6px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+  min-width: 0;
+}
+
+.driver-step-tab-btn:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-primary);
+}
+
+.driver-step-tab-btn.done {
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+}
+
+.driver-step-tab-btn.active {
+  border: 1px solid #6366f1;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.35), rgba(79, 70, 229, 0.25));
+  color: #ffffff !important;
+  box-shadow: 0 2px 10px rgba(99, 102, 241, 0.3);
+}
+
+/* No Tema Claro: Steps do Motorista */
+html.theme-light .driver-step-tab-btn {
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+  color: #475569 !important;
+}
+
+html.theme-light .driver-step-tab-btn:hover {
+  background: #f1f5f9 !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+html.theme-light .driver-step-tab-btn.done {
+  background: #ecfdf5 !important;
+  border: 1px solid #a7f3d0 !important;
+  color: #059669 !important;
+}
+
+html.theme-light .driver-step-tab-btn.active {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
+  border: 1px solid #2563eb !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25) !important;
+}
+
+/* Títulos de Etapas do Motorista */
+.driver-step-title {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+html.theme-light .driver-step-title {
+  color: #0f172a !important;
+}
+
+/* Cards de Categorias (Etapa 2) */
+.driver-category-card {
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(15, 23, 42, 0.6);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.driver-category-card strong {
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.driver-category-card.selected {
+  border: 2px solid #6366f1;
+  background: rgba(99, 102, 241, 0.18);
+}
+
+html.theme-light .driver-category-card {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+}
+
+html.theme-light .driver-category-card strong {
+  color: #0f172a !important;
+}
+
+html.theme-light .driver-category-card.selected {
+  border: 2px solid #2563eb !important;
+  background: #eff6ff !important;
+}
+
+html.theme-light .driver-category-card.selected strong {
+  color: #1d4ed8 !important;
+}
+
+/* Cards de Comodidades (Etapa 3) */
+.driver-amenity-card {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: all 0.2s;
+}
+
+.driver-amenity-card strong {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+
+.driver-amenity-card.checked {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid #10b981;
+}
+
+html.theme-light .driver-amenity-card {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+}
+
+html.theme-light .driver-amenity-card strong {
+  color: #0f172a !important;
+}
+
+html.theme-light .driver-amenity-card.checked {
+  background: #ecfdf5 !important;
+  border: 1px solid #10b981 !important;
+}
+
+html.theme-light .driver-amenity-card.checked strong {
+  color: #047857 !important;
+}
+
+/* Cards de Pagamento (Etapa 4) */
+.driver-payment-card {
+  border-radius: 14px;
+  padding: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: all 0.2s;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--border-subtle);
+}
+
+.driver-payment-card strong {
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.driver-payment-card.active {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid #10b981;
+}
+
+html.theme-light .driver-payment-card {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+}
+
+html.theme-light .driver-payment-card strong {
+  color: #0f172a !important;
+}
+
+html.theme-light .driver-payment-card.active {
+  background: #ecfdf5 !important;
+  border: 1px solid #10b981 !important;
+}
+
+html.theme-light .driver-payment-card.active strong {
+  color: #047857 !important;
+}
+
+/* Card de Chave Pix (Etapa 4) */
+.driver-pix-card {
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 16px;
+}
+
+.driver-pix-card label {
+  color: var(--text-primary);
+}
+
+html.theme-light .driver-pix-card {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+}
+
+html.theme-light .driver-pix-card label {
+  color: #0f172a !important;
+}
+
+/* Cards de Upload de Documentos (Etapa 5) */
+.driver-doc-card {
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.driver-doc-card strong {
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.driver-doc-card.attached {
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+html.theme-light .driver-doc-card {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+}
+
+html.theme-light .driver-doc-card strong {
+  color: #0f172a !important;
+}
+
+html.theme-light .driver-doc-card.attached {
+  border: 1px solid #a7f3d0 !important;
+}
+
+/* Card de Resumo de Homologação (Etapa 6) */
+.driver-summary-card {
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 16px;
+}
+
+.driver-summary-card strong {
+  color: var(--text-primary);
+}
+
+html.theme-light .driver-summary-card {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+}
+
+html.theme-light .driver-summary-card strong {
+  color: #0f172a !important;
+}
+
+/* ======================================================== */
+/* COMPONENTES DO PAINEL DO ADMIN                           */
+/* ======================================================== */
+.admin-card-container {
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 16px 20px;
+}
+
+html.theme-light .admin-card-container {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+}
+
+.admin-stat-num {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-top: 10px;
+}
+
+html.theme-light .admin-stat-num {
+  color: #0f172a !important;
+}
+
+.admin-card-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+html.theme-light .admin-card-title {
+  color: #0f172a !important;
+}
+
+.admin-card-subtext {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+html.theme-light .admin-card-subtext {
+  color: #475569 !important;
+}
+
+/* Regra ampla de garantia para Modo Claro */
+html.theme-light .glass-panel strong,
+html.theme-light .glass-panel h1,
+html.theme-light .glass-panel h2,
+html.theme-light .glass-panel h3,
+html.theme-light .glass-panel h4,
+html.theme-light .glass-panel h5,
+html.theme-light .glass-panel h6 {
+  color: #0f172a !important;
+}
+
+html.theme-light .glass-panel p,
+html.theme-light .glass-panel span:not([style*="color: rgb"], [style*="color:#"], [style*="color: #"]) {
+  color: inherit;
+}
+

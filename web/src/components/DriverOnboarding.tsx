@@ -688,28 +688,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
                 key={s.num}
                 type="button"
                 onClick={() => setStep(s.num)}
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '4px',
-                  padding: '8px 6px',
-                  borderRadius: '10px',
-                  border: isActive ? '1px solid #6366f1' : isDone ? '1px solid rgba(16,185,129,0.3)' : '1px solid var(--border-subtle)',
-                  background: isActive
-                    ? 'linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(79, 70, 229, 0.2))'
-                    : isDone
-                    ? 'rgba(16, 185, 129, 0.1)'
-                    : 'rgba(255, 255, 255, 0.02)',
-                  color: isActive ? '#fff' : isDone ? '#10b981' : 'var(--text-muted)',
-                  fontSize: '0.7rem',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  textAlign: 'center',
-                  minWidth: 0
-                }}
+                className={`driver-step-tab-btn ${isActive ? 'active' : isDone ? 'done' : ''}`}
               >
                 <span style={{
                   width: '22px', height: '22px', borderRadius: '50%',
@@ -938,24 +917,14 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
                     <div
                       key={cat.id}
                       onClick={isApproved ? undefined : () => setVehicleCategory(cat.id)}
-                      style={{
-                        padding: '14px',
-                        borderRadius: '12px',
-                        border: isSelected ? '2px solid #6366f1' : '1px solid var(--border-subtle)',
-                        background: isSelected ? 'rgba(99, 102, 241, 0.18)' : 'rgba(15, 23, 42, 0.6)',
-                        cursor: isApproved ? 'default' : 'pointer',
-                        opacity: isApproved && !isSelected ? 0.5 : 1,
-                        transition: 'all 0.2s',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '6px'
-                      }}
+                      className={`driver-category-card ${isSelected ? 'selected' : ''}`}
+                      style={{ opacity: isApproved && !isSelected ? 0.5 : 1 }}
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ fontSize: '1.4rem' }}>{cat.icon}</span>
-                        {isSelected && <Check size={16} color="#818cf8" />}
+                        {isSelected && <Check size={16} color="#2563eb" />}
                       </div>
-                      <strong style={{ fontSize: '0.95rem', color: '#fff' }}>{cat.name}</strong>
+                      <strong>{cat.name}</strong>
                       <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', lineHeight: 1.3 }}>{cat.description}</span>
                     </div>
                   );
@@ -1142,22 +1111,12 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
                     <div
                       key={amenity.id}
                       onClick={() => toggleAmenity(amenity)}
-                      style={{
-                        padding: '12px 14px',
-                        borderRadius: '12px',
-                        background: isChecked ? 'rgba(16, 185, 129, 0.15)' : 'rgba(15, 23, 42, 0.6)',
-                        border: isChecked ? '1px solid #10b981' : '1px solid var(--border-subtle)',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        transition: 'all 0.2s'
-                      }}
+                      className={`driver-amenity-card ${isChecked ? 'checked' : ''}`}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <span style={{ fontSize: '1.2rem' }}>{amenity.icon}</span>
                         <div>
-                          <strong style={{ fontSize: '0.85rem', color: '#fff', display: 'block' }}>{amenity.label}</strong>
+                          <strong style={{ fontSize: '0.85rem', display: 'block' }}>{amenity.label}</strong>
                           <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{amenity.desc}</span>
                         </div>
                       </div>
@@ -1247,7 +1206,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
           <div style={{ marginBottom: '20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <CreditCard size={22} color="#818cf8" />
-              <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#fff', margin: 0 }}>
+              <h3 className="driver-step-title" style={{ margin: 0 }}>
                 4. Formas de Recebimento & Chave Pix
               </h3>
             </div>
@@ -1286,22 +1245,12 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
                   pixKey: driverPixKey.trim()
                 });
               }}
-              style={{
-                background: driverAcceptsCash ? 'rgba(16, 185, 129, 0.12)' : 'rgba(15, 23, 42, 0.6)',
-                border: driverAcceptsCash ? '1px solid #10b981' : '1px solid var(--border-subtle)',
-                borderRadius: '14px',
-                padding: '16px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                transition: 'all 0.2s'
-              }}
+              className={`driver-payment-card ${driverAcceptsCash ? 'active' : ''}`}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <span style={{ fontSize: '1.8rem' }}>💵</span>
                 <div>
-                  <strong style={{ fontSize: '0.95rem', color: '#fff', display: 'block' }}>
+                  <strong style={{ fontSize: '0.95rem', display: 'block' }}>
                     Aceito receber corridas em Dinheiro
                   </strong>
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
@@ -1328,22 +1277,12 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
                   pixKey: driverPixKey.trim()
                 });
               }}
-              style={{
-                background: driverHasCardMachine ? 'rgba(16, 185, 129, 0.12)' : 'rgba(15, 23, 42, 0.6)',
-                border: driverHasCardMachine ? '1px solid #10b981' : '1px solid var(--border-subtle)',
-                borderRadius: '14px',
-                padding: '16px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                transition: 'all 0.2s'
-              }}
+              className={`driver-payment-card ${driverHasCardMachine ? 'active' : ''}`}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <span style={{ fontSize: '1.8rem' }}>📱</span>
                 <div>
-                  <strong style={{ fontSize: '0.95rem', color: '#fff', display: 'block' }}>
+                  <strong style={{ fontSize: '0.95rem', display: 'block' }}>
                     Possuo maquininha própria de cartão
                   </strong>
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
@@ -1360,13 +1299,8 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
             </div>
 
             {/* Opção 3: Chave Pix */}
-            <div style={{
-              background: 'rgba(15, 23, 42, 0.75)',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: '14px',
-              padding: '16px'
-            }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', fontWeight: 700, color: '#fff', marginBottom: '8px' }}>
+            <div className="driver-pix-card">
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', fontWeight: 700, marginBottom: '8px' }}>
                 <span>🔑</span>
                 <span>Minha Chave Pix (para conferência e repasses da plataforma):</span>
               </label>
@@ -1472,20 +1406,10 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             
             {/* 1. Foto da CNH */}
-            <div style={{
-              background: 'rgba(15, 23, 42, 0.8)',
-              border: cnhUrl ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid var(--border-subtle)',
-              borderRadius: '14px',
-              padding: '16px',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              gap: '12px'
-            }}>
+            <div className={`driver-doc-card ${cnhUrl ? 'attached' : ''}`}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <strong style={{ fontSize: '0.95rem', color: '#fff' }}>🪪 Foto da CNH Aberta</strong>
+                  <strong style={{ fontSize: '0.95rem' }}>🪪 Foto da CNH Aberta</strong>
                   {cnhUrl ? (
                     <span style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 700 }}>✅ Anexada</span>
                   ) : (
@@ -1523,20 +1447,10 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
             </div>
 
             {/* 2. Foto do CRLV */}
-            <div style={{
-              background: 'rgba(15, 23, 42, 0.8)',
-              border: crlvUrl ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid var(--border-subtle)',
-              borderRadius: '14px',
-              padding: '16px',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              gap: '12px'
-            }}>
+            <div className={`driver-doc-card ${crlvUrl ? 'attached' : ''}`}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <strong style={{ fontSize: '0.95rem', color: '#fff' }}>🚗 Foto do Documento do Veículo (CRLV)</strong>
+                  <strong style={{ fontSize: '0.95rem' }}>🚗 Foto do Documento do Veículo (CRLV)</strong>
                   {crlvUrl ? (
                     <span style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 700 }}>✅ Anexado</span>
                   ) : (
@@ -1574,19 +1488,11 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
             </div>
 
             {/* 3. Selfie de Identificação / Câmera ao Vivo */}
-            <div style={{
-              background: 'rgba(15, 23, 42, 0.8)',
-              border: selfieUrl ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid var(--border-subtle)',
-              borderRadius: '14px',
-              padding: '16px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '12px'
-            }}>
+            <div className={`driver-doc-card ${selfieUrl ? 'attached' : ''}`} style={{ flexDirection: 'column', alignItems: 'stretch' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <strong style={{ fontSize: '0.95rem', color: '#fff' }}>🤳 Selfie de Identificação Facial</strong>
+                    <strong style={{ fontSize: '0.95rem' }}>🤳 Selfie de Identificação Facial</strong>
                     {selfieUrl ? (
                       <span style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 700 }}>✅ Foto Pronta</span>
                     ) : (
@@ -1740,7 +1646,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
           </div>
 
           <div>
-            <h3 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#fff' }}>
+            <h3 className="driver-step-title" style={{ fontSize: '1.4rem' }}>
               {verificationStatus === 'approved' 
                 ? 'Cadastro Homologado & Ativo!' 
                 : 'Documentação em Análise'}
@@ -1766,7 +1672,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
             gap: '8px'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <strong style={{ color: '#fff', fontSize: '0.95rem' }}>{vehicleBrand} {vehicleModel} ({vehicleYear})</strong>
+              <strong style={{ fontSize: '0.95rem' }}>{vehicleBrand} {vehicleModel} ({vehicleYear})</strong>
               <span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '6px', background: 'rgba(255, 255, 255, 0.1)', color: '#cbd5e1' }}>
                 Placa: {vehiclePlate}
               </span>
