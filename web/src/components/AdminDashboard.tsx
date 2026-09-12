@@ -6,7 +6,7 @@ import {
   TrendingUp, Database, Image, AlertTriangle, Eye, X, Check,
   Settings, Bell, CreditCard, Sliders, Send, Save, Trash2,
   Calendar, Filter, Globe, Key, Radio, Power, MessageSquare, Edit3,
-  EyeOff, LayoutDashboard, Star, LogOut
+  EyeOff, LayoutDashboard, Star, LogOut, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { formatCurrency, formatCurrencyInput, parseCurrencyInput, formatPhone, formatCpf, formatPlate } from '../utils/formatters';
 import { 
@@ -36,7 +36,7 @@ import { useSystemDialog } from './SystemDialog';
 // Utilitário para verificar pendências documentais obrigatórias
 export const getMissingDriverDocs = (d: DriverProfile): string[] => {
   const missing: string[] = [];
-  if (!d.cnhUrl && !d.cnhNumber) missing.push('Foto da CNH (ou Número)');
+  if (!d.cnhUrl && !d.cnhNumber) missing.push('Foto da CNH (Habilitação)');
   if (!d.crlvUrl && !d.vehiclePlate) missing.push('Foto do CRLV (Doc. do Veículo)');
   if (!d.selfieUrl) missing.push('Selfie de Identificação com CNH');
   if (!d.cpf || d.cpf.replace(/\D/g, '').length < 11) missing.push('CPF Válido');
@@ -52,6 +52,7 @@ interface AdminDashboardProps {
   supabaseConnected: boolean;
   onReloadRides?: () => void;
   onLogout?: () => void;
+  theme?: 'dark' | 'light';
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ 
@@ -59,7 +60,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onOpenSupabaseConfig, 
   supabaseConnected,
   onReloadRides,
-  onLogout
+  onLogout,
+  theme = 'dark'
 }) => {
   const { showAlert, showConfirm, showToast } = useSystemDialog();
   const [activeSubTab, setActiveSubTab] = useState<'overview' | 'drivers' | 'clients' | 'rides' | 'reports' | 'ratings' | 'settings'>('overview');
@@ -78,6 +80,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [previewDoc, setPreviewDoc] = useState<{ title: string; url: string } | null>(null);
   const [driverToDelete, setDriverToDelete] = useState<DriverProfile | null>(null);
   const [isDeletingDriver, setIsDeletingDriver] = useState(false);
+
+  // Controle de expansão/recolhimento dos cards de motorista (Accordion)
+  const [expandedDriverIds, setExpandedDriverIds] = useState<Record<string, boolean>>({});
+  const toggleDriverExpand = (driverId: string) => {
+    setExpandedDriverIds(prev => ({
+      ...prev,
+      [driverId]: !prev[driverId]
+    }));
+  };
 
   // Estados para Edição Cadastral de Motoristas pelo Admin
   const [editingDriver, setEditingDriver] = useState<DriverProfile | null>(null);
@@ -893,48 +904,58 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {filteredDrivers.map(d => {
                 const missingDocs = getMissingDriverDocs(d);
                 const isReadyToApprove = missingDocs.length === 0;
+                const isExpanded = !!expandedDriverIds[d.id];
 
                 return (
                   <div key={d.id} className="glass-card" style={{
-                    padding: '18px 20px',
+                    padding: '16px 20px',
                     borderRadius: '16px',
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: '14px',
-                    boxShadow: '0 4px 16px rgba(0, 0, 0, 0.25)'
+                    gap: isExpanded ? '16px' : '10px',
+                    boxShadow: theme === 'light' ? '0 4px 16px rgba(0, 0, 0, 0.06)' : '0 4px 16px rgba(0, 0, 0, 0.25)',
+                    border: isExpanded 
+                      ? (theme === 'light' ? '1px solid #6366f1' : '1px solid rgba(99, 102, 241, 0.5)')
+                      : (theme === 'light' ? '1px solid #e2e8f0' : '1px solid var(--border-subtle)'),
+                    transition: 'all 0.2s ease-in-out'
                   }}>
+                    {/* CABEÇALHO PRINCIPAL DO CARD (Enxuto, com dados essenciais e botão de expandir) */}
                     <div style={{
                       display: 'flex',
                       justifyContent: 'space-between',
-                      alignItems: 'flex-start',
+                      alignItems: 'center',
                       flexWrap: 'wrap',
-                      gap: '14px'
+                      gap: '12px'
                     }}>
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                          <strong style={{ fontSize: '1.05rem', color: '#fff' }}>
+                      <div style={{ flex: '1 1 280px', minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <strong style={{ fontSize: '1.05rem', color: 'var(--text-primary)' }}>
                             {d.driverName || (d.vehicleBrand ? `${d.vehicleBrand} ${d.vehicleModel}` : 'Motorista Parceiro')}
                           </strong>
+
                           {d.vehicleBrand && (
                             <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
                               ({d.vehicleBrand} {d.vehicleModel} {d.vehicleYear ? `- ${d.vehicleYear}` : ''})
                             </span>
                           )}
+
                           {d.vehiclePlate && (
                             <span style={{
                               fontSize: '0.75rem',
-                              padding: '3px 8px',
+                              padding: '2px 8px',
                               borderRadius: '6px',
-                              background: 'rgba(255, 255, 255, 0.08)',
+                              background: theme === 'light' ? '#f1f5f9' : 'rgba(255, 255, 255, 0.08)',
+                              border: theme === 'light' ? '1px solid #cbd5e1' : undefined,
                               fontWeight: 700,
-                              color: '#94a3b8'
+                              color: theme === 'light' ? '#334155' : '#94a3b8'
                             }}>
                               Placa: {formatPlate(d.vehiclePlate)}
                             </span>
                           )}
+
                           <span style={{
-                            fontSize: '0.75rem',
-                            padding: '3px 10px',
+                            fontSize: '0.72rem',
+                            padding: '2px 8px',
                             borderRadius: '8px',
                             fontWeight: 700,
                             background: d.verificationStatus === 'approved' 
@@ -965,7 +986,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           {d.isOnline ? (
                             <span style={{
                               fontSize: '0.72rem',
-                              padding: '3px 10px',
+                              padding: '2px 8px',
                               borderRadius: '8px',
                               fontWeight: 700,
                               background: 'rgba(16, 185, 129, 0.18)',
@@ -973,11 +994,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               border: '1px solid rgba(16, 185, 129, 0.4)',
                               display: 'inline-flex',
                               alignItems: 'center',
-                              gap: '6px'
+                              gap: '5px'
                             }}>
                               <span style={{
-                                width: '7px',
-                                height: '7px',
+                                width: '6px',
+                                height: '6px',
                                 borderRadius: '50%',
                                 background: '#10b981',
                                 boxShadow: '0 0 6px #10b981'
@@ -987,280 +1008,389 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           ) : (
                             <span style={{
                               fontSize: '0.72rem',
-                              padding: '3px 10px',
+                              padding: '2px 8px',
                               borderRadius: '8px',
                               fontWeight: 700,
-                              background: 'rgba(148, 163, 184, 0.12)',
-                              color: '#94a3b8',
-                              border: '1px solid rgba(148, 163, 184, 0.25)',
+                              background: theme === 'light' ? '#f1f5f9' : 'rgba(148, 163, 184, 0.12)',
+                              color: '#64748b',
+                              border: theme === 'light' ? '1px solid #e2e8f0' : '1px solid rgba(148, 163, 184, 0.25)',
                               display: 'inline-flex',
                               alignItems: 'center',
-                              gap: '6px'
+                              gap: '5px'
                             }}>
                               <span style={{
-                                width: '7px',
-                                height: '7px',
+                                width: '6px',
+                                height: '6px',
                                 borderRadius: '50%',
-                                background: '#64748b'
+                                background: '#94a3b8'
                               }} />
                               OFFLINE
                             </span>
                           )}
                         </div>
 
-                        <div style={{ fontSize: '0.85rem', color: '#cbd5e1', marginTop: '6px', display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
-                          <span>📞 Telefone: <strong>{formatPhone(d.phone) || 'Não informado'}</strong></span>
-                          <span>🆔 CPF: <strong>{formatCpf(d.cpf) || 'Não informado'}</strong></span>
-                          <span>🪪 CNH: <strong>{d.cnhNumber || 'Não informada'}</strong> (Cat. {d.cnhCategory || 'B'})</span>
-                        </div>
-
-                        <div style={{ display: 'flex', gap: '10px', marginTop: '6px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                          <span>⭐ Avaliação: {d.rating}</span>
-                          <span>• 🚗 Total de Corridas: {d.totalRides}</span>
+                        {/* Linha Resumo Rápido */}
+                        <div style={{ display: 'flex', gap: '10px', marginTop: '6px', fontSize: '0.78rem', color: 'var(--text-secondary)', flexWrap: 'wrap', alignItems: 'center' }}>
+                          <span>⭐ <strong>{d.rating || '5.0'}</strong></span>
+                          <span>• 🚗 <strong>{d.totalRides || 0}</strong> {d.totalRides === 1 ? 'corrida' : 'corridas'}</span>
+                          {d.phone && (
+                            <span>• 📞 <strong style={{ color: 'var(--text-primary)' }}>{formatPhone(d.phone)}</strong></span>
+                          )}
                         </div>
                       </div>
 
-                      {/* Ações de Moderação & Controle Online Remoto */}
+                      {/* Botões de Ação Rápida no Cabeçalho */}
                       <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                        {/* Botão de Controle Remoto Online/Offline pelo Administrador */}
+                        {/* Botão de Controle Remoto Online/Offline */}
                         {d.isOnline ? (
                           <button
+                            type="button"
                             onClick={() => handleAdminToggleDriverOnline(d, false)}
                             className="btn-outline"
-                            title="Desconectar motorista do modo online remotamente (furto, perda de celular, suporte emergencial)"
+                            title="Desconectar motorista remotamente"
                             style={{
-                              padding: '8px 14px',
-                              fontSize: '0.8rem',
+                              padding: '6px 12px',
+                              fontSize: '0.78rem',
                               color: '#ef4444',
                               borderColor: 'rgba(239, 68, 68, 0.4)',
                               background: 'rgba(239, 68, 68, 0.08)',
                               display: 'inline-flex',
                               alignItems: 'center',
-                              gap: '6px'
+                              gap: '5px',
+                              borderRadius: '8px'
                             }}
                           >
-                            <Power size={14} />
-                            <span>Desconectar (Offline)</span>
+                            <Power size={13} />
+                            <span>Desconectar</span>
                           </button>
                         ) : (
                           <button
+                            type="button"
                             onClick={() => handleAdminToggleDriverOnline(d, true)}
                             className="btn-outline"
                             title="Conectar motorista em modo online remotamente"
                             style={{
-                              padding: '8px 14px',
-                              fontSize: '0.8rem',
+                              padding: '6px 12px',
+                              fontSize: '0.78rem',
                               color: '#10b981',
                               borderColor: 'rgba(16, 185, 129, 0.4)',
                               background: 'rgba(16, 185, 129, 0.08)',
                               display: 'inline-flex',
                               alignItems: 'center',
-                              gap: '6px'
+                              gap: '5px',
+                              borderRadius: '8px'
                             }}
                           >
-                            <Radio size={14} />
-                            <span>Conectar (Online)</span>
-                          </button>
-                        )}
-                        {d.verificationStatus !== 'approved' && (
-                          <button
-                            onClick={() => handleUpdateStatus(d, 'approved')}
-                            className={isReadyToApprove ? "btn-success" : "btn-outline"}
-                            title={isReadyToApprove ? "Aprovar motorista" : `Faltam documentos: ${missingDocs.join(', ')}`}
-                            style={{ 
-                              padding: '8px 16px', 
-                              fontSize: '0.8rem',
-                              opacity: isReadyToApprove ? 1 : 0.65,
-                              cursor: isReadyToApprove ? 'pointer' : 'not-allowed',
-                              border: isReadyToApprove ? undefined : '1px dashed #ef4444',
-                              color: isReadyToApprove ? '#fff' : '#f87171'
-                            }}
-                          >
-                            <CheckCircle2 size={15} /> Aprovar Motorista
+                            <Radio size={13} />
+                            <span>Conectar</span>
                           </button>
                         )}
 
-                        {d.verificationStatus === 'approved' && (
-                          <button
-                            onClick={() => handleUpdateStatus(d, 'under_review')}
-                            className="btn-outline"
-                            style={{ padding: '8px 14px', fontSize: '0.8rem', color: '#f59e0b' }}
-                          >
-                            <Clock size={14} /> Suspender / Reavaliar
-                          </button>
-                        )}
-
-                        {d.verificationStatus !== 'rejected' && (
-                          <button
-                            onClick={() => handleUpdateStatus(d, 'rejected')}
-                            className="btn-outline"
-                            style={{ padding: '8px 14px', fontSize: '0.8rem', color: '#ef4444' }}
-                            title="Reprovar cadastro do motorista"
-                          >
-                            <XCircle size={14} /> Reprovar
-                          </button>
-                        )}
-
-                        {/* Botão de Editar Cadastro do Motorista */}
+                        {/* Botão de Expandir / Recolher Accordion */}
                         <button
-                          onClick={() => handleOpenEditDriver(d)}
+                          type="button"
+                          onClick={() => toggleDriverExpand(d.id)}
                           className="btn-outline"
                           style={{
-                            padding: '8px 12px',
+                            padding: '6px 14px',
                             fontSize: '0.8rem',
-                            color: '#818cf8',
-                            borderColor: 'rgba(99, 102, 241, 0.4)',
-                            background: 'rgba(99, 102, 241, 0.08)',
+                            fontWeight: 700,
                             display: 'inline-flex',
                             alignItems: 'center',
-                            gap: '6px'
+                            gap: '6px',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            background: isExpanded 
+                              ? (theme === 'light' ? '#eff6ff' : 'rgba(99, 102, 241, 0.15)') 
+                              : (theme === 'light' ? '#f8fafc' : 'rgba(255, 255, 255, 0.05)'),
+                            borderColor: isExpanded 
+                              ? (theme === 'light' ? '#93c5fd' : 'rgba(99, 102, 241, 0.4)') 
+                              : (theme === 'light' ? '#cbd5e1' : 'rgba(255, 255, 255, 0.15)'),
+                            color: isExpanded 
+                              ? (theme === 'light' ? '#1d4ed8' : '#818cf8') 
+                              : 'var(--text-primary)'
                           }}
-                          title="Editar dados cadastrais do motorista (Nome, CPF, Veículo, CNH)"
                         >
-                          <Edit3 size={14} /> Editar
-                        </button>
-
-                        {/* Botão de Excluir Motorista com Confirmação */}
-                        <button
-                          onClick={() => setDriverToDelete(d)}
-                          className="btn-outline"
-                          style={{
-                            padding: '8px 12px',
-                            fontSize: '0.8rem',
-                            color: '#ef4444',
-                            borderColor: 'rgba(239, 68, 68, 0.3)',
-                            background: 'rgba(239, 68, 68, 0.08)'
-                          }}
-                          title="Excluir motorista permanentemente"
-                        >
-                          <Trash2 size={14} /> Excluir
+                          <span>{isExpanded ? 'Recolher' : 'Ver Detalhes'}</span>
+                          {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
                         </button>
                       </div>
                     </div>
 
-                    {/* Documentos Anexados & Miniaturas */}
-                    <div className="admin-audit-card">
-                      <div className="audit-title">
-                        Documentos para Auditoria:
-                      </div>
-
-                      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
-                        {/* CNH */}
-                        {d.cnhUrl ? (
-                          <button
-                            onClick={() => setPreviewDoc({ title: `CNH - ${d.vehicleBrand} ${d.vehicleModel}`, url: d.cnhUrl! })}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              padding: '6px 12px',
-                              borderRadius: '8px',
-                              background: 'rgba(99, 102, 241, 0.15)',
-                              border: '1px solid rgba(99, 102, 241, 0.4)',
-                              color: '#818cf8',
-                              fontSize: '0.75rem',
-                              fontWeight: 600,
-                              cursor: 'pointer'
-                            }}
-                          >
-                            <Eye size={13} /> Ver Foto CNH
-                          </button>
-                        ) : (
-                          <span style={{ fontSize: '0.75rem', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <X size={13} /> CNH não enviada
-                          </span>
-                        )}
-
-                        {/* CRLV */}
-                        {d.crlvUrl ? (
-                          <button
-                            onClick={() => setPreviewDoc({ title: `CRLV (Doc. Veículo) - Placa ${d.vehiclePlate}`, url: d.crlvUrl! })}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              padding: '6px 12px',
-                              borderRadius: '8px',
-                              background: 'rgba(99, 102, 241, 0.15)',
-                              border: '1px solid rgba(99, 102, 241, 0.4)',
-                              color: '#818cf8',
-                              fontSize: '0.75rem',
-                              fontWeight: 600,
-                              cursor: 'pointer'
-                            }}
-                          >
-                            <Eye size={13} /> Ver Doc. Veículo (CRLV)
-                          </button>
-                        ) : (
-                          <span style={{ fontSize: '0.75rem', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <X size={13} /> CRLV não enviado
-                          </span>
-                        )}
-
-                        {/* Selfie */}
-                        {d.selfieUrl ? (
-                          <button
-                            onClick={() => setPreviewDoc({ title: `Selfie de Identificação - ${d.vehicleBrand} ${d.vehicleModel}`, url: d.selfieUrl! })}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              padding: '6px 12px',
-                              borderRadius: '8px',
-                              background: 'rgba(99, 102, 241, 0.15)',
-                              border: '1px solid rgba(99, 102, 241, 0.4)',
-                              color: '#818cf8',
-                              fontSize: '0.75rem',
-                              fontWeight: 600,
-                              cursor: 'pointer'
-                            }}
-                          >
-                            <Eye size={13} /> Ver Selfie / Rosto
-                          </button>
-                        ) : (
-                          <span style={{ fontSize: '0.75rem', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <X size={13} /> Selfie não enviada
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Alerta de Documentos Faltantes ou Badge Completo */}
-                      {!isReadyToApprove ? (
+                    {/* CORPO EXPANDIDO DO ACCORDION */}
+                    {isExpanded && (
+                      <div style={{
+                        paddingTop: '14px',
+                        borderTop: theme === 'light' ? '1px solid #e2e8f0' : '1px solid rgba(255, 255, 255, 0.08)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '14px'
+                      }}>
+                        {/* Grade de Dados Pessoais e Cadastrais com Contraste Alto em Modo Claro */}
                         <div style={{
-                          marginTop: '4px',
-                          padding: '8px 12px',
-                          borderRadius: '8px',
-                          background: 'rgba(239, 68, 68, 0.12)',
-                          border: '1px solid rgba(239, 68, 68, 0.3)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px',
-                          color: '#f87171',
-                          fontSize: '0.75rem'
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                          gap: '10px',
+                          padding: '12px 14px',
+                          background: theme === 'light' ? '#f8fafc' : 'rgba(255, 255, 255, 0.03)',
+                          border: theme === 'light' ? '1px solid #e2e8f0' : '1px solid var(--border-subtle)',
+                          borderRadius: '12px'
                         }}>
-                          <AlertTriangle size={15} style={{ flexShrink: 0 }} />
-                          <span>
-                            <strong>Bloqueio de Aprovação ({missingDocs.length} pendências):</strong> Faltando {missingDocs.join(', ')}.
-                          </span>
+                          <div>
+                            <span style={{ fontSize: '0.72rem', color: theme === 'light' ? '#475569' : '#94a3b8', display: 'block', fontWeight: 600 }}>
+                              📞 Telefone:
+                            </span>
+                            <strong style={{ fontSize: '0.86rem', color: 'var(--text-primary)' }}>
+                              {formatPhone(d.phone) || 'Não informado'}
+                            </strong>
+                          </div>
+
+                          <div>
+                            <span style={{ fontSize: '0.72rem', color: theme === 'light' ? '#475569' : '#94a3b8', display: 'block', fontWeight: 600 }}>
+                              🆔 CPF:
+                            </span>
+                            <strong style={{ fontSize: '0.86rem', color: 'var(--text-primary)' }}>
+                              {formatCpf(d.cpf) || 'Não informado'}
+                            </strong>
+                          </div>
+
+                          <div>
+                            <span style={{ fontSize: '0.72rem', color: theme === 'light' ? '#475569' : '#94a3b8', display: 'block', fontWeight: 600 }}>
+                              🪪 CNH (Habilitação):
+                            </span>
+                            <strong style={{ fontSize: '0.86rem', color: 'var(--text-primary)' }}>
+                              {d.cnhNumber || 'Não informada'} <span style={{ fontSize: '0.75rem', fontWeight: 500, color: theme === 'light' ? '#475569' : '#94a3b8' }}>(Cat. {d.cnhCategory || 'B'})</span>
+                            </strong>
+                          </div>
+
+                          <div>
+                            <span style={{ fontSize: '0.72rem', color: theme === 'light' ? '#475569' : '#94a3b8', display: 'block', fontWeight: 600 }}>
+                              🚗 Veículo & Cor:
+                            </span>
+                            <strong style={{ fontSize: '0.86rem', color: 'var(--text-primary)' }}>
+                              {d.vehicleBrand ? `${d.vehicleBrand} ${d.vehicleModel}` : 'Não informado'} {d.vehicleColor ? `(${d.vehicleColor})` : ''}
+                            </strong>
+                          </div>
                         </div>
-                      ) : (
+
+                        {/* Documentos Anexados & Miniaturas para Auditoria */}
+                        <div className="admin-audit-card">
+                          <div className="audit-title" style={{ color: theme === 'light' ? '#1e293b' : 'var(--text-secondary)' }}>
+                            Documentos para Auditoria:
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+                            {/* CNH */}
+                            {d.cnhUrl ? (
+                              <button
+                                type="button"
+                                onClick={() => setPreviewDoc({ title: `CNH - ${d.vehicleBrand} ${d.vehicleModel}`, url: d.cnhUrl! })}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  padding: '6px 12px',
+                                  borderRadius: '8px',
+                                  background: theme === 'light' ? '#eff6ff' : 'rgba(99, 102, 241, 0.15)',
+                                  border: theme === 'light' ? '1px solid #bfdbfe' : '1px solid rgba(99, 102, 241, 0.4)',
+                                  color: theme === 'light' ? '#1d4ed8' : '#818cf8',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 600,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <Eye size={13} /> Ver Foto CNH
+                              </button>
+                            ) : (
+                              <span style={{ fontSize: '0.75rem', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <X size={13} /> CNH não enviada
+                              </span>
+                            )}
+
+                            {/* CRLV */}
+                            {d.crlvUrl ? (
+                              <button
+                                type="button"
+                                onClick={() => setPreviewDoc({ title: `CRLV (Doc. Veículo) - Placa ${d.vehiclePlate}`, url: d.crlvUrl! })}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  padding: '6px 12px',
+                                  borderRadius: '8px',
+                                  background: theme === 'light' ? '#eff6ff' : 'rgba(99, 102, 241, 0.15)',
+                                  border: theme === 'light' ? '1px solid #bfdbfe' : '1px solid rgba(99, 102, 241, 0.4)',
+                                  color: theme === 'light' ? '#1d4ed8' : '#818cf8',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 600,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <Eye size={13} /> Ver Doc. Veículo (CRLV)
+                              </button>
+                            ) : (
+                              <span style={{ fontSize: '0.75rem', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <X size={13} /> CRLV não enviado
+                              </span>
+                            )}
+
+                            {/* Selfie */}
+                            {d.selfieUrl ? (
+                              <button
+                                type="button"
+                                onClick={() => setPreviewDoc({ title: `Selfie de Identificação - ${d.vehicleBrand} ${d.vehicleModel}`, url: d.selfieUrl! })}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  padding: '6px 12px',
+                                  borderRadius: '8px',
+                                  background: theme === 'light' ? '#eff6ff' : 'rgba(99, 102, 241, 0.15)',
+                                  border: theme === 'light' ? '1px solid #bfdbfe' : '1px solid rgba(99, 102, 241, 0.4)',
+                                  color: theme === 'light' ? '#1d4ed8' : '#818cf8',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 600,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <Eye size={13} /> Ver Selfie / Rosto
+                              </button>
+                            ) : (
+                              <span style={{ fontSize: '0.75rem', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <X size={13} /> Selfie não enviada
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Alerta de Documentos Faltantes ou Badge Completo */}
+                          {!isReadyToApprove ? (
+                            <div style={{
+                              marginTop: '4px',
+                              padding: '8px 12px',
+                              borderRadius: '8px',
+                              background: 'rgba(239, 68, 68, 0.12)',
+                              border: '1px solid rgba(239, 68, 68, 0.3)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              color: '#f87171',
+                              fontSize: '0.75rem'
+                            }}>
+                              <AlertTriangle size={15} style={{ flexShrink: 0 }} />
+                              <span>
+                                <strong>Bloqueio de Aprovação ({missingDocs.length} pendências):</strong> Faltando {missingDocs.join(', ')}.
+                              </span>
+                            </div>
+                          ) : (
+                            <div style={{
+                              marginTop: '4px',
+                              padding: '6px 12px',
+                              borderRadius: '8px',
+                              background: 'rgba(16, 185, 129, 0.1)',
+                              border: '1px solid rgba(16, 185, 129, 0.25)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              color: '#10b981',
+                              fontSize: '0.75rem'
+                            }}>
+                              <Check size={14} />
+                              <span><strong>Documentação completa e validada.</strong> Motorista pronto para aprovação.</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Barra de Ações Administrativas & Moderação */}
                         <div style={{
-                          marginTop: '4px',
-                          padding: '6px 12px',
-                          borderRadius: '8px',
-                          background: 'rgba(16, 185, 129, 0.1)',
-                          border: '1px solid rgba(16, 185, 129, 0.25)',
                           display: 'flex',
-                          alignItems: 'center',
+                          justifyContent: 'flex-end',
                           gap: '8px',
-                          color: '#34d399',
-                          fontSize: '0.75rem'
+                          alignItems: 'center',
+                          flexWrap: 'wrap',
+                          paddingTop: '8px',
+                          borderTop: theme === 'light' ? '1px solid #f1f5f9' : '1px solid rgba(255, 255, 255, 0.05)'
                         }}>
-                          <Check size={14} />
-                          <span><strong>Documentação completa e validada.</strong> Motorista pronto para aprovação.</span>
+                          {d.verificationStatus !== 'approved' && (
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateStatus(d, 'approved')}
+                              className={isReadyToApprove ? "btn-success" : "btn-outline"}
+                              title={isReadyToApprove ? "Aprovar motorista" : `Faltam documentos: ${missingDocs.join(', ')}`}
+                              style={{ 
+                                padding: '7px 14px', 
+                                fontSize: '0.8rem',
+                                opacity: isReadyToApprove ? 1 : 0.65,
+                                cursor: isReadyToApprove ? 'pointer' : 'not-allowed',
+                                border: isReadyToApprove ? undefined : '1px dashed #ef4444',
+                                color: isReadyToApprove ? '#fff' : '#f87171'
+                              }}
+                            >
+                              <CheckCircle2 size={15} /> Aprovar Motorista
+                            </button>
+                          )}
+
+                          {d.verificationStatus === 'approved' && (
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateStatus(d, 'under_review')}
+                              className="btn-outline"
+                              style={{ padding: '7px 12px', fontSize: '0.8rem', color: '#f59e0b' }}
+                            >
+                              <Clock size={14} /> Suspender / Reavaliar
+                            </button>
+                          )}
+
+                          {d.verificationStatus !== 'rejected' && (
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateStatus(d, 'rejected')}
+                              className="btn-outline"
+                              style={{ padding: '7px 12px', fontSize: '0.8rem', color: '#ef4444' }}
+                              title="Reprovar cadastro do motorista"
+                            >
+                              <XCircle size={14} /> Reprovar
+                            </button>
+                          )}
+
+                          {/* Botão de Editar Cadastro do Motorista */}
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditDriver(d)}
+                            className="btn-outline"
+                            style={{
+                              padding: '7px 12px',
+                              fontSize: '0.8rem',
+                              color: theme === 'light' ? '#4338ca' : '#818cf8',
+                              borderColor: theme === 'light' ? 'rgba(99, 102, 241, 0.5)' : 'rgba(99, 102, 241, 0.4)',
+                              background: theme === 'light' ? 'rgba(99, 102, 241, 0.08)' : 'rgba(99, 102, 241, 0.08)',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px'
+                            }}
+                            title="Editar dados cadastrais do motorista (Nome, CPF, Veículo, CNH)"
+                          >
+                            <Edit3 size={14} /> Editar
+                          </button>
+
+                          {/* Botão de Excluir Motorista com Confirmação */}
+                          <button
+                            type="button"
+                            onClick={() => setDriverToDelete(d)}
+                            className="btn-outline"
+                            style={{
+                              padding: '7px 12px',
+                              fontSize: '0.8rem',
+                              color: '#ef4444',
+                              borderColor: 'rgba(239, 68, 68, 0.3)',
+                              background: 'rgba(239, 68, 68, 0.08)'
+                            }}
+                            title="Excluir motorista permanentemente"
+                          >
+                            <Trash2 size={14} /> Excluir
+                          </button>
                         </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}

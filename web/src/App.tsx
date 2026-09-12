@@ -2904,6 +2904,7 @@ export function App() {
             supabaseConnected={supabaseConnected}
             onReloadRides={fetchRides}
             onLogout={handleLogout}
+            theme={theme}
           />
         )}
 
