@@ -14,6 +14,8 @@ export const LogoProposalsModal: React.FC<LogoProposalsModalProps> = ({
 }) => {
   const [selectedId, setSelectedId] = useState<number>(() => {
     try {
+      const dedicated = localStorage.getItem('drivehora_selected_logo_option');
+      if (dedicated === '1' || dedicated === '2' || dedicated === '3') return Number(dedicated);
       const raw = localStorage.getItem('drivehora_system_settings_v1');
       if (raw) {
         const parsed = JSON.parse(raw);
@@ -25,6 +27,11 @@ export const LogoProposalsModal: React.FC<LogoProposalsModalProps> = ({
 
   useEffect(() => {
     try {
+      const dedicated = localStorage.getItem('drivehora_selected_logo_option');
+      if (dedicated === '1' || dedicated === '2' || dedicated === '3') {
+        setSelectedId(Number(dedicated));
+        return;
+      }
       const raw = localStorage.getItem('drivehora_system_settings_v1');
       if (raw) {
         const parsed = JSON.parse(raw);
@@ -174,7 +181,12 @@ export const LogoProposalsModal: React.FC<LogoProposalsModalProps> = ({
             return (
               <div
                 key={p.id}
-                onClick={() => setSelectedId(p.id)}
+                onClick={() => {
+                  setSelectedId(p.id);
+                  if (onSelectLogo) {
+                    onSelectLogo(p.id);
+                  }
+                }}
                 className="modal-themed-card"
                 style={{
                   borderRadius: '20px',

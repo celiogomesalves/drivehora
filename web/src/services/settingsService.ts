@@ -144,16 +144,35 @@ const DB_SETTINGS_KEY = 'global_platform_settings';
 export const getSystemSettings = (): SystemSettings => {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (!saved) return DEFAULT_SETTINGS;
+    const dedicatedLogo = typeof window !== 'undefined' ? localStorage.getItem('drivehora_selected_logo_option') : null;
+    const dedicatedLogoNum = dedicatedLogo ? Number(dedicatedLogo) : null;
+
+    if (!saved) {
+      if (dedicatedLogoNum === 1 || dedicatedLogoNum === 2 || dedicatedLogoNum === 3) {
+        return {
+          ...DEFAULT_SETTINGS,
+          branding: {
+            ...DEFAULT_SETTINGS.branding,
+            logoOption: dedicatedLogoNum as 1 | 2 | 3
+          }
+        };
+      }
+      return DEFAULT_SETTINGS;
+    }
+
     const parsed = JSON.parse(saved);
     const fb = parsed.firebase || {};
     const br = parsed.branding || {};
+
+    const activeLogoOption = (dedicatedLogoNum === 1 || dedicatedLogoNum === 2 || dedicatedLogoNum === 3)
+      ? (dedicatedLogoNum as 1 | 2 | 3)
+      : ((br.logoOption === 1 || br.logoOption === 2 || br.logoOption === 3) ? br.logoOption : DEFAULT_SETTINGS.branding.logoOption);
 
     return {
       ...DEFAULT_SETTINGS,
       ...parsed,
       branding: {
-        logoOption: (br.logoOption === 1 || br.logoOption === 2 || br.logoOption === 3) ? br.logoOption : DEFAULT_SETTINGS.branding.logoOption,
+        logoOption: activeLogoOption,
         newRideSound: (br.newRideSound === 'new_ride_a' || br.newRideSound === 'new_ride_b' || br.newRideSound === 'new_ride_c') ? br.newRideSound : DEFAULT_SETTINGS.branding.newRideSound,
         acceptedSound: 'accepted_a',
         inProgressSound: 'in_progress_a',
@@ -254,7 +273,21 @@ export const fetchSystemSettingsFromDb = async (): Promise<SystemSettings> => {
       appUrl: dbConfig.appUrl?.trim() || DEFAULT_SETTINGS.appUrl,
       vehicleCategories: (dbConfig.vehicleCategories && dbConfig.vehicleCategories.length > 0) 
         ? dbConfig.vehicleCategories 
-        : DEFAULT_VEHICLE_CATEGORIES
+        : DEFAULT_VEHICLE_CATEGORIES,
+      branding: {
+        logoOption: (() => {
+          const dedicated = typeof window !== 'undefined' ? localStorage.getItem('drivehora_selected_logo_option') : null;
+          if (dedicated === '1' || dedicated === '2' || dedicated === '3') return Number(dedicated) as 1 | 2 | 3;
+          if (dbConfig.branding?.logoOption) return dbConfig.branding.logoOption;
+          if (local.branding?.logoOption) return local.branding.logoOption;
+          return DEFAULT_SETTINGS.branding.logoOption;
+        })(),
+        newRideSound: dbConfig.branding?.newRideSound || local.branding?.newRideSound || DEFAULT_SETTINGS.branding.newRideSound,
+        acceptedSound: 'accepted_a',
+        inProgressSound: 'in_progress_a',
+        finishedSound: 'finished_a',
+        timeAlertSound: 'time_alert'
+      }
     };
 
     localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));

@@ -7965,6 +7965,9 @@ export function App() {
         isOpen={showLogoModal}
         onClose={() => setShowLogoModal(false)}
         onSelectLogo={async (optionId) => {
+          try {
+            localStorage.setItem('drivehora_selected_logo_option', String(optionId));
+          } catch {}
           const updated = {
             ...systemSettings,
             branding: {
@@ -7973,6 +7976,9 @@ export function App() {
             }
           };
           setSystemSettings(updated);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('drivehora_settings_updated', { detail: updated }));
+          }
           await saveSystemSettings(updated);
           showToast(`Logo ${optionId} definida como padrão oficial e refletida em todo o sistema!`, 'success');
         }}

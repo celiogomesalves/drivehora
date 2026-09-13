@@ -19,9 +19,13 @@ export const DriveHoraLogo: React.FC<DriveHoraLogoProps> = ({
   className
 }) => {
   const [activeOption, setActiveOption] = useState<1 | 2 | 3>(() => {
-    if (option) return option;
+    if (option && (option === 1 || option === 2 || option === 3)) return option;
     try {
-      const raw = localStorage.getItem('drivehora_system_settings_v1');
+      const dedicated = typeof window !== 'undefined' ? localStorage.getItem('drivehora_selected_logo_option') : null;
+      if (dedicated === '1' || dedicated === '2' || dedicated === '3') {
+        return Number(dedicated) as 1 | 2 | 3;
+      }
+      const raw = typeof window !== 'undefined' ? localStorage.getItem('drivehora_system_settings_v1') : null;
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed.branding?.logoOption) return parsed.branding.logoOption;
@@ -40,14 +44,30 @@ export const DriveHoraLogo: React.FC<DriveHoraLogoProps> = ({
   // Escuta atualizações de sistema transmitidas em tempo real (ex: troca de logo pelo Admin)
   useEffect(() => {
     const handleSettingsUpdated = (e: any) => {
+      try {
+        const dedicated = localStorage.getItem('drivehora_selected_logo_option');
+        if (dedicated === '1' || dedicated === '2' || dedicated === '3') {
+          setActiveOption(Number(dedicated) as 1 | 2 | 3);
+          return;
+        }
+      } catch {}
       const opt = e.detail?.branding?.logoOption;
       if (opt && (opt === 1 || opt === 2 || opt === 3)) {
         setActiveOption(opt);
       }
     };
     window.addEventListener('drivehora_settings_updated', handleSettingsUpdated);
-    return () => window.removeEventListener('drivehora_settings_updated', handleSettingsUpdated);
+    window.addEventListener('storage', handleSettingsUpdated);
+    return () => {
+      window.removeEventListener('drivehora_settings_updated', handleSettingsUpdated);
+      window.removeEventListener('storage', handleSettingsUpdated);
+    };
   }, []);
+
+  // Prioridade absoluta síncrona: se a prop option estiver definida, usa imediatamente
+  const currentOption: 1 | 2 | 3 = (option === 1 || option === 2 || option === 3)
+    ? option
+    : activeOption;
 
   return (
     <div
@@ -72,9 +92,9 @@ export const DriveHoraLogo: React.FC<DriveHoraLogoProps> = ({
     >
       {/* Imagem de Alta Fidelidade do Conceito Selecionado - Exibida em sua Total Integridade */}
       <img
-        key={`drivehora-logo-${activeOption}`}
-        src={`/branding/logo_option_${activeOption}.jpg`}
-        alt={`DriveHora Logo Oficial (Opção ${activeOption})`}
+        key={`drivehora-logo-${currentOption}`}
+        src={`/branding/logo_option_${currentOption}.jpg`}
+        alt={`DriveHora Logo Oficial (Opção ${currentOption})`}
         style={{
           width: '100%',
           height: '100%',
