@@ -2442,7 +2442,11 @@ export function App() {
                 cursor: isUserAdmin ? 'pointer' : 'default' 
               }}
             >
-              <DriveHoraLogo size={38} option={systemSettings.branding?.logoOption || 2} />
+              <DriveHoraLogo 
+                key={`main-header-logo-${systemSettings.branding?.logoOption || 2}`} 
+                size={38} 
+                option={systemSettings.branding?.logoOption || 2} 
+              />
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span className="app-brand-title">DriveHora</span>
@@ -7980,7 +7984,6 @@ export function App() {
             window.dispatchEvent(new CustomEvent('drivehora_settings_updated', { detail: updated }));
           }
           await saveSystemSettings(updated);
-          showToast(`Logo ${optionId} definida como padrão oficial e refletida em todo o sistema!`, 'success');
         }}
       />
 

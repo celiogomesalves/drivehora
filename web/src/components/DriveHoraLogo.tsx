@@ -1,4 +1,13 @@
 import React, { useState, useEffect } from 'react';
+import logoOption1 from '../assets/branding/logo_option_1.jpg';
+import logoOption2 from '../assets/branding/logo_option_2.jpg';
+import logoOption3 from '../assets/branding/logo_option_3.jpg';
+
+const LOGO_IMAGES: Record<1 | 2 | 3, string> = {
+  1: logoOption1,
+  2: logoOption2,
+  3: logoOption3
+};
 
 interface DriveHoraLogoProps {
   size?: number;
@@ -8,9 +17,9 @@ interface DriveHoraLogoProps {
 }
 
 /**
- * DriveHoraLogo - Identidade Visual Moderna e Sofisticada
- * Renderiza o conceito aprovado (Opções 1, 2 ou 3) com sincronização em tempo real
- * quando o Administrador altera as configurações da marca na plataforma.
+ * DriveHoraLogo - Identidade Visual Oficial DriveHora
+ * Renderiza o conceito aprovado (Opções 1, 2 ou 3) com importação direta de assets
+ * empacotados pelo Vite e sincronização em tempo real imediata.
  */
 export const DriveHoraLogo: React.FC<DriveHoraLogoProps> = ({
   size = 38,
@@ -34,14 +43,14 @@ export const DriveHoraLogo: React.FC<DriveHoraLogoProps> = ({
     return 2;
   });
 
-  // Reatividade imediata: sincroniza com a prop option sempre que ela for atualizada
+  // Reatividade imediata para alterações de prop
   useEffect(() => {
     if (option && (option === 1 || option === 2 || option === 3)) {
       setActiveOption(option);
     }
   }, [option]);
 
-  // Escuta atualizações de sistema transmitidas em tempo real (ex: troca de logo pelo Admin)
+  // Escuta atualizações locais e de outras abas
   useEffect(() => {
     const handleSettingsUpdated = (e: any) => {
       try {
@@ -64,10 +73,12 @@ export const DriveHoraLogo: React.FC<DriveHoraLogoProps> = ({
     };
   }, []);
 
-  // Prioridade absoluta síncrona: se a prop option estiver definida, usa imediatamente
+  // Prioridade síncrona: usa a prop se definida, senão o estado ativo
   const currentOption: 1 | 2 | 3 = (option === 1 || option === 2 || option === 3)
     ? option
     : activeOption;
+
+  const currentImageSrc = LOGO_IMAGES[currentOption] || LOGO_IMAGES[2];
 
   return (
     <div
@@ -90,10 +101,9 @@ export const DriveHoraLogo: React.FC<DriveHoraLogoProps> = ({
         ...style
       }}
     >
-      {/* Imagem de Alta Fidelidade do Conceito Selecionado - Exibida em sua Total Integridade */}
       <img
-        key={`drivehora-logo-${currentOption}`}
-        src={`/branding/logo_option_${currentOption}.jpg`}
+        key={`drivehora-logo-img-${currentOption}`}
+        src={currentImageSrc}
         alt={`DriveHora Logo Oficial (Opção ${currentOption})`}
         style={{
           width: '100%',
@@ -102,99 +112,7 @@ export const DriveHoraLogo: React.FC<DriveHoraLogoProps> = ({
           borderRadius: Math.max(2, Math.round(size * 0.16)),
           display: 'block'
         }}
-        onError={(e) => {
-          // Se a imagem falhar em carregar, oculta para exibir o SVG interno de fallback
-          (e.currentTarget as HTMLElement).style.display = 'none';
-        }}
       />
-
-      <svg
-        width={Math.round(size * 0.68)}
-        height={Math.round(size * 0.68)}
-        viewBox="0 0 48 48"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-        style={{ position: 'absolute', zIndex: 0 }}
-      >
-        <defs>
-          {/* Gradiente do Monograma 'D' + Velocidade */}
-          <linearGradient id="dhGradientD" x1="4" y1="6" x2="44" y2="42" gradientUnits="userSpaceOnUse">
-            <stop stopColor="#ffffff" />
-            <stop offset="0.45" stopColor="#c7d2fe" />
-            <stop offset="1" stopColor="#818cf8" />
-          </linearGradient>
-
-          {/* Gradiente do Dial Interno de Hora */}
-          <linearGradient id="dhDialGradient" x1="18" y1="12" x2="38" y2="34" gradientUnits="userSpaceOnUse">
-            <stop stopColor="#38bdf8" />
-            <stop offset="1" stopColor="#6366f1" />
-          </linearGradient>
-
-          {/* Sombra de Profundidade */}
-          <filter id="dhGlow" x="-20%" y="-20%" width="140%" height="140%">
-            <feDropShadow dx="0" dy="1" stdDeviation="1.5" floodColor="#4f46e5" floodOpacity="0.6" />
-          </filter>
-        </defs>
-
-        {/* Trilha Aerodinâmica Traseira (Velocidade & Fluidez) */}
-        <path
-          d="M6 18C10 18 13 16 16 14"
-          stroke="#818cf8"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeOpacity="0.75"
-        />
-        <path
-          d="M4 24C9 24 13 23 18 21"
-          stroke="#a5b4fc"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-        />
-        <path
-          d="M7 30C11 30 14 31 17 33"
-          stroke="#6366f1"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeOpacity="0.75"
-        />
-
-        {/* Monograma Estrutural 'D' Esculpido */}
-        <path
-          d="M18 10H26C34.2843 10 41 16.268 41 24C41 31.732 34.2843 38 26 38H18V10Z"
-          stroke="url(#dhGradientD)"
-          strokeWidth="3.2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          filter="url(#dhGlow)"
-        />
-
-        {/* Mostrador Circular do Cronógrafo de Horas (O 'Hora' da marca) */}
-        <circle
-          cx="27"
-          cy="24"
-          r="8"
-          stroke="url(#dhDialGradient)"
-          strokeWidth="2"
-          strokeDasharray="1.5 2"
-        />
-
-        {/* Ponteiros do Relógio de Precisão / Vetor de Direção */}
-        <path
-          d="M27 24L27 19.5"
-          stroke="#ffffff"
-          strokeWidth="2.2"
-          strokeLinecap="round"
-        />
-        <path
-          d="M27 24L31.5 26.5"
-          stroke="#38bdf8"
-          strokeWidth="2.2"
-          strokeLinecap="round"
-        />
-
-        {/* Centro Pivô de Precisão em Joia / Titânio */}
-        <circle cx="27" cy="24" r="1.8" fill="#ffffff" />
-      </svg>
     </div>
   );
 };

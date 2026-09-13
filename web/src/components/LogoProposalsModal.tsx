@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Sparkles, X, CheckCircle2, Award, Shield, Cpu } from 'lucide-react';
+import logoOption1 from '../assets/branding/logo_option_1.jpg';
+import logoOption2 from '../assets/branding/logo_option_2.jpg';
+import logoOption3 from '../assets/branding/logo_option_3.jpg';
 
 interface LogoProposalsModalProps {
   isOpen: boolean;
@@ -48,7 +51,7 @@ export const LogoProposalsModal: React.FC<LogoProposalsModalProps> = ({
       title: 'Opção 1: Chrono-Drive Tech',
       tag: 'Futurista & Vibrante',
       icon: Cpu,
-      imageSrc: '/branding/logo_option_1.jpg',
+      imageSrc: logoOption1,
       description: 'Monograma "D" aerodinâmico com mostrador de cronógrafo interno e rastro de vento neon.',
       palette: ['#0f172a', '#4f46e5', '#818cf8', '#38bdf8'],
       highlights: 'Alta visibilidade em telas mobile, ideal para perfil tech moderno.'
@@ -58,7 +61,7 @@ export const LogoProposalsModal: React.FC<LogoProposalsModalProps> = ({
       title: 'Opção 2: Infinito & Velocímetro Titânio',
       tag: 'Mais Votada • Luxo & Minimalismo',
       icon: Sparkles,
-      imageSrc: '/branding/logo_option_2.jpg',
+      imageSrc: logoOption2,
       description: 'Fusão contínua da letra "D" com o símbolo do infinito (tempo ilimitado) em aço escovado e ponteiro cobalto.',
       palette: ['#0a0d14', '#1e293b', '#3b82f6', '#e2e8f0'],
       highlights: 'Extrema elegância, padrão de montadoras como Porsche e Tesla.'
@@ -68,7 +71,7 @@ export const LogoProposalsModal: React.FC<LogoProposalsModalProps> = ({
       title: 'Opção 3: Shield Asas Executivas',
       tag: 'Chauffeur VIP & Tradicional',
       icon: Shield,
-      imageSrc: '/branding/logo_option_3.jpg',
+      imageSrc: logoOption3,
       description: 'Emblema em formato de escudo heráldico com asas em titânio e relógio de alta relojoaria suíça no centro.',
       palette: ['#111827', '#1e3a8a', '#94a3b8', '#ffffff'],
       highlights: 'Transmite máxima solidez, segurança e pontualidade executiva.'
