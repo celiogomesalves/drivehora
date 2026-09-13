@@ -5,6 +5,7 @@ import { DriveHoraLogo } from './DriveHoraLogo';
 interface AboutAppModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onOpenTerms?: () => void;
   logoOption?: 1 | 2 | 3;
   theme?: 'light' | 'dark';
 }
@@ -12,6 +13,7 @@ interface AboutAppModalProps {
 export const AboutAppModal: React.FC<AboutAppModalProps> = ({
   isOpen,
   onClose,
+  onOpenTerms,
   logoOption = 2,
   theme = 'dark'
 }) => {
@@ -260,6 +262,33 @@ export const AboutAppModal: React.FC<AboutAppModalProps> = ({
             </span>
           </div>
         </div>
+
+        {/* Link para Termos & LGPD */}
+        {onOpenTerms && (
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              onOpenTerms();
+            }}
+            className="btn-outline"
+            style={{
+              width: '100%',
+              padding: '10px',
+              fontSize: '0.8rem',
+              fontWeight: 600,
+              borderRadius: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              cursor: 'pointer'
+            }}
+          >
+            <ShieldCheck size={15} />
+            <span>Ver Termos de Uso & Privacidade (LGPD)</span>
+          </button>
+        )}
 
         {/* Botão de Fechar */}
         <button

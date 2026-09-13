@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { UserRole, UserProfile } from '../types/auth';
-import { isSuperAdminEmail } from '../types/auth';
+import { isSuperAdminEmail, CURRENT_TERMS_VERSION } from '../types/auth';
 import { 
   Users, Car, LogIn, Mail, Lock, User, Phone, ShieldCheck, 
   Clock, DollarSign, LogOut, X, ShieldAlert 
@@ -15,12 +15,14 @@ import {
   getDeviceName, getLocalSessionToken, setLocalSessionToken, 
   generateSessionToken, formatDeviceName 
 } from '../utils/sessionHelper';
+import { TermsAndPrivacyModal } from './TermsAndPrivacyModal';
 
 interface LoginPageProps {
   onLoginSuccess: (user: UserProfile) => void;
+  theme?: 'light' | 'dark';
 }
 
-export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
+export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, theme = 'dark' }) => {
   const [selectedRole, setSelectedRole] = useState<UserRole>('client');
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
@@ -28,6 +30,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  // Estados de Aceite Obrigatório dos Termos de Uso e LGPD
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
+  const [termsModalTab, setTermsModalTab] = useState<'terms' | 'privacy'>('terms');
+  const [termsError, setTermsError] = useState(false);
 
   // Estado para detecção de sessão concorrente em outro aparelho
   const [concurrentSessionData, setConcurrentSessionData] = useState<{
@@ -58,6 +66,15 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // 🛡️ VALIDAÇÃO RIGOROSA LGPD: Login só permitido se aceitar os Termos e Privacidade
+    if (!acceptedTerms) {
+      setTermsError(true);
+      setTermsModalTab('terms');
+      setShowTermsModal(true);
+      return;
+    }
+    setTermsError(false);
     setIsLoading(true);
 
     const cleanEmail = email.trim().toLowerCase() || (selectedRole === 'client' ? 'passageiro@drivehora.com' : 'motorista@drivehora.com');
@@ -76,7 +93,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       role: isAdmin ? 'admin' : selectedRole,
       phone: (phone.trim() ? formatPhone(phone) : existingProfile?.phone) || '',
       isAdmin: isAdmin,
-      createdAt: existingProfile?.createdAt || new Date().toISOString()
+      createdAt: existingProfile?.createdAt || new Date().toISOString(),
+      termsAcceptedAt: new Date().toISOString(),
+      termsVersion: CURRENT_TERMS_VERSION
     };
 
     // 🛡️ VERIFICAÇÃO DE SESSÃO ÚNICA (Single Device Session):
@@ -367,6 +386,88 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               </div>
             </div>
 
+            {/* Aceite Obrigatório dos Termos de Uso e LGPD */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '10px',
+              padding: '12px 14px',
+              borderRadius: '12px',
+              background: acceptedTerms 
+                ? (theme === 'light' ? '#eff6ff' : 'rgba(99, 102, 241, 0.12)') 
+                : (termsError ? (theme === 'light' ? '#fef2f2' : 'rgba(239, 68, 68, 0.12)') : (theme === 'light' ? '#f8fafc' : 'rgba(255, 255, 255, 0.03)')),
+              border: acceptedTerms 
+                ? (theme === 'light' ? '1px solid #93c5fd' : '1px solid rgba(99, 102, 241, 0.35)') 
+                : (termsError ? '1px solid #ef4444' : (theme === 'light' ? '1px solid #cbd5e1' : '1px solid var(--border-subtle)')),
+              fontSize: '0.8rem',
+              color: 'var(--text-secondary)',
+              transition: 'all 0.2s'
+            }}>
+              <input
+                type="checkbox"
+                id="loginTermsCheckbox"
+                checked={acceptedTerms}
+                onChange={(e) => {
+                  setAcceptedTerms(e.target.checked);
+                  if (e.target.checked) setTermsError(false);
+                }}
+                style={{
+                  width: '18px',
+                  height: '18px',
+                  accentColor: '#2563eb',
+                  marginTop: '2px',
+                  cursor: 'pointer',
+                  flexShrink: 0
+                }}
+                required
+              />
+              <label htmlFor="loginTermsCheckbox" style={{ cursor: 'pointer', lineHeight: 1.45 }}>
+                Declaro que li e concordo expressamente com os{' '}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTermsModalTab('terms');
+                    setShowTermsModal(true);
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    color: theme === 'light' ? '#1d4ed8' : '#818cf8',
+                    fontWeight: 700,
+                    textDecoration: 'underline',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Termos de Uso
+                </button>
+                {' '}e com a{' '}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTermsModalTab('privacy');
+                    setShowTermsModal(true);
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    color: theme === 'light' ? '#1d4ed8' : '#818cf8',
+                    fontWeight: 700,
+                    textDecoration: 'underline',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Política de Privacidade & Proteção de Dados (LGPD)
+                </button>.
+                {termsError && (
+                  <span style={{ color: '#ef4444', display: 'block', fontWeight: 700, marginTop: '4px' }}>
+                    ⚠️ O aceite dos termos é obrigatório para acessar o aplicativo.
+                  </span>
+                )}
+              </label>
+            </div>
+
             <button
               type="submit"
               disabled={isLoading}
@@ -504,7 +605,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         </div>
       )}
 
-      {/* Footer */}
+      {/* Footer com Links Legais */}
       <footer style={{
         maxWidth: '1100px',
         margin: '0 auto',
@@ -513,10 +614,68 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         fontSize: '0.8rem',
         color: 'var(--text-muted)',
         paddingTop: '20px',
-        borderTop: '1px solid var(--border-subtle)'
+        borderTop: '1px solid var(--border-subtle)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px',
+        alignItems: 'center'
       }}>
-        © 2026 DriveHora — Plataforma de Motoristas Particulares por Hora. Todos os direitos reservados.
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap', justifyContent: 'center' }}>
+          <button
+            type="button"
+            onClick={() => {
+              setTermsModalTab('terms');
+              setShowTermsModal(true);
+            }}
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              fontSize: '0.78rem',
+              color: theme === 'light' ? '#2563eb' : '#818cf8',
+              cursor: 'pointer',
+              textDecoration: 'underline'
+            }}
+          >
+            Termos de Uso
+          </button>
+          <span>•</span>
+          <button
+            type="button"
+            onClick={() => {
+              setTermsModalTab('privacy');
+              setShowTermsModal(true);
+            }}
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              fontSize: '0.78rem',
+              color: theme === 'light' ? '#2563eb' : '#818cf8',
+              cursor: 'pointer',
+              textDecoration: 'underline'
+            }}
+          >
+            Política de Privacidade & Proteção de Dados (LGPD)
+          </button>
+        </div>
+        <div>
+          © 2026 DriveHora — Plataforma de Motoristas Particulares por Hora. Todos os direitos reservados.
+        </div>
       </footer>
+
+      {/* Modal Interativo de Termos de Uso e LGPD */}
+      <TermsAndPrivacyModal
+        isOpen={showTermsModal}
+        onClose={() => setShowTermsModal(false)}
+        initialTab={termsModalTab}
+        theme={theme}
+        mustAccept={false}
+        onAccept={() => {
+          setAcceptedTerms(true);
+          setTermsError(false);
+        }}
+      />
     </div>
   );
 };

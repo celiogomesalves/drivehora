@@ -3485,7 +3485,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       appUrl: e.target.value
                     }))}
                     className="input-field"
-                    style={{ width: '100%', fontSize: '0.85rem' }}
+                    style={{ 
+                      width: '100%', 
+                      fontSize: '0.85rem',
+                      background: theme === 'light' ? '#ffffff' : 'var(--bg-surface)',
+                      color: 'var(--text-primary)',
+                      border: theme === 'light' ? '1px solid #cbd5e1' : '1px solid var(--border-subtle)'
+                    }}
                   />
                   <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
                     Padrão: <code>https://drivehora.agenc-ia.net</code> (ou qualquer outro domínio/subdomínio customizado).

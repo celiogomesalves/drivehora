@@ -13,7 +13,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import confetti from 'canvas-confetti';
 import { getSupabase, getSupabaseCredentials, saveSupabaseCredentials, initGlobalSupabaseConfig } from './supabase';
 import type { UserProfile, ClientProfile, DriverProfile, DriverPublicProfile } from './types/auth';
-import { isSuperAdminEmail } from './types/auth';
+import { isSuperAdminEmail, CURRENT_TERMS_VERSION } from './types/auth';
 import { LoginPage } from './components/LoginPage';
 import { DriveHoraLogo } from './components/DriveHoraLogo';
 import { ClientOnboarding } from './components/ClientOnboarding';
@@ -31,6 +31,7 @@ import { ActiveRidePanel } from './components/ActiveRidePanel';
 import { SoundAuditionModal } from './components/SoundAuditionModal';
 import { LogoProposalsModal } from './components/LogoProposalsModal';
 import { AboutAppModal } from './components/AboutAppModal';
+import { TermsAndPrivacyModal } from './components/TermsAndPrivacyModal';
 import { getUserWallet, addWalletCredit, addWalletDebit, type UserWallet } from './services/walletService';
 import { dbCreateRideReport } from './services/dbService';
 import { GpsNavigationModal } from './components/GpsNavigationModal';
@@ -39,7 +40,7 @@ import { sendAppNotification, requestNotificationPermission } from './services/s
 import { getCurrentPosition, reverseGeocode, searchAddressPlaces, geocodeAddress } from './services/gpsService';
 import { formatCurrency, formatCurrencyInput, parseCurrencyInput } from './utils/formatters';
 import { 
-  dbGetClientProfile, dbGetDriverProfile, dbGetAllDrivers,
+  dbGetClientProfile, dbGetDriverProfile, dbGetAllDrivers, dbSaveProfile,
   dbCreateRide, dbUpdateRide, dbCancelRide, dbAcknowledgeRide, dbUpdateDriverOnlineStatus, dbUpdateDriverLocation,
   dbGetFavoriteDriverIds, dbToggleFavoriteDriver, dbSaveUserDeviceToken, dbCheckUserSession,
   dbCreditDriverCancellationFee, dbSendRideChatMessage, dbExtendRideHours,
@@ -312,6 +313,8 @@ export function App() {
   const [showSoundAuditionModal, setShowSoundAuditionModal] = useState(false);
   const [showLogoModal, setShowLogoModal] = useState(false);
   const [showAboutAppModal, setShowAboutAppModal] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
+  const [termsModalTab, setTermsModalTab] = useState<'terms' | 'privacy'>('terms');
   const [inputSupabaseUrl, setInputSupabaseUrl] = useState(supabaseConfig.url);
   const [inputSupabaseKey, setInputSupabaseKey] = useState(supabaseConfig.key);
   const [supabaseConnected, setSupabaseConnected] = useState(false);
@@ -2263,6 +2266,7 @@ export function App() {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--bg-primary)' }}>
         <LoginPage
+          theme={theme}
           onLoginSuccess={(user) => {
             const isAdmin = isSuperAdminEmail(user.email) || user.role === 'admin' || user.isAdmin;
             if (isAdmin) {
@@ -7997,8 +8001,42 @@ export function App() {
       <AboutAppModal
         isOpen={showAboutAppModal}
         onClose={() => setShowAboutAppModal(false)}
+        onOpenTerms={() => {
+          setTermsModalTab('terms');
+          setShowTermsModal(true);
+        }}
         logoOption={systemSettings.branding?.logoOption || 2}
         theme={theme}
+      />
+
+      {/* Modal Obrigatório / Informativo de Termos de Uso e LGPD */}
+      <TermsAndPrivacyModal
+        isOpen={showTermsModal || Boolean(currentUser && currentUser.termsVersion !== CURRENT_TERMS_VERSION)}
+        onClose={() => {
+          if (!currentUser || currentUser.termsVersion === CURRENT_TERMS_VERSION) {
+            setShowTermsModal(false);
+          }
+        }}
+        initialTab={termsModalTab}
+        theme={theme}
+        mustAccept={Boolean(currentUser && currentUser.termsVersion !== CURRENT_TERMS_VERSION)}
+        onAccept={async () => {
+          if (!currentUser) return;
+          const updated: UserProfile = {
+            ...currentUser,
+            termsAcceptedAt: new Date().toISOString(),
+            termsVersion: CURRENT_TERMS_VERSION
+          };
+          setCurrentUser(updated);
+          setShowTermsModal(false);
+          try {
+            localStorage.setItem('drivehora_current_user', JSON.stringify(updated));
+            await dbSaveProfile(updated);
+            showToast('Termos de Uso e Política de Privacidade aceitos com sucesso!', 'success');
+          } catch (e) {
+            console.warn('Erro ao sincronizar aceite dos termos:', e);
+          }
+        }}
       />
 
       {/* Modal de Cancelamento de Atendimento pelo Motorista com Justificativa */}

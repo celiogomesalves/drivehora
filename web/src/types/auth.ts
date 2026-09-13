@@ -12,6 +12,8 @@ export const isSuperAdminEmail = (email?: string | null): boolean => {
   return SUPER_ADMIN_EMAILS.includes(email.trim().toLowerCase());
 };
 
+export const CURRENT_TERMS_VERSION = '2026.1';
+
 export interface UserProfile {
   id: string;
   email: string;
@@ -24,6 +26,8 @@ export interface UserProfile {
   activeDeviceName?: string;
   lastActiveAt?: string;
   createdAt?: string;
+  termsAcceptedAt?: string;
+  termsVersion?: string;
 }
 
 export interface ClientProfile {

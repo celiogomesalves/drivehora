@@ -98,12 +98,17 @@ html.theme-light .app-header div {
 }
 
 html.theme-light .custom-input,
+html.theme-light .input-field,
+html.theme-light .select-field,
 html.theme-light input[type="text"],
+html.theme-light input[type="url"],
 html.theme-light input[type="email"],
 html.theme-light input[type="password"],
 html.theme-light input[type="number"],
 html.theme-light input[type="tel"],
 html.theme-light input[type="date"],
+html.theme-light input[type="time"],
+html.theme-light input[type="search"],
 html.theme-light select,
 html.theme-light textarea {
   background-color: #ffffff !important;
@@ -1207,7 +1212,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .input-field {
-  background: rgba(15, 23, 42, 0.85);
+  background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   color: var(--text-primary);
   padding: 12px 14px;
@@ -1226,7 +1231,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .select-field {
-  background: rgba(15, 23, 42, 0.9);
+  background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   color: var(--text-primary);
   padding: 12px 14px;
