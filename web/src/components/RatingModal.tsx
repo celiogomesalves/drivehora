@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Star, ShieldAlert, CheckCircle2, MessageSquare, Heart } from 'lucide-react';
+import { Star, ShieldAlert, CheckCircle2, MessageSquare, Heart, ThumbsUp, AlertCircle } from 'lucide-react';
 import { dbSubmitRating, type DbRide } from '../services/dbService';
+import { triggerHaptic } from '../utils/haptics';
 
 interface RatingModalProps {
   ride: DbRide;
@@ -22,9 +23,46 @@ export function RatingModal({
   const [score, setScore] = useState<number>(5);
   const [hoverScore, setHoverScore] = useState<number>(0);
   const [comment, setComment] = useState<string>('');
-  const [wantsToFavorite, setWantsToFavorite] = useState<boolean>(false);
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [selectedChips, setSelectedChips] = useState<string[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [wantsToFavorite, setWantsToFavorite] = useState<boolean>(false);
+
+  const positiveChips = [
+    '🚗 Carro Super Limpo',
+    '💬 Ótima Conversa',
+    '🛡️ Direção Segura',
+    '⏱️ Pontualidade 100%',
+    '❄️ Clima Perfeito',
+    '🎶 Música Agradável'
+  ];
+
+  const negativeChips = [
+    'Atraso excessivo',
+    'Veículo sujo ou com odor',
+    'Direção imprudente/brusca',
+    'Comportamento inadequado'
+  ];
+
+  const toggleChip = (chip: string) => {
+    triggerHaptic('light');
+    setSelectedChips(prev => {
+      const exists = prev.includes(chip);
+      const next = exists ? prev.filter(c => c !== chip) : [...prev, chip];
+      // Atualiza o comentário automaticamente com os chips selecionados
+      const customParts = comment.split(' • ').filter(part => !positiveChips.includes(part) && !negativeChips.includes(part));
+      const cleanCustom = customParts.join(' ').trim();
+      const combined = [...next, cleanCustom].filter(Boolean).join(' • ');
+      setComment(combined);
+      return next;
+    });
+  };
+
+  const handleStarClick = (star: number) => {
+    triggerHaptic('medium');
+    setScore(star);
+    setSelectedChips([]);
+  };
 
   const isClient = currentUserRole === 'client';
   const targetUserName = isClient
@@ -39,6 +77,7 @@ export function RatingModal({
 
     // Para notas 1, 2 ou 3 estrelas, a justificativa/comentário é obrigatória
     if (score <= 3 && comment.trim().length < 5) {
+      triggerHaptic('warning');
       setErrorMessage('Para notas até 3 estrelas, por favor escreva uma breve justificativa para nossa equipe de qualidade.');
       return;
     }
@@ -63,10 +102,12 @@ export function RatingModal({
         comment: comment.trim(),
         createdAt: Date.now()
       });
+      triggerHaptic('success');
       onRatingCompleted();
     } catch (err: any) {
       console.warn('Erro ao registrar avaliação:', err);
       // Mesmo se houver inconsistência de conexão, avança para não travar o usuário
+      triggerHaptic('medium');
       onRatingCompleted();
     } finally {
       setIsSubmitting(false);
@@ -149,7 +190,7 @@ export function RatingModal({
                 <button
                   key={star}
                   type="button"
-                  onClick={() => setScore(star)}
+                  onClick={() => handleStarClick(star)}
                   onMouseEnter={() => setHoverScore(star)}
                   onMouseLeave={() => setHoverScore(0)}
                   style={{
@@ -179,6 +220,75 @@ export function RatingModal({
             {score === 3 && <span style={{ color: '#f59e0b' }}>⭐ Regular (Justificativa obrigatória)</span>}
             {score === 2 && <span style={{ color: '#fb923c' }}>⭐ Ruim (Justificativa obrigatória)</span>}
             {score === 1 && <span style={{ color: '#ef4444' }}>⭐ Péssimo (A equipe avaliará o caso)</span>}
+          </div>
+
+          {/* Chips Interativos de Elogios e Motivos Rápidos */}
+          <div style={{ margin: '4px 0' }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '0.78rem',
+                fontWeight: 600,
+                color: score >= 4 ? '#34d399' : '#fca5a5',
+                marginBottom: '8px'
+              }}
+            >
+              {score >= 4 ? (
+                <>
+                  <ThumbsUp size={13} />
+                  <span>Destaques da experiência (toque para selecionar):</span>
+                </>
+              ) : (
+                <>
+                  <AlertCircle size={13} />
+                  <span>O que motivou essa avaliação? (toque para selecionar):</span>
+                </>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {(score >= 4 ? positiveChips : negativeChips).map(chip => {
+                const isSelected = selectedChips.includes(chip);
+                return (
+                  <button
+                    key={chip}
+                    type="button"
+                    onClick={() => toggleChip(chip)}
+                    style={{
+                      fontSize: '0.76rem',
+                      fontWeight: isSelected ? 700 : 500,
+                      padding: '6px 12px',
+                      borderRadius: '999px',
+                      border: isSelected
+                        ? score >= 4
+                          ? '1px solid #10b981'
+                          : '1px solid #ef4444'
+                        : '1px solid rgba(255, 255, 255, 0.12)',
+                      background: isSelected
+                        ? score >= 4
+                          ? 'rgba(16, 185, 129, 0.22)'
+                          : 'rgba(239, 68, 68, 0.22)'
+                        : 'rgba(255, 255, 255, 0.05)',
+                      color: isSelected
+                        ? score >= 4
+                          ? '#6ee7b7'
+                          : '#fca5a5'
+                        : 'var(--text-secondary, #94a3b8)',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px'
+                    }}
+                  >
+                    {isSelected && <span>✓</span>}
+                    <span>{chip}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Campo de Comentário */}

@@ -50,6 +50,8 @@ export interface DbRide {
   pinCode?: string;
   extendedHours?: number;
   chatMessages?: DbRideChatMessage[];
+  stops?: string[];
+  compliments?: string[];
 }
 
 // Timeout helper para chamadas de banco nunca travarem
@@ -768,6 +770,8 @@ export const dbGetRidesSubstatusMap = async (): Promise<Record<string, {
   pinCode?: string;
   extendedHours?: number;
   chatMessages?: DbRideChatMessage[];
+  stops?: string[];
+  compliments?: string[];
 }>> => {
   let map: Record<string, any> = {};
   try {
@@ -806,6 +810,8 @@ export const dbSetRideSubstatus = async (
     pinCode?: string;
     extendedHours?: number;
     chatMessages?: DbRideChatMessage[];
+    stops?: string[];
+    compliments?: string[];
   }
 ): Promise<void> => {
   try {

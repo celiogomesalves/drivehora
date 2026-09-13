@@ -6,6 +6,7 @@ import {
 import type { DbRide } from '../services/dbService';
 import type { DriverProfile } from '../types/auth';
 import { formatCurrency } from '../utils/formatters';
+import { triggerHaptic } from '../utils/haptics';
 
 interface ActiveRidePanelProps {
   ride: DbRide;
@@ -112,6 +113,7 @@ export const ActiveRidePanel: React.FC<ActiveRidePanelProps> = ({
   // Copiar código PIN
   const handleCopyPin = () => {
     try {
+      triggerHaptic('light');
       navigator.clipboard.writeText(pinCode);
       setCopiedLink(true);
       setTimeout(() => setCopiedLink(false), 2000);
@@ -122,6 +124,7 @@ export const ActiveRidePanel: React.FC<ActiveRidePanelProps> = ({
   const handleSendChat = async (textToSend?: string) => {
     const text = (textToSend || chatInputText).trim();
     if (!text || !onSendMessage) return;
+    triggerHaptic('light');
     await onSendMessage(ride.id, text);
     setChatInputText('');
   };
@@ -130,6 +133,7 @@ export const ActiveRidePanel: React.FC<ActiveRidePanelProps> = ({
   const handleVerifyPinSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (inputPin.trim().length !== 4) {
+      triggerHaptic('warning');
       setPinError('Digite o PIN de 4 dígitos fornecido pelo passageiro.');
       return;
     }
@@ -139,7 +143,10 @@ export const ActiveRidePanel: React.FC<ActiveRidePanelProps> = ({
       if (onStartRideWithPin) {
         const res = await onStartRideWithPin(ride.id, inputPin.trim());
         if (!res.success) {
+          triggerHaptic('error');
           setPinError(res.message || 'Código PIN incorreto. Verifique com o passageiro.');
+        } else {
+          triggerHaptic('success');
         }
       }
     } finally {
@@ -150,6 +157,7 @@ export const ActiveRidePanel: React.FC<ActiveRidePanelProps> = ({
   // Estender tempo
   const handleConfirmExtend = async (hours: number) => {
     if (onExtendRide) {
+      triggerHaptic('success');
       await onExtendRide(ride.id, hours);
       setShowExtendModal(false);
     }
@@ -659,7 +667,8 @@ export const ActiveRidePanel: React.FC<ActiveRidePanelProps> = ({
             padding: '14px',
             marginBottom: '16px'
           }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '10px' }}>
+            {/* Ponto de Partida */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '12px' }}>
               <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#6366f1', marginTop: '4px', flexShrink: 0 }} />
               <div>
                 <span style={{ fontSize: '0.7rem', color: textSub, textTransform: 'uppercase' }}>Ponto de Partida</span>
@@ -667,6 +676,36 @@ export const ActiveRidePanel: React.FC<ActiveRidePanelProps> = ({
               </div>
             </div>
 
+            {/* Paradas Intermediárias */}
+            {ride.stops && ride.stops.length > 0 && ride.stops.map((stop, sIdx) => (
+              <div key={sIdx} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '12px', marginLeft: '1px' }}>
+                <div style={{
+                  width: '16px',
+                  height: '16px',
+                  borderRadius: '50%',
+                  background: 'rgba(245, 158, 11, 0.2)',
+                  border: '1.5px solid #f59e0b',
+                  color: '#f59e0b',
+                  fontSize: '0.62rem',
+                  fontWeight: 800,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginTop: '2px',
+                  flexShrink: 0
+                }}>
+                  {sIdx + 1}
+                </div>
+                <div>
+                  <span style={{ fontSize: '0.7rem', color: '#f59e0b', textTransform: 'uppercase', fontWeight: 700 }}>
+                    Parada Intermediária {sIdx + 1}
+                  </span>
+                  <div style={{ fontSize: '0.84rem', fontWeight: 600, color: textTitle }}>{stop}</div>
+                </div>
+              </div>
+            ))}
+
+            {/* Destino Principal */}
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
               <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: '#10b981', marginTop: '4px', flexShrink: 0 }} />
               <div>

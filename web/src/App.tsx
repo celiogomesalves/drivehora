@@ -46,6 +46,7 @@ import { getSystemSettings, fetchSystemSettingsFromDb, type SystemSettings } fro
 import { testGatewayConnection, createPixPayment, simulateAsaasPayment, type PaymentMethodType } from './services/paymentGatewayService';
 import { getLocalSessionToken, clearLocalSessionToken } from './utils/sessionHelper';
 import { useSystemDialog } from './components/SystemDialog';
+import { triggerHaptic } from './utils/haptics';
 
 export function App() {
   const { showAlert, showConfirm, showToast } = useSystemDialog();
@@ -277,10 +278,49 @@ export function App() {
   // Formulário do cliente & Busca Automática de Endereços
   const [origin, setOrigin] = useState('Av. Paulista, 1000 - Bela Vista');
   const [destination, setDestination] = useState('');
+  const [stops, setStops] = useState<string[]>([]);
+  const [stopSuggestions, setStopSuggestions] = useState<Record<number, string[]>>({});
+  const [isSearchingStop, setIsSearchingStop] = useState<Record<number, boolean>>({});
   const [originSuggestions, setOriginSuggestions] = useState<string[]>([]);
   const [destSuggestions, setDestSuggestions] = useState<string[]>([]);
   const [isSearchingOrigin, setIsSearchingOrigin] = useState(false);
   const [isSearchingDest, setIsSearchingDest] = useState(false);
+
+  const handleAddStop = () => {
+    if (stops.length >= 3) {
+      showAlert('Você pode adicionar no máximo 3 paradas intermediárias.', 'info', 'Limite de Paradas');
+      return;
+    }
+    triggerHaptic('light');
+    setStops(prev => [...prev, '']);
+  };
+
+  const handleUpdateStop = (index: number, val: string) => {
+    setStops(prev => {
+      const next = [...prev];
+      next[index] = val;
+      return next;
+    });
+    if (val.trim().length >= 2) {
+      setIsSearchingStop(prev => ({ ...prev, [index]: true }));
+      searchAddressPlaces(val, clientOriginCoords).then(results => {
+        setStopSuggestions(prev => ({ ...prev, [index]: results }));
+        setIsSearchingStop(prev => ({ ...prev, [index]: false }));
+      });
+    } else {
+      setStopSuggestions(prev => ({ ...prev, [index]: [] }));
+    }
+  };
+
+  const handleRemoveStop = (index: number) => {
+    triggerHaptic('light');
+    setStops(prev => prev.filter((_, i) => i !== index));
+    setStopSuggestions(prev => {
+      const next = { ...prev };
+      delete next[index];
+      return next;
+    });
+  };
   const [hours, setHours] = useState(3);
   const [hourlyRate, setHourlyRate] = useState(60);
   const [isRequesting, setIsRequesting] = useState(false);
@@ -1423,6 +1463,7 @@ export function App() {
       clientName: currentUser?.fullName || 'Passageiro',
       origin,
       destination,
+      stops: stops.filter(s => s.trim().length > 0),
       originLat: oLat,
       originLng: oLng,
       destLat: dLat,
@@ -1446,6 +1487,8 @@ export function App() {
       favoriteDriverIds: (prioritizeFavorites && favoriteDriverIds.length > 0) ? favoriteDriverIds : undefined
     };
 
+    triggerHaptic('medium');
+
     // 1. Atualização imediata no estado local do cliente
     if (!isScheduledRide) {
       setCurrentRideId(rideId);
@@ -1454,6 +1497,7 @@ export function App() {
       // Limpa os campos do formulário para permitir novas solicitações imediatamente
       setOrigin('');
       setDestination('');
+      setStops([]);
       setSelectedAmenities([]);
       setClientOriginCoords(null);
       setIsScheduledRide(false);
@@ -1638,6 +1682,7 @@ export function App() {
 
   // Ações do Motorista
   const handleAcceptRide = async (rideId: string) => {
+    triggerHaptic('success');
     const driverId = currentUser?.id || 'driver_demo_01';
     const driverName = currentUser?.fullName || 'Motorista Parceiro';
     setDismissedRideId(null);
@@ -1652,6 +1697,7 @@ export function App() {
   };
 
   const handleStartToPickup = async (rideId: string) => {
+    triggerHaptic('medium');
     await dbUpdateRide(rideId, {
       status: 'to_pickup'
     });
@@ -1666,6 +1712,7 @@ export function App() {
   };
 
   const handleArrivedAtPickup = async (rideId: string) => {
+    triggerHaptic('success');
     const targetRide = rides.find(r => r.id === rideId);
     await dbUpdateRide(rideId, {
       status: 'arrived_at_pickup',
@@ -1683,6 +1730,7 @@ export function App() {
   };
 
   const handleStartRide = async (rideId: string) => {
+    triggerHaptic('heavy');
     const targetRide = rides.find(r => r.id === rideId);
     await dbUpdateRide(rideId, {
       status: 'in_progress',
@@ -1704,6 +1752,7 @@ export function App() {
     const targetRide = rides.find(r => r.id === rideId);
     const expectedPin = targetRide?.pinCode || '2846';
     if (enteredPin.trim() !== expectedPin.trim()) {
+      triggerHaptic('error');
       return { success: false, message: 'Código PIN incorreto. Peça os 4 dígitos que aparecem no app do passageiro.' };
     }
     await handleStartRide(rideId);
@@ -1712,6 +1761,7 @@ export function App() {
 
   // Estender horas da corrida em tempo real
   const handleExtendRide = async (rideId: string, hoursToAdd: number) => {
+    triggerHaptic('success');
     await dbExtendRideHours(rideId, hoursToAdd);
     fetchRides();
     showToast(`Franquia de tempo estendida com sucesso em +${hoursToAdd}h!`, 'success');
@@ -1719,6 +1769,7 @@ export function App() {
 
   // Enviar mensagem de chat rápido entre cliente e motorista
   const handleSendRideChatMessage = async (rideId: string, text: string) => {
+    triggerHaptic('light');
     const senderRole = (currentUser?.role === 'driver' && activeTab === 'driver') ? 'driver' : 'client';
     const senderName = currentUser?.fullName || (senderRole === 'driver' ? 'Motorista' : 'Passageiro');
     const msg: DbRideChatMessage = {
@@ -1734,6 +1785,7 @@ export function App() {
   };
 
   const handleFinishRide = async (rideId: string) => {
+    triggerHaptic('success');
     const targetRide = rides.find(r => r.id === rideId);
     await dbUpdateRide(rideId, {
       status: 'finished',
@@ -3931,6 +3983,120 @@ export function App() {
                         </div>
                       )}
                     </div>
+
+                    {/* Paradas Intermediárias Adicionadas */}
+                    {stops.map((stopVal, sIdx) => (
+                      <div key={sIdx} className="input-group" style={{ position: 'relative', background: 'rgba(245, 158, 11, 0.05)', padding: '10px 12px', borderRadius: '12px', border: '1px dashed rgba(245, 158, 11, 0.35)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                          <label style={{ margin: 0, fontSize: '0.82rem', fontWeight: 700, color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span>🟡 Parada {sIdx + 1}</span>
+                            {isSearchingStop[sIdx] && (
+                              <span style={{ fontSize: '0.68rem', color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 500 }}>
+                                <RefreshCw size={9} className="animate-spin" /> Buscando...
+                              </span>
+                            )}
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveStop(sIdx)}
+                            style={{
+                              background: 'rgba(239, 68, 68, 0.12)',
+                              border: '1px solid rgba(239, 68, 68, 0.3)',
+                              color: '#f87171',
+                              borderRadius: '6px',
+                              padding: '2px 8px',
+                              fontSize: '0.7rem',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '3px'
+                            }}
+                          >
+                            <span>✕ Remover</span>
+                          </button>
+                        </div>
+                        <input
+                          type="text"
+                          className="custom-input"
+                          value={stopVal}
+                          onChange={(e) => handleUpdateStop(sIdx, e.target.value)}
+                          placeholder={`Endereço da Parada ${sIdx + 1} (ex: Farmácia, Cartório, Supermercado...)`}
+                          style={{ borderColor: 'rgba(245, 158, 11, 0.4)' }}
+                        />
+                        {/* Sugestões de Endereço para esta Parada */}
+                        {stopSuggestions[sIdx] && stopSuggestions[sIdx].length > 0 && (
+                          <div style={{
+                            position: 'absolute',
+                            top: '100%',
+                            left: 0,
+                            right: 0,
+                            background: 'rgba(15, 23, 42, 0.98)',
+                            border: '1px solid rgba(245, 158, 11, 0.4)',
+                            borderRadius: '10px',
+                            boxShadow: '0 10px 25px rgba(0,0,0,0.6)',
+                            zIndex: 30,
+                            marginTop: '4px',
+                            maxHeight: '200px',
+                            overflowY: 'auto'
+                          }}>
+                            {stopSuggestions[sIdx].map((sug, idx) => (
+                              <div
+                                key={idx}
+                                onClick={() => {
+                                  handleUpdateStop(sIdx, sug);
+                                  setStopSuggestions(prev => ({ ...prev, [sIdx]: [] }));
+                                }}
+                                style={{
+                                  padding: '9px 12px',
+                                  fontSize: '0.8rem',
+                                  color: '#e2e8f0',
+                                  cursor: 'pointer',
+                                  borderBottom: idx < stopSuggestions[sIdx].length - 1 ? '1px solid rgba(255, 255, 255, 0.06)' : 'none',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px'
+                                }}
+                                onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(245, 158, 11, 0.2)')}
+                                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                              >
+                                <MapPin size={13} color="#f59e0b" style={{ flexShrink: 0 }} />
+                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sug}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+
+                    {/* Botão para Adicionar Parada Intermediária */}
+                    {stops.length < 3 && (
+                      <div style={{ display: 'flex', justifyContent: 'flex-start', marginTop: '-4px' }}>
+                        <button
+                          type="button"
+                          onClick={handleAddStop}
+                          style={{
+                            background: 'rgba(99, 102, 241, 0.08)',
+                            border: '1px dashed rgba(99, 102, 241, 0.35)',
+                            color: '#818cf8',
+                            borderRadius: '10px',
+                            padding: '6px 12px',
+                            fontSize: '0.78rem',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            transition: 'all 0.15s ease'
+                          }}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(99, 102, 241, 0.18)')}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(99, 102, 241, 0.08)')}
+                        >
+                          <span style={{ fontSize: '1rem', lineHeight: 1 }}>+</span>
+                          <span>Adicionar Parada Intermediária {stops.length > 0 ? `(${stops.length}/3)` : ''}</span>
+                        </button>
+                      </div>
+                    )}
 
                     {/* Campo Destino com Busca Automática ao Digitar */}
                     <div className="input-group" style={{ position: 'relative' }}>
