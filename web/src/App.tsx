@@ -94,12 +94,24 @@ export function App() {
 
   const isUserAdmin = Boolean(currentUser?.isAdmin || currentUser?.role === 'admin' || isSuperAdminEmail(currentUser?.email));
 
+  const isRideActive = (status?: string) => 
+    status === 'searching' || 
+    status === 'accepted' || 
+    status === 'to_pickup' || 
+    status === 'arrived_at_pickup' || 
+    status === 'in_progress';
+
   const [activeTab, setActiveTab] = useState<'client' | 'driver' | 'admin' | 'mobile'>(() => {
     try {
+      const savedTab = localStorage.getItem('drivehora_active_tab');
       const saved = localStorage.getItem('drivehora_current_user');
       if (!saved) return 'client';
       const parsed = JSON.parse(saved);
       if (isSuperAdminEmail(parsed.email) || parsed.role === 'admin' || parsed.isAdmin) return 'admin';
+      if (savedTab && ['client', 'driver', 'admin'].includes(savedTab)) {
+        if (parsed.role === 'driver' && (savedTab === 'driver' || savedTab === 'client')) return savedTab as any;
+        if (parsed.role === 'client') return 'client';
+      }
       if (parsed.role === 'driver') return 'driver';
       return 'client';
     } catch {
@@ -107,8 +119,30 @@ export function App() {
     }
   });
 
+  useEffect(() => {
+    try {
+      localStorage.setItem('drivehora_active_tab', activeTab);
+    } catch {}
+  }, [activeTab]);
+
   const [rides, setRides] = useState<DbRide[]>([]);
-  const [currentRideId, setCurrentRideId] = useState<string | null>(null);
+  const [currentRideId, setCurrentRideId] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('drivehora_current_ride_id');
+    } catch {
+      return null;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      if (currentRideId) {
+        localStorage.setItem('drivehora_current_ride_id', currentRideId);
+      } else {
+        localStorage.removeItem('drivehora_current_ride_id');
+      }
+    } catch {}
+  }, [currentRideId]);
   
   // Lista de IDs de corridas arquivadas pelo cliente
   const [archivedRideIds, setArchivedRideIds] = useState<string[]>(() => {
@@ -338,7 +372,21 @@ export function App() {
   const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
 
   // Cliente: Sub-aba (Solicitar Corrida, Agendadas, Radar, Favoritos VIP, Histórico ou Meus Dados/CPF)
-  const [clientSubTab, setClientSubTab] = useState<'request' | 'scheduled' | 'nearby_radar' | 'favorites' | 'history' | 'profile'>('request');
+  const [clientSubTab, setClientSubTab] = useState<'request' | 'scheduled' | 'nearby_radar' | 'favorites' | 'history' | 'profile'>(() => {
+    try {
+      const saved = localStorage.getItem('drivehora_client_subtab');
+      if (saved && ['request', 'scheduled', 'nearby_radar', 'favorites', 'history', 'profile'].includes(saved)) {
+        return saved as any;
+      }
+    } catch {}
+    return 'request';
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('drivehora_client_subtab', clientSubTab);
+    } catch {}
+  }, [clientSubTab]);
   const [expandedScheduledRideIds, setExpandedScheduledRideIds] = useState<Record<string, boolean>>({});
 
   const toggleScheduledRideExpand = (rideId: string) => {
@@ -680,7 +728,19 @@ export function App() {
   const [driverDateFilter, setDriverDateFilter] = useState<'all' | 'today' | 'week' | '15days' | '30days' | 'custom'>('week');
   const [driverCustomDate, setDriverCustomDate] = useState<string>('');
   const [driverStatusFilter, setDriverStatusFilter] = useState<'all' | 'finished' | 'cancelled' | 'in_progress'>('all');
-  const [driverSubTab, setDriverSubTab] = useState<'radar' | 'history'>('radar');
+  const [driverSubTab, setDriverSubTab] = useState<'radar' | 'history'>(() => {
+    try {
+      const saved = localStorage.getItem('drivehora_driver_subtab');
+      if (saved && (saved === 'radar' || saved === 'history')) return saved as any;
+    } catch {}
+    return 'radar';
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('drivehora_driver_subtab', driverSubTab);
+    } catch {}
+  }, [driverSubTab]);
   const [searchCancellationReason, setSearchCancellationReason] = useState<{
     rideId: string;
     reason: 'no_drivers_online' | 'timeout_10min';
@@ -1186,6 +1246,25 @@ export function App() {
             };
           });
           setRides(formatted);
+
+          // Sincronização inteligente da corrida ativa para não perder estado ao alternar telas
+          if (currentUser?.role === 'client') {
+            const activeRide = formatted.find(r => 
+              r.clientId === currentUser.id && 
+              !r.isScheduled && 
+              isRideActive(r.status)
+            );
+            if (activeRide) {
+              setCurrentRideId(prev => (prev !== activeRide.id ? activeRide.id : prev));
+            } else {
+              setCurrentRideId(prev => {
+                if (!prev) return null;
+                const match = formatted.find(r => r.id === prev);
+                if (!match || !isRideActive(match.status)) return null;
+                return prev;
+              });
+            }
+          }
           return;
         }
       } catch (e) {
@@ -1226,6 +1305,25 @@ export function App() {
           };
         });
         setRides(mapped);
+
+        // Sincronização inteligente da corrida ativa para não perder estado ao alternar telas
+        if (currentUser?.role === 'client') {
+          const activeRide = mapped.find((r: any) => 
+            r.clientId === currentUser.id && 
+            !r.isScheduled && 
+            isRideActive(r.status)
+          );
+          if (activeRide) {
+            setCurrentRideId(prev => (prev !== activeRide.id ? activeRide.id : prev));
+          } else {
+            setCurrentRideId(prev => {
+              if (!prev) return null;
+              const match = mapped.find((r: any) => r.id === prev);
+              if (!match || !isRideActive(match.status)) return null;
+              return prev;
+            });
+          }
+        }
       }
     } catch (e) {
       console.warn("Erro ao buscar corridas:", e);
@@ -1281,12 +1379,25 @@ export function App() {
     };
     window.addEventListener('drivehora_substatus_updated', handleSubstatusEvent);
 
+    // Ciclo de vida: re-sincronizar imediatamente ao alternar janelas, desbloquear celular ou voltar do Waze/Maps
+    const handleVisibilityOrFocus = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        fetchRides();
+      }
+    };
+    window.addEventListener('visibilitychange', handleVisibilityOrFocus);
+    window.addEventListener('pageshow', handleVisibilityOrFocus);
+    window.addEventListener('focus', handleVisibilityOrFocus);
+
     const interval = setInterval(() => {
       fetchRides();
     }, 3000);
 
     return () => {
       clearInterval(interval);
+      window.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+      window.removeEventListener('pageshow', handleVisibilityOrFocus);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
       window.removeEventListener('drivehora_substatus_updated', handleSubstatusEvent);
       if (channel && sb) sb.removeChannel(channel);
     };
@@ -1937,7 +2048,6 @@ export function App() {
   // ========================================================
   // CÁLCULOS E EFEITOS DO SISTEMA (DECLARADOS ANTES DO RENDER CONDICIONAL PARA RESPEITAR AS REGRAS DOS HOOKS DO REACT)
   // ========================================================
-  const isRideActive = (status?: string) => status === 'searching' || status === 'accepted' || status === 'to_pickup' || status === 'arrived_at_pickup' || status === 'in_progress';
 
   // Todas as corridas agendadas ativas do passageiro (exibidas na aba Agendadas com cards expansíveis)
   const clientScheduledRides = rides.filter(r => 

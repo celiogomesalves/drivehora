@@ -2,8 +2,8 @@
 
 export type NotificationSoundType = 'new_ride' | 'accepted' | 'in_progress' | 'finished' | 'alert';
 
-// 1. Sintetizador Web Audio API de Alta Fidelidade (Funciona sem arquivos externos)
-export const playNotificationSound = (type: NotificationSoundType = 'alert') => {
+// Sintetizador harmônico nativo do Web Audio API
+const playSynthesizedTones = (type: NotificationSoundType) => {
   try {
     const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
     if (!AudioCtx) return;
@@ -26,7 +26,7 @@ export const playNotificationSound = (type: NotificationSoundType = 'alert') => 
     };
 
     if (type === 'new_ride') {
-      // Alerta chamativo para o motorista (Arpejo duplo de alerta)
+      // Alerta chamativo para o motorista (Arpejo duplo de alerta característico DriveHora)
       playTone(880, 0, 0.15, 0.35, 'triangle');
       playTone(1174.66, 0.18, 0.22, 0.35, 'triangle');
       playTone(1479.98, 0.42, 0.3, 0.35, 'triangle');
@@ -53,8 +53,43 @@ export const playNotificationSound = (type: NotificationSoundType = 'alert') => 
       playTone(900, 0.18, 0.3, 0.25, 'sine');
     }
   } catch (e) {
-    console.warn('Erro ao reproduzir áudio Web Audio API:', e);
+    console.warn('Erro ao reproduzir áudio sintetizado:', e);
   }
+};
+
+// 1. Tocar som do aplicativo (Tenta arquivo físico exclusivo em /sounds/ e usa sintetizador como garantia)
+export const playNotificationSound = (type: NotificationSoundType = 'alert') => {
+  if (typeof window === 'undefined') return;
+
+  // Mapa de arquivos de áudio customizados (exclusivos da marca)
+  const soundFiles: Record<NotificationSoundType, string> = {
+    new_ride: '/sounds/new_ride.mp3',
+    accepted: '/sounds/accepted.mp3',
+    in_progress: '/sounds/in_progress.mp3',
+    finished: '/sounds/finished.mp3',
+    alert: '/sounds/alert.mp3'
+  };
+
+  const audioPath = soundFiles[type];
+  if (audioPath) {
+    try {
+      const audio = new Audio(audioPath);
+      audio.volume = 0.9;
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(() => {
+          // Fallback silencioso para o sintetizador caso o arquivo não exista ou o navegador bloqueie
+          playSynthesizedTones(type);
+        });
+        return;
+      }
+    } catch {
+      playSynthesizedTones(type);
+      return;
+    }
+  }
+
+  playSynthesizedTones(type);
 };
 
 // 2. Solicitar Permissão de Notificação com Confirmação do Usuário
