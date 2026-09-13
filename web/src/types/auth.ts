@@ -41,6 +41,8 @@ export interface ClientProfile {
   city: string;
   state: string;
   isProfileComplete: boolean;
+  rating?: number;
+  totalRides?: number;
   isHidden?: boolean;
   isDeleted?: boolean;
   deletedAt?: string;

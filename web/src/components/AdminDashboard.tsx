@@ -90,6 +90,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }));
   };
 
+  // Controle de expansão/recolhimento dos cards de clientes (Accordion)
+  const [expandedClientIds, setExpandedClientIds] = useState<Record<string, boolean>>({});
+  const toggleClientExpand = (clientId: string) => {
+    setExpandedClientIds(prev => ({
+      ...prev,
+      [clientId]: !prev[clientId]
+    }));
+  };
+
   // Estados para Edição Cadastral de Motoristas pelo Admin
   const [editingDriver, setEditingDriver] = useState<DriverProfile | null>(null);
   const [editDriverForm, setEditDriverForm] = useState<{
@@ -1501,143 +1510,311 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 )}
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {filteredList.map(c => (
-                  <div key={c.id} style={{
-                    background: c.isHidden ? 'rgba(234, 179, 8, 0.08)' : undefined,
-                    border: c.isHidden ? '1px solid rgba(234, 179, 8, 0.3)' : '1px solid var(--border-subtle)',
-                    borderRadius: '14px',
-                    padding: '18px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '8px'
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <strong style={{ fontSize: '1.05rem', color: '#fff' }}>
-                          {c.fullName || 'Passageiro DriveHora'}
-                        </strong>
-                        {c.email && (
-                          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                            • {c.email}
-                          </span>
-                        )}
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                        {c.isHidden ? (
-                          <span style={{
-                            fontSize: '0.75rem',
-                            padding: '3px 8px',
-                            borderRadius: '6px',
-                            background: 'rgba(234, 179, 8, 0.2)',
-                            color: '#fde047',
-                            fontWeight: 700
-                          }}>
-                            🟡 Oculto da Lista
-                          </span>
-                        ) : (
-                          <span style={{
-                            fontSize: '0.75rem',
-                            padding: '3px 8px',
-                            borderRadius: '6px',
-                            background: 'rgba(16, 185, 129, 0.15)',
-                            color: '#10b981',
-                            fontWeight: 700
-                          }}>
-                            {c.isProfileComplete ? 'Perfil Ativo ✅' : 'Cadastrado 👤'}
-                          </span>
-                        )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {filteredList.map(c => {
+                  const isExpanded = !!expandedClientIds[c.id];
 
-                        {c.isHidden ? (
-                          <>
-                            <button
-                              onClick={() => handleRestoreClient(c)}
-                              className="btn-outline"
-                              style={{
-                                padding: '5px 12px',
-                                fontSize: '0.75rem',
+                  // Corridas do cliente vinculadas pelo ID ou nome
+                  const clientRides = rides.filter(r => 
+                    r.clientId === c.id || 
+                    r.clientId === c.userId || 
+                    (c.fullName && r.clientName?.trim().toLowerCase() === c.fullName?.trim().toLowerCase())
+                  );
+                  const totalClientRides = clientRides.length;
+
+                  // Avaliações recebidas pelo cliente na plataforma
+                  const clientRatings = ratingsList.filter(r => r.toUserId === c.id || r.toUserId === c.userId);
+                  const clientRatingAvg = clientRatings.length > 0
+                    ? (clientRatings.reduce((acc, curr) => acc + curr.score, 0) / clientRatings.length).toFixed(1)
+                    : (c.rating ? Number(c.rating).toFixed(1) : '5.0');
+
+                  return (
+                    <div
+                      key={c.id}
+                      className="glass-card"
+                      style={{
+                        padding: '16px 20px',
+                        borderRadius: '16px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: isExpanded ? '16px' : '10px',
+                        background: c.isHidden ? (theme === 'light' ? 'rgba(234, 179, 8, 0.08)' : 'rgba(234, 179, 8, 0.06)') : undefined,
+                        boxShadow: theme === 'light' ? '0 4px 16px rgba(0, 0, 0, 0.06)' : '0 4px 16px rgba(0, 0, 0, 0.25)',
+                        border: isExpanded 
+                          ? (theme === 'light' ? '1px solid #6366f1' : '1px solid rgba(99, 102, 241, 0.5)')
+                          : c.isHidden
+                          ? '1px solid rgba(234, 179, 8, 0.35)'
+                          : (theme === 'light' ? '1px solid #e2e8f0' : '1px solid var(--border-subtle)'),
+                        transition: 'all 0.2s ease-in-out'
+                      }}
+                    >
+                      {/* CABEÇALHO PRINCIPAL DO CARD (Padrão Idêntico aos Motoristas) */}
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        gap: '12px'
+                      }}>
+                        <div style={{ flex: '1 1 280px', minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <strong style={{
+                              fontSize: '1.05rem',
+                              color: 'var(--text-primary)',
+                              whiteSpace: 'normal',
+                              wordBreak: 'break-word',
+                              lineHeight: 1.3
+                            }}>
+                              {c.fullName || 'Passageiro DriveHora'}
+                            </strong>
+
+                            {c.isHidden ? (
+                              <span style={{
+                                fontSize: '0.72rem',
+                                padding: '2px 8px',
+                                borderRadius: '8px',
+                                fontWeight: 700,
+                                background: 'rgba(234, 179, 8, 0.2)',
+                                color: '#fde047',
+                                border: '1px solid rgba(234, 179, 8, 0.4)'
+                              }}>
+                                🟡 Oculto da Lista
+                              </span>
+                            ) : (
+                              <span style={{
+                                fontSize: '0.72rem',
+                                padding: '2px 8px',
+                                borderRadius: '8px',
+                                fontWeight: 700,
+                                background: 'rgba(16, 185, 129, 0.15)',
                                 color: '#10b981',
-                                borderColor: 'rgba(16, 185, 129, 0.4)',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px'
-                              }}
-                              title="Reativar passageiro na lista principal"
-                            >
-                              <Check size={12} /> Reativar
-                            </button>
-                            <button
-                              onClick={() => { setClientToDelete(c); setClientDeleteMode('definitive'); }}
-                              className="btn-outline"
-                              style={{
-                                padding: '5px 10px',
-                                fontSize: '0.75rem',
-                                color: '#ef4444',
-                                borderColor: 'rgba(239, 68, 68, 0.4)',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px'
-                              }}
-                              title="Excluir definitivamente todas as informações deste passageiro"
-                            >
-                              <Trash2 size={12} /> Excluir Definitivo
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            <button
-                              onClick={() => handleOpenEditClient(c)}
-                              className="btn-outline"
-                              style={{
-                                padding: '5px 12px',
-                                fontSize: '0.75rem',
-                                color: '#818cf8',
-                                borderColor: 'rgba(99, 102, 241, 0.3)',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px'
-                              }}
-                              title="Editar dados cadastrais do passageiro"
-                            >
-                              <Edit3 size={12} /> Editar Cadastro
-                            </button>
-                            <button
-                              onClick={() => { setClientToDelete(c); setClientDeleteMode('partial'); }}
-                              className="btn-outline"
-                              style={{
-                                padding: '5px 10px',
-                                fontSize: '0.75rem',
-                                color: '#ef4444',
-                                borderColor: 'rgba(239, 68, 68, 0.35)',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px'
-                              }}
-                              title="Opções de exclusão do passageiro (parcial ou definitiva)"
-                            >
-                              <Trash2 size={12} /> Excluir
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
+                                border: '1px solid rgba(16, 185, 129, 0.3)'
+                              }}>
+                                {c.isProfileComplete ? 'Perfil Ativo ✅' : 'Cadastrado 👤'}
+                              </span>
+                            )}
+                          </div>
 
-                    <div style={{ fontSize: '0.85rem', color: '#cbd5e1', display: 'flex', flexWrap: 'wrap', gap: '14px' }}>
-                      <span>📞 Telefone: <strong>{formatPhone(c.phone) || 'Não informado'}</strong></span>
-                      {c.cpf && <span>🆔 CPF: <strong>{formatCpf(c.cpf)}</strong></span>}
-                    </div>
+                          {/* Linha Resumo Rápido (Mesmo padrão do motorista com avaliação, corridas, telefone e email) */}
+                          <div style={{
+                            display: 'flex',
+                            gap: '10px',
+                            marginTop: '6px',
+                            fontSize: '0.78rem',
+                            color: 'var(--text-secondary)',
+                            flexWrap: 'wrap',
+                            alignItems: 'center'
+                          }}>
+                            <span>⭐ <strong>{clientRatingAvg}</strong></span>
+                            <span>• 🚗 <strong>{totalClientRides}</strong> {totalClientRides === 1 ? 'corrida' : 'corridas'}</span>
+                            {c.phone && (
+                              <span>• 📞 <strong style={{ color: 'var(--text-primary)' }}>{formatPhone(c.phone)}</strong></span>
+                            )}
+                            {c.email && (
+                              <span>• ✉️ <span style={{ color: 'var(--text-secondary)' }}>{c.email}</span></span>
+                            )}
+                          </div>
+                        </div>
 
-                    {(c.street || c.city || c.neighborhood) && (
-                      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                        📍 {c.street ? `${c.street}, ${c.number || 'S/N'}` : ''} 
-                        {c.complement ? ` (${c.complement})` : ''} 
-                        {c.neighborhood ? ` - ${c.neighborhood}` : ''} 
-                        {c.city ? ` - ${c.city}/${c.state}` : ''} 
-                        {c.cep ? ` • CEP: ${c.cep}` : ''}
+                        {/* Botões de Ação Rápida no Cabeçalho */}
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                          {c.isHidden ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleRestoreClient(c)}
+                                className="btn-outline"
+                                style={{
+                                  padding: '6px 12px',
+                                  fontSize: '0.78rem',
+                                  color: '#10b981',
+                                  borderColor: 'rgba(16, 185, 129, 0.4)',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '5px',
+                                  borderRadius: '8px'
+                                }}
+                                title="Reativar passageiro na lista principal"
+                              >
+                                <Check size={13} />
+                                <span>Reativar</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => { setClientToDelete(c); setClientDeleteMode('definitive'); }}
+                                className="btn-outline"
+                                style={{
+                                  padding: '6px 12px',
+                                  fontSize: '0.78rem',
+                                  color: '#ef4444',
+                                  borderColor: 'rgba(239, 68, 68, 0.4)',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '5px',
+                                  borderRadius: '8px'
+                                }}
+                                title="Excluir definitivamente este passageiro"
+                              >
+                                <Trash2 size={13} />
+                                <span>Excluir Definitivo</span>
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditClient(c)}
+                                className="btn-outline"
+                                style={{
+                                  padding: '6px 12px',
+                                  fontSize: '0.78rem',
+                                  color: '#818cf8',
+                                  borderColor: 'rgba(99, 102, 241, 0.3)',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '5px',
+                                  borderRadius: '8px'
+                                }}
+                                title="Editar dados cadastrais do passageiro"
+                              >
+                                <Edit3 size={13} />
+                                <span>Editar</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => { setClientToDelete(c); setClientDeleteMode('partial'); }}
+                                className="btn-outline"
+                                style={{
+                                  padding: '6px 12px',
+                                  fontSize: '0.78rem',
+                                  color: '#ef4444',
+                                  borderColor: 'rgba(239, 68, 68, 0.35)',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '5px',
+                                  borderRadius: '8px'
+                                }}
+                                title="Opções de exclusão do passageiro (parcial ou definitiva)"
+                              >
+                                <Trash2 size={13} />
+                                <span>Excluir</span>
+                              </button>
+                            </>
+                          )}
+
+                          {/* Botão de Expandir / Recolher Accordion */}
+                          <button
+                            type="button"
+                            onClick={() => toggleClientExpand(c.id)}
+                            className="btn-outline"
+                            style={{
+                              padding: '6px 14px',
+                              fontSize: '0.8rem',
+                              fontWeight: 700,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              borderRadius: '8px',
+                              cursor: 'pointer',
+                              background: isExpanded 
+                                ? (theme === 'light' ? '#eff6ff' : 'rgba(99, 102, 241, 0.15)') 
+                                : (theme === 'light' ? '#f8fafc' : 'rgba(255, 255, 255, 0.05)'),
+                              borderColor: isExpanded 
+                                ? (theme === 'light' ? '#93c5fd' : 'rgba(99, 102, 241, 0.4)') 
+                                : (theme === 'light' ? '#cbd5e1' : 'rgba(255, 255, 255, 0.15)'),
+                              color: isExpanded 
+                                ? (theme === 'light' ? '#1d4ed8' : '#818cf8') 
+                                : 'var(--text-primary)'
+                            }}
+                          >
+                            <span>{isExpanded ? 'Recolher' : 'Ver Detalhes'}</span>
+                            {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                          </button>
+                        </div>
                       </div>
-                    )}
-                  </div>
-                ))}
+
+                      {/* CORPO EXPANDIDO DO ACCORDION (Dados cadastrais completos em grade com alto contraste) */}
+                      {isExpanded && (
+                        <div style={{
+                          paddingTop: '14px',
+                          borderTop: theme === 'light' ? '1px solid #e2e8f0' : '1px solid rgba(255, 255, 255, 0.08)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '12px'
+                        }}>
+                          <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                            gap: '12px',
+                            padding: '14px 16px',
+                            background: theme === 'light' ? '#f8fafc' : 'rgba(255, 255, 255, 0.03)',
+                            border: theme === 'light' ? '1px solid #e2e8f0' : '1px solid var(--border-subtle)',
+                            borderRadius: '12px'
+                          }}>
+                            <div>
+                              <span style={{ fontSize: '0.72rem', color: theme === 'light' ? '#475569' : '#94a3b8', display: 'block', fontWeight: 600 }}>
+                                🆔 CPF:
+                              </span>
+                              <strong style={{ fontSize: '0.86rem', color: 'var(--text-primary)' }}>
+                                {formatCpf(c.cpf) || 'Não informado'}
+                              </strong>
+                            </div>
+
+                            <div>
+                              <span style={{ fontSize: '0.72rem', color: theme === 'light' ? '#475569' : '#94a3b8', display: 'block', fontWeight: 600 }}>
+                                📞 Telefone / WhatsApp:
+                              </span>
+                              <strong style={{ fontSize: '0.86rem', color: 'var(--text-primary)' }}>
+                                {formatPhone(c.phone) || 'Não informado'}
+                              </strong>
+                            </div>
+
+                            <div>
+                              <span style={{ fontSize: '0.72rem', color: theme === 'light' ? '#475569' : '#94a3b8', display: 'block', fontWeight: 600 }}>
+                                ✉️ Email de Contato:
+                              </span>
+                              <strong style={{ fontSize: '0.86rem', color: 'var(--text-primary)' }}>
+                                {c.email || 'Não informado'}
+                              </strong>
+                            </div>
+
+                            <div>
+                              <span style={{ fontSize: '0.72rem', color: theme === 'light' ? '#475569' : '#94a3b8', display: 'block', fontWeight: 600 }}>
+                                🚗 Estatísticas de Viagens:
+                              </span>
+                              <span style={{ fontSize: '0.86rem', color: 'var(--text-primary)', fontWeight: 600 }}>
+                                {totalClientRides} {totalClientRides === 1 ? 'corrida realizada' : 'corridas realizadas'} (⭐ {clientRatingAvg})
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Endereço Residencial do Passageiro */}
+                          {(c.street || c.city || c.neighborhood || c.cep) && (
+                            <div style={{
+                              padding: '12px 16px',
+                              background: theme === 'light' ? '#f1f5f9' : 'rgba(255, 255, 255, 0.02)',
+                              border: theme === 'light' ? '1px solid #e2e8f0' : '1px solid var(--border-subtle)',
+                              borderRadius: '10px',
+                              fontSize: '0.82rem',
+                              color: 'var(--text-secondary)'
+                            }}>
+                              <span style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
+                                📍 Endereço Cadastral:
+                              </span>
+                              <span>
+                                {c.street ? `${c.street}, ${c.number || 'S/N'}` : ''} 
+                                {c.complement ? ` (${c.complement})` : ''} 
+                                {c.neighborhood ? ` - ${c.neighborhood}` : ''} 
+                                {c.city ? ` - ${c.city}/${c.state}` : ''} 
+                                {c.cep ? ` • CEP: ${c.cep}` : ''}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
