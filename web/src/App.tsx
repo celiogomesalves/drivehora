@@ -679,6 +679,7 @@ export function App() {
   const [allDriversList, setAllDriversList] = useState<DriverProfile[]>([]);
   const [driverDateFilter, setDriverDateFilter] = useState<'all' | 'today' | 'week' | '15days' | '30days' | 'custom'>('week');
   const [driverCustomDate, setDriverCustomDate] = useState<string>('');
+  const [driverStatusFilter, setDriverStatusFilter] = useState<'all' | 'finished' | 'cancelled' | 'in_progress'>('all');
   const [driverSubTab, setDriverSubTab] = useState<'radar' | 'history'>('radar');
   const [searchCancellationReason, setSearchCancellationReason] = useState<{
     rideId: string;
@@ -6137,10 +6138,10 @@ export function App() {
                         }}
                         className="btn-outline"
                         style={{ fontSize: '0.75rem', padding: '6px 10px' }}
-                        title="Editar / Cadastrar dados do veículo e CNH"
+                        title="Ver e editar meu perfil, veículo e documentos"
                       >
                         <UserCheck size={14} />
-                        <span>Meus Documentos</span>
+                        <span>Perfil</span>
                       </button>
 
                       <button
@@ -6800,7 +6801,21 @@ export function App() {
 
                       const myCompletedRides = rides.filter(r => r.driverId === currentUser.id);
 
+                      const countFinished = myCompletedRides.filter(r => r.status === 'finished').length;
+                      const countCancelled = myCompletedRides.filter(r => r.status === 'cancelled').length;
+                      const countInProgress = myCompletedRides.filter(r => r.status === 'in_progress' || r.status === 'accepted' || r.status === 'to_pickup' || r.status === 'arrived_at_pickup').length;
+
                       const filteredDriverRides = myCompletedRides.filter(r => {
+                        // 1. Filtro de Status
+                        if (driverStatusFilter === 'finished') {
+                          if (r.status !== 'finished') return false;
+                        } else if (driverStatusFilter === 'cancelled') {
+                          if (r.status !== 'cancelled') return false;
+                        } else if (driverStatusFilter === 'in_progress') {
+                          if (r.status !== 'in_progress' && r.status !== 'accepted' && r.status !== 'to_pickup' && r.status !== 'arrived_at_pickup') return false;
+                        }
+
+                        // 2. Filtro de Data
                         const rideTime = r.createdAt || (r as any).created_at ? new Date(r.createdAt || (r as any).created_at).getTime() : now;
                         if (driverDateFilter === 'today') {
                           return rideTime >= startOfToday.getTime();
@@ -6834,7 +6849,7 @@ export function App() {
                               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                                 <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
                                   <Clock size={22} color="#10b981" />
-                                  Meu Histórico de Corridas Atendidas ({filteredDriverRides.length})
+                                  Meu Histórico de Corridas ({filteredDriverRides.length})
                                 </h3>
                                 <button
                                   type="button"
@@ -6881,7 +6896,7 @@ export function App() {
                             </div>
                           </div>
 
-                          {/* Barra de Filtros de Período Fixos e Personalizado (Padrão: Esta semana) */}
+                          {/* Barra de Filtros de Período de Data */}
                           <div style={{
                             display: 'flex',
                             alignItems: 'center',
@@ -6891,11 +6906,11 @@ export function App() {
                             background: theme === 'light' ? '#f8fafc' : 'rgba(255, 255, 255, 0.03)',
                             borderRadius: '12px',
                             border: theme === 'light' ? '1px solid #e2e8f0' : '1px solid var(--border-subtle)',
-                            marginBottom: '20px'
+                            marginBottom: '10px'
                           }}>
                             <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginRight: '4px' }}>
                               <Filter size={15} color="#10b981" />
-                              Filtrar por:
+                              Período:
                             </span>
 
                             <button
@@ -6903,7 +6918,7 @@ export function App() {
                               onClick={() => setDriverDateFilter('all')}
                               className={`filter-pill-btn ${driverDateFilter === 'all' ? 'active' : ''}`}
                             >
-                              Todas
+                              Todo o Período
                             </button>
 
                             <button
@@ -6974,6 +6989,62 @@ export function App() {
                                 )}
                               </div>
                             )}
+                          </div>
+
+                          {/* Barra de Filtros por Status da Corrida */}
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            flexWrap: 'wrap',
+                            gap: '8px',
+                            padding: '10px 14px',
+                            background: theme === 'light' ? '#f8fafc' : 'rgba(255, 255, 255, 0.03)',
+                            borderRadius: '12px',
+                            border: theme === 'light' ? '1px solid #e2e8f0' : '1px solid var(--border-subtle)',
+                            marginBottom: '20px'
+                          }}>
+                            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginRight: '4px' }}>
+                              <CheckCircle2 size={15} color="#6366f1" />
+                              Status:
+                            </span>
+
+                            <button
+                              type="button"
+                              onClick={() => setDriverStatusFilter('all')}
+                              className={`filter-pill-btn ${driverStatusFilter === 'all' ? 'active' : ''}`}
+                            >
+                              Todas ({myCompletedRides.length})
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setDriverStatusFilter('finished')}
+                              className={`filter-pill-btn ${driverStatusFilter === 'finished' ? 'active' : ''}`}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                            >
+                              <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#10b981', display: 'inline-block' }}></span>
+                              <span>Concluídas ({countFinished})</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setDriverStatusFilter('cancelled')}
+                              className={`filter-pill-btn ${driverStatusFilter === 'cancelled' ? 'active' : ''}`}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                            >
+                              <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#ef4444', display: 'inline-block' }}></span>
+                              <span>Canceladas ({countCancelled})</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setDriverStatusFilter('in_progress')}
+                              className={`filter-pill-btn ${driverStatusFilter === 'in_progress' ? 'active' : ''}`}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                            >
+                              <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#f59e0b', display: 'inline-block' }}></span>
+                              <span>Em Andamento ({countInProgress})</span>
+                            </button>
                           </div>
 
                           {filteredDriverRides.length === 0 ? (
@@ -7659,9 +7730,9 @@ export function App() {
               className={`mobile-nav-item ${showDriverProfileEdit && driverOnboardingInitialStep !== 4 ? 'active driver-active' : ''}`}
             >
               <div className="icon-wrapper">
-                <Car size={19} />
+                <UserCheck size={19} />
               </div>
-              <span>Veículo/Doc</span>
+              <span>Perfil</span>
             </button>
 
             {isUserAdmin ? (
