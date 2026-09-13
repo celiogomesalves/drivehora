@@ -7086,7 +7086,7 @@ export function App() {
                                         flexDirection: 'column',
                                         gap: '12px'
                                       }}>
-                                        {/* Grid Financeiro da Corrida */}
+                                        {/* Grid Financeiro da Corrida (Foco no Repasse do Motorista) */}
                                         <div style={{
                                           display: 'grid',
                                           gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
@@ -7097,21 +7097,17 @@ export function App() {
                                           border: theme === 'light' ? '1px solid #e2e8f0' : '1px solid var(--border-subtle)'
                                         }}>
                                           <div>
-                                            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>Total do Cliente:</span>
-                                            <strong className="ride-title-text" style={{ fontSize: '0.9rem' }}>{formatCurrency(r.total)}</strong>
+                                            <span style={{ fontSize: '0.7rem', color: '#10b981', display: 'block', fontWeight: 600 }}>Repasse Recebido:</span>
+                                            <strong style={{ fontSize: '1.05rem', color: '#10b981', fontWeight: 800 }}>{formatCurrency(r.driverNet)}</strong>
                                           </div>
                                           <div>
-                                            <span style={{ fontSize: '0.7rem', color: '#10b981', display: 'block' }}>Seu Repasse (85%):</span>
-                                            <strong style={{ fontSize: '0.95rem', color: '#10b981' }}>{formatCurrency(r.driverNet)}</strong>
+                                            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>Franquia de Tempo:</span>
+                                            <strong className="ride-title-text" style={{ fontSize: '0.9rem' }}>{r.hours} hora(s)</strong>
                                           </div>
                                           <div>
-                                            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>Taxa Plataforma (15%):</span>
-                                            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{formatCurrency((r as any).platformFee || (r.total - r.driverNet))}</span>
-                                          </div>
-                                          <div>
-                                            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>Pagamento:</span>
+                                            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>Forma de Recebimento:</span>
                                             <span style={{ fontSize: '0.8rem', color: '#6366f1', fontWeight: 600 }}>
-                                              {r.paymentMethod === 'credit_card' ? '💳 Cartão de Crédito (App)' : r.paymentMethod === 'cash' ? '💵 Dinheiro ao Motorista' : r.paymentMethod === 'card_machine' ? '📱 Maquininha do Motorista' : r.paymentMethod === 'pix' ? '🔑 Pix Direto' : '💳 Plataforma'}
+                                              {r.paymentMethod === 'credit_card' ? '💳 Cartão de Crédito (App)' : r.paymentMethod === 'cash' ? '💵 Dinheiro Direto' : r.paymentMethod === 'card_machine' ? '📱 Maquininha do Motorista' : r.paymentMethod === 'pix' ? '🔑 Pix Direto' : '💳 Plataforma'}
                                             </span>
                                           </div>
                                         </div>

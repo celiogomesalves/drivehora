@@ -30,31 +30,40 @@ export function NearbyDriversMap({
   const hasInitialFittedRef = useRef(false);
 
   const [userLocation, setUserLocation] = useState<Coordinates>({ latitude: -19.8157, longitude: -43.9542 }); // Default BH
+  const userLocationRef = useRef<Coordinates>(userLocation);
+  userLocationRef.current = userLocation;
+
   const [onlineDrivers, setOnlineDrivers] = useState<DriverProfile[]>([]);
+  const onlineDriversRef = useRef<DriverProfile[]>(onlineDrivers);
+  onlineDriversRef.current = onlineDrivers;
+
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<Date>(new Date());
 
   // Função de Auto-Zoom Inteligente: calcula enquadramento ótimo para todos os motoristas + cliente
-  const fitMapToAllDrivers = useCallback((isSmooth = true) => {
+  const fitMapToAllDrivers = useCallback((isSmooth = true, customDrivers?: DriverProfile[], customLocation?: Coordinates) => {
     if (!mapInstanceRef.current) return;
 
     try {
       mapInstanceRef.current.invalidateSize();
 
+      const loc = customLocation || userLocationRef.current;
+      const drivers = customDrivers || onlineDriversRef.current;
+
       const points: [number, number][] = [
-        [userLocation.latitude, userLocation.longitude]
+        [loc.latitude, loc.longitude]
       ];
 
-      onlineDrivers.forEach((driver, idx) => {
+      drivers.forEach((driver, idx) => {
         const offsetLat = (Math.sin(idx * 1.7) * 0.008) + (idx % 2 === 0 ? 0.003 : -0.004);
         const offsetLng = (Math.cos(idx * 1.7) * 0.009) + (idx % 2 === 0 ? -0.003 : 0.004);
-        const driverLat = (driver.currentLat && !isNaN(driver.currentLat)) ? driver.currentLat : (userLocation.latitude + offsetLat);
-        const driverLng = (driver.currentLng && !isNaN(driver.currentLng)) ? driver.currentLng : (userLocation.longitude + offsetLng);
+        const driverLat = (driver.currentLat && !isNaN(driver.currentLat)) ? driver.currentLat : (loc.latitude + offsetLat);
+        const driverLng = (driver.currentLng && !isNaN(driver.currentLng)) ? driver.currentLng : (loc.longitude + offsetLng);
         points.push([driverLat, driverLng]);
       });
 
       if (points.length === 1) {
-        mapInstanceRef.current.setView(points[0], 14, { animate: isSmooth });
+        mapInstanceRef.current.setView(points[0], 15, { animate: isSmooth });
       } else {
         const bounds = L.latLngBounds(points);
         mapInstanceRef.current.fitBounds(bounds, {
@@ -67,7 +76,7 @@ export function NearbyDriversMap({
     } catch (err) {
       console.warn('Erro ao ajustar enquadramento do mapa:', err);
     }
-  }, [userLocation, onlineDrivers]);
+  }, []);
 
   // Focar em um motorista específico e abrir o popup
   const focusOnDriver = (driverId: string, lat: number, lng: number) => {
@@ -86,16 +95,22 @@ export function NearbyDriversMap({
     getCurrentPosition()
       .then(coords => {
         setUserLocation(coords);
+        userLocationRef.current = coords;
+        if (mapInstanceRef.current) {
+          fitMapToAllDrivers(true, undefined, coords);
+        }
       })
       .catch(() => {});
 
     if ('geolocation' in navigator) {
       watchId = navigator.geolocation.watchPosition(
         (pos) => {
-          setUserLocation({
+          const newCoords = {
             latitude: pos.coords.latitude,
             longitude: pos.coords.longitude
-          });
+          };
+          setUserLocation(newCoords);
+          userLocationRef.current = newCoords;
         },
         () => {},
         { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
@@ -105,7 +120,7 @@ export function NearbyDriversMap({
     return () => {
       if (watchId !== null) navigator.geolocation.clearWatch(watchId);
     };
-  }, []);
+  }, [fitMapToAllDrivers]);
 
   // 2. Buscar Motoristas com Posições GPS
   const loadDrivers = useCallback(async (isManual = false) => {
@@ -130,13 +145,22 @@ export function NearbyDriversMap({
       }
 
       setOnlineDrivers(online);
+      onlineDriversRef.current = online;
       setLastSyncTime(new Date());
+
+      // Auto-enquadramento automático na primeira chegada dos dados
+      if (!hasInitialFittedRef.current && mapInstanceRef.current) {
+        hasInitialFittedRef.current = true;
+        setTimeout(() => {
+          fitMapToAllDrivers(true, online);
+        }, 150);
+      }
     } catch (e) {
       console.warn('Erro ao sincronizar motoristas:', e);
     } finally {
       if (isManual) setIsSyncing(false);
     }
-  }, [allRides]);
+  }, [allRides, fitMapToAllDrivers]);
 
   // 3. Inscrição em Tempo Real (Supabase Realtime) + Polling Suave
   useEffect(() => {
@@ -197,22 +221,20 @@ export function NearbyDriversMap({
 
     userMarkerRef.current = userMarker;
 
-    // Ajustar tamanho inicial pós-renderização
+    // Ajustar tamanho inicial pós-renderização e enquadrar
     const t1 = setTimeout(() => {
-      map.invalidateSize();
-      if (!hasInitialFittedRef.current && onlineDrivers.length > 0) {
-        hasInitialFittedRef.current = true;
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.invalidateSize();
         fitMapToAllDrivers(false);
       }
-    }, 100);
+    }, 150);
 
     const t2 = setTimeout(() => {
-      map.invalidateSize();
-      if (!hasInitialFittedRef.current && onlineDrivers.length > 0) {
-        hasInitialFittedRef.current = true;
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.invalidateSize();
         fitMapToAllDrivers(true);
       }
-    }, 500);
+    }, 600);
 
     const handleResize = () => {
       if (mapInstanceRef.current) {
@@ -231,18 +253,18 @@ export function NearbyDriversMap({
         driverMarkersRef.current.clear();
       }
     };
-  }, []); // Run once on mount
+  }, [fitMapToAllDrivers, userLocation.latitude, userLocation.longitude]);
 
-  // 4.1 Enquadramento automático EXCLUSIVAMENTE na primeira carga (ao abrir a página)
+  // 4.1 Enquadramento automático garantido na primeira carga com motoristas
   useEffect(() => {
-    if (!hasInitialFittedRef.current && onlineDrivers.length > 0 && mapInstanceRef.current) {
+    if (!hasInitialFittedRef.current && mapInstanceRef.current) {
       hasInitialFittedRef.current = true;
       const timer = setTimeout(() => {
-        fitMapToAllDrivers(true);
-      }, 200);
+        fitMapToAllDrivers(true, onlineDrivers);
+      }, 250);
       return () => clearTimeout(timer);
     }
-  }, [onlineDrivers.length, fitMapToAllDrivers]);
+  }, [onlineDrivers, fitMapToAllDrivers]);
 
   // 5. Atualizar posição do passageiro de forma suave (Sem recriar o mapa)
   useEffect(() => {
@@ -422,22 +444,11 @@ export function NearbyDriversMap({
           gap: '6px',
           zIndex: 500
         }}>
-          <div style={{
-            background: 'rgba(15, 23, 42, 0.92)',
-            backdropFilter: 'blur(10px)',
-            border: '1px solid rgba(255, 255, 255, 0.15)',
-            borderRadius: '10px',
-            padding: '6px 10px',
-            fontSize: '0.74rem',
-            color: '#fff',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            boxShadow: '0 4px 15px rgba(0,0,0,0.5)',
-            whiteSpace: 'nowrap'
-          }}>
-            <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#10b981' }}></span>
-            <span><strong>{onlineDrivers.length}</strong> motorista(s) visíveis</span>
+          <div className="radar-floating-badge">
+            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981', display: 'inline-block' }}></span>
+            <span className="radar-floating-badge-text">
+              <strong style={{ fontWeight: 800 }}>{onlineDrivers.length}</strong> motorista(s) visíveis
+            </span>
           </div>
 
           <button
@@ -445,31 +456,7 @@ export function NearbyDriversMap({
               loadDrivers(true);
               fitMapToAllDrivers(true);
             }}
-            style={{
-              background: 'rgba(15, 23, 42, 0.92)',
-              backdropFilter: 'blur(10px)',
-              border: '1px solid rgba(99, 102, 241, 0.5)',
-              borderRadius: '10px',
-              padding: '6px 10px',
-              fontSize: '0.72rem',
-              color: '#818cf8',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '5px',
-              fontWeight: 700,
-              boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
-              transition: 'all 0.2s',
-              whiteSpace: 'nowrap'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'rgba(99, 102, 241, 0.25)';
-              e.currentTarget.style.color = '#fff';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'rgba(15, 23, 42, 0.92)';
-              e.currentTarget.style.color = '#818cf8';
-            }}
+            className="radar-floating-btn"
           >
             <Maximize2 size={12} />
             <span>Enquadrar Visão Geral</span>
