@@ -58,6 +58,19 @@ export interface SystemSettings {
     finishedSound: 'finished_a';
     timeAlertSound: 'time_alert';
   };
+  // Gestão de Seguro de Acidentes Pessoais a Passageiros (Seguro APP / Lei 13.640/2018)
+  insurance: {
+    enabled: boolean;
+    requireInsuranceToRequestRide: boolean; // O Administrador decide se exige apólice ativa ou libera sem seguro
+    providerName: string;
+    policyNumber: string;
+    validUntil: string;
+    coverageAmountMA: number;
+    coverageAmountIPA: number;
+    coverageAmountDMHO: number;
+    emergencyHotline: string;
+    costPerHour: number;
+  };
 }
 
 export const DEFAULT_VEHICLE_CATEGORIES: VehicleCategoryConfig[] = [
@@ -134,6 +147,18 @@ const DEFAULT_SETTINGS: SystemSettings = {
     inProgressSound: 'in_progress_a',
     finishedSound: 'finished_a',
     timeAlertSound: 'time_alert'
+  },
+  insurance: {
+    enabled: true,
+    requireInsuranceToRequestRide: false, // O Administrador pode liberar ou bloquear a seu critério
+    providerName: 'Porto Seguro Cia. de Seguros Gerais',
+    policyNumber: 'APP-DRIVEHORA-2026-98214',
+    validUntil: '2027-12-31',
+    coverageAmountMA: 100000,
+    coverageAmountIPA: 100000,
+    coverageAmountDMHO: 10000,
+    emergencyHotline: '0800 727 2727',
+    costPerHour: 0.40
   }
 };
 
@@ -206,7 +231,8 @@ export const getSystemSettings = (): SystemSettings => {
       appUrl: parsed.appUrl?.trim() || DEFAULT_SETTINGS.appUrl,
       vehicleCategories: (parsed.vehicleCategories && parsed.vehicleCategories.length > 0) 
         ? parsed.vehicleCategories 
-        : DEFAULT_VEHICLE_CATEGORIES
+        : DEFAULT_VEHICLE_CATEGORIES,
+      insurance: { ...DEFAULT_SETTINGS.insurance, ...(parsed.insurance || {}) }
     };
   } catch {
     return DEFAULT_SETTINGS;
@@ -300,7 +326,8 @@ export const fetchSystemSettingsFromDb = async (): Promise<SystemSettings> => {
         inProgressSound: 'in_progress_a',
         finishedSound: 'finished_a',
         timeAlertSound: 'time_alert'
-      }
+      },
+      insurance: { ...DEFAULT_SETTINGS.insurance, ...(dbConfig.insurance || local.insurance || {}) }
     };
 
     localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));

@@ -2529,4 +2529,65 @@ html.theme-light .modal-themed-footer,
   color: #475569 !important;
 }
 
+/* ======================================================== */
+/* ANIMAÇÃO PULSANTE: MOTORISTA ONLINE & AGUARDANDO CHAMADOS */
+/* ======================================================== */
+@keyframes driver-online-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.75), 0 0 10px rgba(16, 185, 129, 0.35);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(16, 185, 129, 0), 0 0 22px rgba(16, 185, 129, 0.6);
+    transform: scale(1.025);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0), 0 0 10px rgba(16, 185, 129, 0.35);
+    transform: scale(1);
+  }
+}
+
+@keyframes driver-radar-ripple {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scale(1.6);
+    opacity: 0.2;
+  }
+  100% {
+    transform: scale(2.1);
+    opacity: 0;
+  }
+}
+
+.driver-online-pulsing-btn {
+  animation: driver-online-pulse 2.2s cubic-bezier(0.4, 0, 0.6, 1) infinite !important;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.22), rgba(5, 150, 105, 0.38)) !important;
+  border: 1.5px solid #10b981 !important;
+  color: #10b981 !important;
+  position: relative;
+  overflow: visible !important;
+}
+
+.driver-online-pulsing-btn::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: inherit;
+  border: 1.5px solid rgba(16, 185, 129, 0.5);
+  animation: driver-radar-ripple 2.2s cubic-bezier(0, 0.2, 0.8, 1) infinite;
+  pointer-events: none;
+}
+
+/* Indicador de Status Online Pulsante no Rodapé Mobile */
+.mobile-nav-item.driver-status-item.is-online {
+  animation: driver-online-pulse 2.2s cubic-bezier(0.4, 0, 0.6, 1) infinite !important;
+  background: rgba(16, 185, 129, 0.18) !important;
+  border: 1px solid rgba(16, 185, 129, 0.45) !important;
+  color: #10b981 !important;
+}
+
+
 

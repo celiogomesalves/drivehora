@@ -1508,6 +1508,30 @@ export function App() {
       return;
     }
 
+    // 3. Validação de Protocolo de Seguro da Plataforma (Seguro APP / Lei Federal 13.640/2018)
+    if (systemSettings.insurance?.requireInsuranceToRequestRide) {
+      const isConfigured = Boolean(
+        systemSettings.insurance?.providerName?.trim() &&
+        systemSettings.insurance?.policyNumber?.trim()
+      );
+      let isExpired = false;
+      if (systemSettings.insurance?.validUntil) {
+        const expiryDate = new Date(`${systemSettings.insurance.validUntil}T23:59:59`);
+        isExpired = expiryDate.getTime() < Date.now();
+      }
+
+      if (!isConfigured || isExpired) {
+        showAlert(
+          isExpired
+            ? `A apólice de seguro de acidentes pessoais aos passageiros (${systemSettings.insurance?.providerName || 'Seguro APP'}) atingiu a data de validade. Por protocolo rigoroso de segurança, novos pedidos estão temporariamente pausados até que a administração confirme a renovação.`
+            : 'Por protocolo rigoroso de segurança e conformidade legal (Lei Federal nº 13.640/2018), esta plataforma exige apólice ativa de seguro de acidentes pessoais aos passageiros antes de aceitar corridas. Aguarde a regularização pela administração.',
+          'warning',
+          isExpired ? 'Apólice de Seguro Vencida' : 'Seguro Obrigatório Pendente'
+        );
+        return;
+      }
+    }
+
     // Exigência cadastral do passageiro (CPF obrigatório para emissão de gateway de pagamento)
     const cleanCpf = (clientProfile?.cpf || '').replace(/\D/g, '');
     if (!clientProfile || cleanCpf.length !== 11) {
@@ -4556,6 +4580,26 @@ export function App() {
                       </div>
                     </div>
 
+                    {/* Selo de Proteção e Seguro da Viagem (Lei 13.640/2018) */}
+                    {systemSettings.insurance?.providerName && systemSettings.insurance?.policyNumber && (
+                      <div style={{
+                        padding: '10px 14px',
+                        borderRadius: '12px',
+                        background: 'rgba(16, 185, 129, 0.08)',
+                        border: '1px solid rgba(16, 185, 129, 0.25)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        fontSize: '0.78rem',
+                        color: 'var(--text-primary)'
+                      }}>
+                        <ShieldCheck size={18} color="#10b981" style={{ flexShrink: 0 }} />
+                        <div style={{ lineHeight: 1.4 }}>
+                          <strong style={{ color: '#10b981' }}>Viagem 100% Assegurada (Seguro APP):</strong> Cobertura de acidentes pessoais durante todo o período ({systemSettings.insurance.providerName} • Apólice nº {systemSettings.insurance.policyNumber}).
+                        </div>
+                      </div>
+                    )}
+
                     {/* Aviso de Indisponibilidade Momentânea caso Gateway não esteja Operacional */}
                     {!gatewayOperational && (
                       <div style={{
@@ -6207,26 +6251,29 @@ export function App() {
                           </span>
                         )}
                         {/* Indicador de Status Online/Offline visível no topo */}
-                        <span style={{
-                          fontSize: '0.7rem',
-                          color: isDriverOnline ? '#10b981' : '#ef4444',
-                          background: isDriverOnline ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                          border: `1px solid ${isDriverOnline ? 'rgba(16, 185, 129, 0.35)' : 'rgba(239, 68, 68, 0.35)'}`,
-                          padding: '2px 8px',
-                          borderRadius: '12px',
-                          fontWeight: 700,
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px'
-                        }}>
+                        <span 
+                          className={isDriverOnline ? 'driver-online-pulsing-btn' : ''}
+                          style={{
+                            fontSize: '0.72rem',
+                            color: isDriverOnline ? '#10b981' : '#ef4444',
+                            background: isDriverOnline ? undefined : 'rgba(239, 68, 68, 0.15)',
+                            border: isDriverOnline ? undefined : '1px solid rgba(239, 68, 68, 0.35)',
+                            padding: '3px 10px',
+                            borderRadius: '14px',
+                            fontWeight: 800,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px'
+                          }}
+                        >
                           <span style={{
-                            width: '6px',
-                            height: '6px',
+                            width: '7px',
+                            height: '7px',
                             borderRadius: '50%',
                             background: isDriverOnline ? '#10b981' : '#ef4444',
                             display: 'inline-block'
-                          }} />
-                          {isDriverOnline ? 'ONLINE' : 'OFFLINE'}
+                          }} className={isDriverOnline ? 'animate-ping' : ''} />
+                          {isDriverOnline ? 'ONLINE • AGUARDANDO' : 'OFFLINE'}
                         </span>
                       </div>
                       <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
@@ -6308,22 +6355,22 @@ export function App() {
                       <button
                         onClick={handleToggleDriverOnline}
                         disabled={isTogglingOnline}
+                        className={isDriverOnline ? 'driver-online-pulsing-btn' : ''}
+                        title={isDriverOnline ? 'Você está online e visível no radar de passageiros. Clique para ficar offline.' : 'Clique para ficar online e receber chamadas.'}
                         style={{
                           display: 'flex',
                           alignItems: 'center',
                           gap: '8px',
-                          padding: '8px 16px',
+                          padding: '8px 18px',
                           borderRadius: '24px',
-                          border: 'none',
                           cursor: isTogglingOnline ? 'not-allowed' : 'pointer',
                           opacity: isTogglingOnline ? 0.7 : 1,
-                          fontWeight: 700,
+                          fontWeight: 800,
                           fontSize: '0.85rem',
-                          background: isDriverOnline ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                          background: isDriverOnline ? undefined : 'rgba(239, 68, 68, 0.15)',
                           color: isDriverOnline ? '#10b981' : '#ef4444',
-                          borderWidth: '1px',
-                          borderStyle: 'solid',
-                          borderColor: isDriverOnline ? '#10b981' : '#ef4444'
+                          border: isDriverOnline ? undefined : '1px solid rgba(239, 68, 68, 0.4)',
+                          transition: 'all 0.2s'
                         }}
                       >
                         {isTogglingOnline ? (
@@ -6334,7 +6381,7 @@ export function App() {
                         ) : (
                           <>
                             <Radio size={16} className={isDriverOnline ? 'animate-pulse' : ''} />
-                            <span>{isDriverOnline ? 'ONLINE' : 'OFFLINE'}</span>
+                            <span>{isDriverOnline ? 'ONLINE • AGUARDANDO' : 'OFFLINE'}</span>
                           </>
                         )}
                       </button>

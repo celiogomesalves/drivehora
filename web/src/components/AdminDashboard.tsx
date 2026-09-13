@@ -3631,6 +3631,287 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           </div>
 
+          {/* SEÇÃO 4: GESTÃO DO SEGURO DA PLATAFORMA (SEGURO APP / LEI 13.640/2018) */}
+          <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            {/* Header da Seção */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  background: systemSettings.insurance?.requireInsuranceToRequestRide ? 'rgba(16, 185, 129, 0.18)' : 'rgba(245, 158, 11, 0.18)',
+                  padding: '10px',
+                  borderRadius: '12px',
+                  color: systemSettings.insurance?.requireInsuranceToRequestRide ? '#10b981' : '#f59e0b'
+                }}>
+                  <ShieldCheck size={24} />
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <h4 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
+                      Gestão de Seguro da Plataforma (Seguro APP • Passageiros & Motoristas)
+                    </h4>
+                    <span style={{
+                      fontSize: '0.68rem',
+                      fontWeight: 700,
+                      padding: '2px 8px',
+                      borderRadius: '8px',
+                      background: 'rgba(99, 102, 241, 0.15)',
+                      color: '#818cf8'
+                    }}>
+                      Lei Federal nº 13.640/2018
+                    </span>
+                  </div>
+                  <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: '3px 0 0' }}>
+                    Defina a apólice de Acidentes Pessoais a Passageiros (APP) e controle a obrigatoriedade para realização de corridas
+                  </p>
+                </div>
+              </div>
+
+              {/* Botão Salvar Seguro Rápido */}
+              <button
+                type="button"
+                onClick={handleSaveAllSettings}
+                disabled={isSavingSettings}
+                className="btn-primary"
+                style={{
+                  padding: '8px 16px',
+                  fontSize: '0.82rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <Save size={16} />
+                <span>Salvar Configurações de Seguro</span>
+              </button>
+            </div>
+
+            {/* BANNER PRINCIPAL DE DECISÃO DO ADMINISTRADOR (LIBERAR OU BLOQUEAR) */}
+            <div style={{
+              padding: '16px 20px',
+              borderRadius: '14px',
+              background: systemSettings.insurance?.requireInsuranceToRequestRide
+                ? 'rgba(16, 185, 129, 0.08)'
+                : 'rgba(245, 158, 11, 0.08)',
+              border: `1.5px solid ${systemSettings.insurance?.requireInsuranceToRequestRide ? 'rgba(16, 185, 129, 0.35)' : 'rgba(245, 158, 11, 0.35)'}`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '16px'
+            }}>
+              <div style={{ maxWidth: '680px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                  <strong style={{
+                    fontSize: '0.92rem',
+                    color: systemSettings.insurance?.requireInsuranceToRequestRide ? '#10b981' : '#f59e0b'
+                  }}>
+                    {systemSettings.insurance?.requireInsuranceToRequestRide
+                      ? '🛡️ Exigência Rigorosa Ativa: Seguro Obrigatório para Solicitar Corridas'
+                      : '⚠️ Operação Liberada Sem Seguro Obrigatório (Decisão do Administrador)'}
+                  </strong>
+                </div>
+                <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
+                  {systemSettings.insurance?.requireInsuranceToRequestRide
+                    ? 'O sistema bloqueia novas solicitações de passageiros caso as informações da apólice não estejam cadastradas ou se a data de validade estiver expirada. Segurança jurídica total.'
+                    : 'A plataforma permite que passageiros solicitem corridas livremente mesmo sem informações ou apólice ativa de seguro. Essa liberação é controlada por sua conta e risco.'}
+                </p>
+              </div>
+
+              <label style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '10px',
+                cursor: 'pointer',
+                background: 'var(--bg-card)',
+                padding: '8px 16px',
+                borderRadius: '12px',
+                border: '1px solid var(--border-subtle)'
+              }}>
+                <input
+                  type="checkbox"
+                  checked={Boolean(systemSettings.insurance?.requireInsuranceToRequestRide)}
+                  onChange={(e) => setSystemSettings(prev => ({
+                    ...prev,
+                    insurance: {
+                      ...prev.insurance,
+                      requireInsuranceToRequestRide: e.target.checked
+                    }
+                  }))}
+                  style={{ width: '18px', height: '18px', accentColor: '#10b981', cursor: 'pointer' }}
+                />
+                <span style={{ fontSize: '0.82rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                  {systemSettings.insurance?.requireInsuranceToRequestRide ? 'Exigência Ativada' : 'Permitir Sem Seguro'}
+                </span>
+              </label>
+            </div>
+
+            {/* CAMPOS DA APÓLICE DE SEGURO */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+              {/* Seguradora */}
+              <div>
+                <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                  Companhia Seguradora (Credenciada SUSEP)
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ex: Porto Seguro, Chubb, Mapfre, Kovr, Zurich"
+                  value={systemSettings.insurance?.providerName || ''}
+                  onChange={(e) => setSystemSettings(prev => ({
+                    ...prev,
+                    insurance: { ...prev.insurance, providerName: e.target.value }
+                  }))}
+                  className="input-field"
+                  style={{ width: '100%', fontSize: '0.85rem' }}
+                />
+              </div>
+
+              {/* Número da Apólice */}
+              <div>
+                <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                  Número da Apólice Coletiva / Bilhete Master
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ex: APP-DRIVEHORA-2026-98214"
+                  value={systemSettings.insurance?.policyNumber || ''}
+                  onChange={(e) => setSystemSettings(prev => ({
+                    ...prev,
+                    insurance: { ...prev.insurance, policyNumber: e.target.value }
+                  }))}
+                  className="input-field"
+                  style={{ width: '100%', fontSize: '0.85rem' }}
+                />
+              </div>
+
+              {/* Data de Validade */}
+              <div>
+                <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                  Vigência / Data de Validade da Apólice
+                </label>
+                <input
+                  type="date"
+                  value={systemSettings.insurance?.validUntil || ''}
+                  onChange={(e) => setSystemSettings(prev => ({
+                    ...prev,
+                    insurance: { ...prev.insurance, validUntil: e.target.value }
+                  }))}
+                  className="input-field"
+                  style={{ width: '100%', fontSize: '0.85rem' }}
+                />
+              </div>
+
+              {/* Telefone 0800 Emergência */}
+              <div>
+                <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                  Central 0800 / WhatsApp de Emergência da Seguradora
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ex: 0800 727 2727"
+                  value={systemSettings.insurance?.emergencyHotline || ''}
+                  onChange={(e) => setSystemSettings(prev => ({
+                    ...prev,
+                    insurance: { ...prev.insurance, emergencyHotline: e.target.value }
+                  }))}
+                  className="input-field"
+                  style={{ width: '100%', fontSize: '0.85rem' }}
+                />
+              </div>
+            </div>
+
+            {/* COBERTURAS CAPITAL SEGURADO */}
+            <div style={{
+              background: 'rgba(255, 255, 255, 0.02)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: '14px',
+              padding: '16px'
+            }}>
+              <h5 style={{ margin: '0 0 12px', fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                Limites de Cobertura por Ocupante (Passageiro & Condutor)
+              </h5>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
+                <div>
+                  <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                    Morte Acidental (MA)
+                  </label>
+                  <input
+                    type="number"
+                    step="5000"
+                    value={systemSettings.insurance?.coverageAmountMA || 100000}
+                    onChange={(e) => setSystemSettings(prev => ({
+                      ...prev,
+                      insurance: { ...prev.insurance, coverageAmountMA: Number(e.target.value) }
+                    }))}
+                    className="input-field"
+                    style={{ width: '100%', fontSize: '0.85rem' }}
+                  />
+                  <span style={{ fontSize: '0.7rem', color: '#10b981', marginTop: '2px', display: 'block' }}>
+                    {formatCurrency(systemSettings.insurance?.coverageAmountMA || 100000)}
+                  </span>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                    Invalidez Permanente (IPA)
+                  </label>
+                  <input
+                    type="number"
+                    step="5000"
+                    value={systemSettings.insurance?.coverageAmountIPA || 100000}
+                    onChange={(e) => setSystemSettings(prev => ({
+                      ...prev,
+                      insurance: { ...prev.insurance, coverageAmountIPA: Number(e.target.value) }
+                    }))}
+                    className="input-field"
+                    style={{ width: '100%', fontSize: '0.85rem' }}
+                  />
+                  <span style={{ fontSize: '0.7rem', color: '#10b981', marginTop: '2px', display: 'block' }}>
+                    Até {formatCurrency(systemSettings.insurance?.coverageAmountIPA || 100000)}
+                  </span>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                    Despesas Médicas Hospitalares (DMHO)
+                  </label>
+                  <input
+                    type="number"
+                    step="1000"
+                    value={systemSettings.insurance?.coverageAmountDMHO || 10000}
+                    onChange={(e) => setSystemSettings(prev => ({
+                      ...prev,
+                      insurance: { ...prev.insurance, coverageAmountDMHO: Number(e.target.value) }
+                    }))}
+                    className="input-field"
+                    style={{ width: '100%', fontSize: '0.85rem' }}
+                  />
+                  <span style={{ fontSize: '0.7rem', color: '#10b981', marginTop: '2px', display: 'block' }}>
+                    Até {formatCurrency(systemSettings.insurance?.coverageAmountDMHO || 10000)}
+                  </span>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                    Provisão de Custo / Hora (R$)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.05"
+                    value={systemSettings.insurance?.costPerHour || 0.40}
+                    onChange={(e) => setSystemSettings(prev => ({
+                      ...prev,
+                      insurance: { ...prev.insurance, costPerHour: Number(e.target.value) }
+                    }))}
+                    className="input-field"
+                    style={{ width: '100%', fontSize: '0.85rem' }}
+                  />
+                  <span style={{ fontSize: '0.7rem', color: '#38bdf8', marginTop: '2px', display: 'block' }}>
+                    {formatCurrency(systemSettings.insurance?.costPerHour || 0.40)} / hora
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
