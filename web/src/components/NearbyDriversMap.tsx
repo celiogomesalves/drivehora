@@ -89,6 +89,12 @@ export function NearbyDriversMap({
     mapContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
 
+  const allRidesRef = useRef(allRides);
+  allRidesRef.current = allRides;
+
+  const fitMapToAllDriversRef = useRef(fitMapToAllDrivers);
+  fitMapToAllDriversRef.current = fitMapToAllDrivers;
+
   // 1. Obter e monitorar GPS real do Cliente
   useEffect(() => {
     let watchId: number | null = null;
@@ -96,8 +102,9 @@ export function NearbyDriversMap({
       .then(coords => {
         setUserLocation(coords);
         userLocationRef.current = coords;
-        if (mapInstanceRef.current) {
-          fitMapToAllDrivers(true, undefined, coords);
+        if (mapInstanceRef.current && !hasInitialFittedRef.current) {
+          hasInitialFittedRef.current = true;
+          fitMapToAllDriversRef.current(true, undefined, coords);
         }
       })
       .catch(() => {});
@@ -120,7 +127,7 @@ export function NearbyDriversMap({
     return () => {
       if (watchId !== null) navigator.geolocation.clearWatch(watchId);
     };
-  }, [fitMapToAllDrivers]);
+  }, []);
 
   // 2. Buscar Motoristas com Posições GPS
   const loadDrivers = useCallback(async (isManual = false) => {
@@ -130,10 +137,11 @@ export function NearbyDriversMap({
       // Exibir APENAS motoristas que estão ONLINE e com cadastro APROVADO
       let online = all.filter(d => d.isOnline === true && d.verificationStatus === 'approved');
 
+      const currentRides = allRidesRef.current;
       // Se allRides estiver disponível, recalcular/validar a contagem real de corridas finalizadas
-      if (allRides && allRides.length > 0) {
+      if (currentRides && currentRides.length > 0) {
         online = online.map(d => {
-          const completedCount = allRides.filter((r: any) => 
+          const completedCount = currentRides.filter((r: any) => 
             (r.driverId === d.id || r.driverId === d.userId) && 
             (r.status === 'finished' || r.status === 'completed')
           ).length;
@@ -148,11 +156,11 @@ export function NearbyDriversMap({
       onlineDriversRef.current = online;
       setLastSyncTime(new Date());
 
-      // Auto-enquadramento automático na primeira chegada dos dados
+      // Auto-enquadramento automático estritamente na primeira chegada dos dados
       if (!hasInitialFittedRef.current && mapInstanceRef.current) {
         hasInitialFittedRef.current = true;
         setTimeout(() => {
-          fitMapToAllDrivers(true, online);
+          fitMapToAllDriversRef.current(true, online);
         }, 150);
       }
     } catch (e) {
@@ -160,7 +168,7 @@ export function NearbyDriversMap({
     } finally {
       if (isManual) setIsSyncing(false);
     }
-  }, [allRides, fitMapToAllDrivers]);
+  }, []);
 
   // 3. Inscrição em Tempo Real (Supabase Realtime) + Polling Suave
   useEffect(() => {
@@ -253,7 +261,7 @@ export function NearbyDriversMap({
         driverMarkersRef.current.clear();
       }
     };
-  }, [fitMapToAllDrivers, userLocation.latitude, userLocation.longitude]);
+  }, []); // Inicializa o mapa UMA ÚNICA VEZ no mount (sem destruir/recriar o mapa no GPS)
 
   // 4.1 Enquadramento automático garantido na primeira carga com motoristas
   useEffect(() => {

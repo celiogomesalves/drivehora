@@ -6,7 +6,7 @@ interface AboutAppModalProps {
   isOpen: boolean;
   onClose: () => void;
   onOpenTerms?: () => void;
-  logoOption?: 1 | 2 | 3;
+  logoOption?: 1 | 2 | 3 | 'custom';
   theme?: 'light' | 'dark';
 }
 

@@ -50,7 +50,8 @@ export interface SystemSettings {
   vehicleCategories: VehicleCategoryConfig[];
   // Identidade Visual e Sons Padrão do Aplicativo (Configurado pelo Administrador)
   branding: {
-    logoOption: 1 | 2 | 3;
+    logoOption: 1 | 2 | 3 | 'custom';
+    customLogoUrl?: string;
     newRideSound: 'new_ride_a' | 'new_ride_b' | 'new_ride_c';
     acceptedSound: 'accepted_a';
     inProgressSound: 'in_progress_a';
@@ -145,34 +146,44 @@ export const getSystemSettings = (): SystemSettings => {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     const dedicatedLogo = typeof window !== 'undefined' ? localStorage.getItem('drivehora_selected_logo_option') : null;
-    const dedicatedLogoNum = dedicatedLogo ? Number(dedicatedLogo) : null;
+    const dedicatedCustomUrl = typeof window !== 'undefined' ? localStorage.getItem('drivehora_custom_logo_url') : null;
+
+    let activeLogoOption: 1 | 2 | 3 | 'custom' = DEFAULT_SETTINGS.branding.logoOption;
+    if (dedicatedLogo === '1' || dedicatedLogo === '2' || dedicatedLogo === '3') {
+      activeLogoOption = Number(dedicatedLogo) as 1 | 2 | 3;
+    } else if (dedicatedLogo === 'custom') {
+      activeLogoOption = 'custom';
+    }
 
     if (!saved) {
-      if (dedicatedLogoNum === 1 || dedicatedLogoNum === 2 || dedicatedLogoNum === 3) {
-        return {
-          ...DEFAULT_SETTINGS,
-          branding: {
-            ...DEFAULT_SETTINGS.branding,
-            logoOption: dedicatedLogoNum as 1 | 2 | 3
-          }
-        };
-      }
-      return DEFAULT_SETTINGS;
+      return {
+        ...DEFAULT_SETTINGS,
+        branding: {
+          ...DEFAULT_SETTINGS.branding,
+          logoOption: activeLogoOption,
+          customLogoUrl: dedicatedCustomUrl || undefined
+        }
+      };
     }
 
     const parsed = JSON.parse(saved);
     const fb = parsed.firebase || {};
     const br = parsed.branding || {};
 
-    const activeLogoOption = (dedicatedLogoNum === 1 || dedicatedLogoNum === 2 || dedicatedLogoNum === 3)
-      ? (dedicatedLogoNum as 1 | 2 | 3)
-      : ((br.logoOption === 1 || br.logoOption === 2 || br.logoOption === 3) ? br.logoOption : DEFAULT_SETTINGS.branding.logoOption);
+    if (dedicatedLogo !== '1' && dedicatedLogo !== '2' && dedicatedLogo !== '3' && dedicatedLogo !== 'custom') {
+      if (br.logoOption === 1 || br.logoOption === 2 || br.logoOption === 3 || br.logoOption === 'custom') {
+        activeLogoOption = br.logoOption;
+      }
+    }
+
+    const customLogoUrl = dedicatedCustomUrl || br.customLogoUrl || undefined;
 
     return {
       ...DEFAULT_SETTINGS,
       ...parsed,
       branding: {
         logoOption: activeLogoOption,
+        customLogoUrl,
         newRideSound: (br.newRideSound === 'new_ride_a' || br.newRideSound === 'new_ride_b' || br.newRideSound === 'new_ride_c') ? br.newRideSound : DEFAULT_SETTINGS.branding.newRideSound,
         acceptedSound: 'accepted_a',
         inProgressSound: 'in_progress_a',
@@ -278,10 +289,12 @@ export const fetchSystemSettingsFromDb = async (): Promise<SystemSettings> => {
         logoOption: (() => {
           const dedicated = typeof window !== 'undefined' ? localStorage.getItem('drivehora_selected_logo_option') : null;
           if (dedicated === '1' || dedicated === '2' || dedicated === '3') return Number(dedicated) as 1 | 2 | 3;
+          if (dedicated === 'custom') return 'custom';
           if (dbConfig.branding?.logoOption) return dbConfig.branding.logoOption;
           if (local.branding?.logoOption) return local.branding.logoOption;
           return DEFAULT_SETTINGS.branding.logoOption;
         })(),
+        customLogoUrl: dbConfig.branding?.customLogoUrl || local.branding?.customLogoUrl || undefined,
         newRideSound: dbConfig.branding?.newRideSound || local.branding?.newRideSound || DEFAULT_SETTINGS.branding.newRideSound,
         acceptedSound: 'accepted_a',
         inProgressSound: 'in_progress_a',

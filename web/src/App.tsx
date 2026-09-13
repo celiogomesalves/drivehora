@@ -7978,15 +7978,21 @@ export function App() {
       <LogoProposalsModal
         isOpen={showLogoModal}
         onClose={() => setShowLogoModal(false)}
-        onSelectLogo={async (optionId) => {
+        currentOption={systemSettings.branding?.logoOption}
+        currentCustomLogoUrl={systemSettings.branding?.customLogoUrl}
+        onSelectLogo={async (optionId, customLogoUrl) => {
           try {
             localStorage.setItem('drivehora_selected_logo_option', String(optionId));
+            if (customLogoUrl) {
+              localStorage.setItem('drivehora_custom_logo_url', customLogoUrl);
+            }
           } catch {}
           const updated = {
             ...systemSettings,
             branding: {
               ...systemSettings.branding,
-              logoOption: optionId as any
+              logoOption: optionId,
+              customLogoUrl: customLogoUrl || systemSettings.branding?.customLogoUrl
             }
           };
           setSystemSettings(updated);
@@ -8032,7 +8038,7 @@ export function App() {
           try {
             localStorage.setItem('drivehora_current_user', JSON.stringify(updated));
             await dbSaveProfile(updated);
-            showToast('Termos de Uso e Política de Privacidade aceitos com sucesso!', 'success');
+            // Toast de confirmação removido a pedido do usuário
           } catch (e) {
             console.warn('Erro ao sincronizar aceite dos termos:', e);
           }
