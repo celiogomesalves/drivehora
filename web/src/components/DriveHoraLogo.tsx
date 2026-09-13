@@ -1,22 +1,50 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 interface DriveHoraLogoProps {
   size?: number;
   className?: string;
-  variant?: 'emblem' | 'full' | 'minimal';
+  option?: 1 | 2 | 3;
   style?: React.CSSProperties;
 }
 
 /**
  * DriveHoraLogo - Identidade Visual Moderna e Sofisticada
- * Monograma vetorial premium combinando a aerodinâmica da letra 'D' (Drive)
- * com o ponteiro e dial de precisão do cronógrafo (Hora), em acabamento platina & cobalto.
+ * Renderiza o conceito aprovado (Opções 1, 2 ou 3) com sincronização em tempo real
+ * quando o Administrador altera as configurações da marca na plataforma.
  */
 export const DriveHoraLogo: React.FC<DriveHoraLogoProps> = ({
   size = 38,
+  option,
   style,
   className
 }) => {
+  const [activeOption, setActiveOption] = useState<1 | 2 | 3>(() => {
+    if (option) return option;
+    try {
+      const raw = localStorage.getItem('drivehora_system_settings_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed.branding?.logoOption) return parsed.branding.logoOption;
+      }
+    } catch {}
+    return 2;
+  });
+
+  useEffect(() => {
+    if (option) {
+      setActiveOption(option);
+      return;
+    }
+    const handleSettingsUpdated = (e: any) => {
+      const opt = e.detail?.branding?.logoOption;
+      if (opt && (opt === 1 || opt === 2 || opt === 3)) {
+        setActiveOption(opt);
+      }
+    };
+    window.addEventListener('drivehora_settings_updated', handleSettingsUpdated);
+    return () => window.removeEventListener('drivehora_settings_updated', handleSettingsUpdated);
+  }, [option]);
+
   return (
     <div
       className={className}
@@ -28,25 +56,27 @@ export const DriveHoraLogo: React.FC<DriveHoraLogoProps> = ({
         width: size,
         height: size,
         borderRadius: Math.round(size * 0.28),
-        background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #312e81 100%)',
-        boxShadow: '0 4px 20px rgba(99, 102, 241, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.2)',
+        background: 'linear-gradient(135deg, #0a0d14 0%, #1e1b4b 50%, #0f172a 100%)',
+        boxShadow: '0 4px 20px rgba(59, 130, 246, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.2)',
         border: '1px solid rgba(129, 140, 248, 0.3)',
         flexShrink: 0,
         overflow: 'hidden',
         ...style
       }}
     >
-      {/* Brilho de reflexo dinâmico de alta sofisticação */}
-      <div
+      {/* Imagem de Alta Fidelidade do Conceito Selecionado */}
+      <img
+        src={`/branding/logo_option_${activeOption}.jpg`}
+        alt="DriveHora Logo"
         style={{
-          position: 'absolute',
-          top: '-20%',
-          left: '-20%',
-          width: '70%',
-          height: '70%',
-          background: 'radial-gradient(circle, rgba(255, 255, 255, 0.25) 0%, transparent 70%)',
-          pointerEvents: 'none',
-          borderRadius: '50%'
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover',
+          display: 'block'
+        }}
+        onError={(e) => {
+          // Se a imagem falhar em carregar, oculta para exibir o SVG interno de fallback
+          (e.currentTarget as HTMLElement).style.display = 'none';
         }}
       />
 
@@ -56,7 +86,7 @@ export const DriveHoraLogo: React.FC<DriveHoraLogoProps> = ({
         viewBox="0 0 48 48"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
-        style={{ position: 'relative', zIndex: 1 }}
+        style={{ position: 'absolute', zIndex: 0 }}
       >
         <defs>
           {/* Gradiente do Monograma 'D' + Velocidade */}

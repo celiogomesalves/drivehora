@@ -45,7 +45,7 @@ import {
   type DbRide, type DbRideChatMessage
 } from './services/dbService';
 import { requestWebPushToken, onForegroundMessage } from './services/firebase';
-import { getSystemSettings, fetchSystemSettingsFromDb, type SystemSettings } from './services/settingsService';
+import { getSystemSettings, fetchSystemSettingsFromDb, saveSystemSettings, type SystemSettings } from './services/settingsService';
 import { testGatewayConnection, createPixPayment, simulateAsaasPayment, type PaymentMethodType } from './services/paymentGatewayService';
 import { getLocalSessionToken, clearLocalSessionToken } from './utils/sessionHelper';
 import { useSystemDialog } from './components/SystemDialog';
@@ -2431,9 +2431,16 @@ export function App() {
           }}>
             {/* Logo & Marca */}
             <div 
-              onClick={() => setShowLogoModal(true)} 
-              title="Clique para ver e escolher as propostas de Logo do DriveHora"
-              style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}
+              onClick={() => {
+                if (isUserAdmin) setShowLogoModal(true);
+              }} 
+              title={isUserAdmin ? "Painel Admin: Clique para escolher a Logo oficial do sistema" : "DriveHora"}
+              style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '10px', 
+                cursor: isUserAdmin ? 'pointer' : 'default' 
+              }}
             >
               <DriveHoraLogo size={38} />
               <div>
@@ -2550,29 +2557,31 @@ export function App() {
                 </div>
               </div>
 
-              {/* Botão de Degustação / Escolha de Sons */}
-              <button
-                onClick={() => setShowSoundAuditionModal(true)}
-                title="Identidade Sonora: Ouvir e escolher os toques exclusivos do DriveHora"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '5px',
-                  padding: '4px 10px',
-                  borderRadius: '20px',
-                  fontSize: '0.72rem',
-                  fontWeight: 700,
-                  background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(129, 140, 248, 0.2))',
-                  border: '1px solid rgba(99, 102, 241, 0.35)',
-                  color: 'var(--primary-color, #818cf8)',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  boxShadow: '0 2px 8px rgba(99, 102, 241, 0.15)'
-                }}
-              >
-                <Music size={12} />
-                <span className="hide-on-mobile">Sons</span>
-              </button>
+              {/* Botão de Degustação / Escolha de Sons (Exclusivo do Administrador) */}
+              {isUserAdmin && (
+                <button
+                  onClick={() => setShowSoundAuditionModal(true)}
+                  title="Painel Admin: Ouvir e definir sons padrão do DriveHora"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    padding: '4px 10px',
+                    borderRadius: '20px',
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(129, 140, 248, 0.2))',
+                    border: '1px solid rgba(99, 102, 241, 0.35)',
+                    color: 'var(--primary-color, #818cf8)',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    boxShadow: '0 2px 8px rgba(99, 102, 241, 0.15)'
+                  }}
+                >
+                  <Music size={12} />
+                  <span className="hide-on-mobile">Sons</span>
+                </button>
+              )}
 
               <div className="user-header-card">
                 <div style={{
@@ -7932,18 +7941,40 @@ export function App() {
         />
       )}
 
-      {/* Modal de Degustação e Escolha de Sons Exclusivos */}
+      {/* Modal de Degustação e Escolha de Sons Exclusivos (Configurado pelo Admin) */}
       <SoundAuditionModal
         isOpen={showSoundAuditionModal}
+        isAdmin={isUserAdmin}
         onClose={() => setShowSoundAuditionModal(false)}
+        onSaveSoundPreset={async (presetId) => {
+          const updated = {
+            ...systemSettings,
+            branding: {
+              ...systemSettings.branding,
+              newRideSound: presetId
+            }
+          };
+          setSystemSettings(updated);
+          await saveSystemSettings(updated);
+          showToast('Novo som padrão de corrida salvo e ativo para todos os motoristas!', 'success');
+        }}
       />
 
-      {/* Modal de Visualização e Escolha de Logos */}
+      {/* Modal de Visualização e Escolha de Logos (Configurado pelo Admin) */}
       <LogoProposalsModal
         isOpen={showLogoModal}
         onClose={() => setShowLogoModal(false)}
-        onSelectLogo={(optionId) => {
-          showToast(`Opção ${optionId} de Logo selecionada como preferência!`, 'success');
+        onSelectLogo={async (optionId) => {
+          const updated = {
+            ...systemSettings,
+            branding: {
+              ...systemSettings.branding,
+              logoOption: optionId as any
+            }
+          };
+          setSystemSettings(updated);
+          await saveSystemSettings(updated);
+          showToast(`Logo ${optionId} definida como padrão oficial e refletida em todo o sistema!`, 'success');
         }}
       />
 

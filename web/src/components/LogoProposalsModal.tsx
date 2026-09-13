@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Sparkles, X, CheckCircle2, Award, Shield, Cpu } from 'lucide-react';
 
 interface LogoProposalsModalProps {
@@ -12,7 +12,26 @@ export const LogoProposalsModal: React.FC<LogoProposalsModalProps> = ({
   onClose,
   onSelectLogo
 }) => {
-  const [selectedId, setSelectedId] = useState<number>(2);
+  const [selectedId, setSelectedId] = useState<number>(() => {
+    try {
+      const raw = localStorage.getItem('drivehora_system_settings_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed.branding?.logoOption) return parsed.branding.logoOption;
+      }
+    } catch {}
+    return 2;
+  });
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('drivehora_system_settings_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed.branding?.logoOption) setSelectedId(parsed.branding.logoOption);
+      }
+    } catch {}
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

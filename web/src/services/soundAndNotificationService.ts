@@ -26,11 +26,31 @@ const playSynthesizedTones = (type: NotificationSoundType) => {
     };
 
     if (type === 'new_ride') {
-      // Alerta chamativo para o motorista (Arpejo duplo de alerta característico DriveHora)
-      playTone(880, 0, 0.15, 0.35, 'triangle');
-      playTone(1174.66, 0.18, 0.22, 0.35, 'triangle');
-      playTone(1479.98, 0.42, 0.3, 0.35, 'triangle');
-      playTone(1760, 0.74, 0.35, 0.4, 'triangle');
+      let soundPreset = 'new_ride_a';
+      try {
+        const raw = localStorage.getItem('drivehora_system_settings_v1');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed.branding?.newRideSound) soundPreset = parsed.branding.newRideSound;
+        }
+      } catch {}
+
+      if (soundPreset === 'new_ride_b') {
+        // Opção B: Pulse Luxe (Chauffeur VIP)
+        playTone(587.33, 0, 0.3, 0.35, 'sine');
+        playTone(880, 0.15, 0.45, 0.35, 'sine');
+        playTone(1174.66, 0.35, 0.5, 0.3, 'sine');
+      } else if (soundPreset === 'new_ride_c') {
+        // Opção C: Bell Alert (Carrilhão Moderno)
+        playTone(1046.5, 0, 0.2, 0.4, 'sine');
+        playTone(1567.98, 0.22, 0.6, 0.35, 'sine');
+      } else {
+        // Opção A: Arpejo Neo-Drive (Padrão Aprovado - Alta visibilidade)
+        playTone(880, 0, 0.15, 0.35, 'triangle');
+        playTone(1174.66, 0.18, 0.22, 0.35, 'triangle');
+        playTone(1479.98, 0.42, 0.3, 0.35, 'triangle');
+        playTone(1760, 0.74, 0.38, 0.4, 'triangle');
+      }
     } else if (type === 'accepted') {
       // Tom harmonioso para o passageiro: Motorista a caminho! (C5 -> E5 -> G5)
       playTone(523.25, 0, 0.18, 0.25, 'sine');

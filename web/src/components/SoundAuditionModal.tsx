@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
-import { Volume2, Music, Sparkles, X } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Volume2, Music, Sparkles, X, CheckCircle2, Crown } from 'lucide-react';
 import { playNotificationSound, type NotificationSoundType } from '../services/soundAndNotificationService';
 
 interface SoundAuditionModalProps {
   isOpen: boolean;
   onClose: () => void;
+  isAdmin?: boolean;
+  onSaveSoundPreset?: (presetId: 'new_ride_a' | 'new_ride_b' | 'new_ride_c') => void;
 }
 
 interface SoundOption {
@@ -18,8 +20,32 @@ interface SoundOption {
   playCustom?: () => void;
 }
 
-export const SoundAuditionModal: React.FC<SoundAuditionModalProps> = ({ isOpen, onClose }) => {
+export const SoundAuditionModal: React.FC<SoundAuditionModalProps> = ({
+  isOpen,
+  onClose,
+  isAdmin = false,
+  onSaveSoundPreset
+}) => {
   const [playingId, setPlayingId] = useState<string | null>(null);
+  const [currentActivePreset, setCurrentActivePreset] = useState<'new_ride_a' | 'new_ride_b' | 'new_ride_c'>(() => {
+    try {
+      const raw = localStorage.getItem('drivehora_system_settings_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed.branding?.newRideSound) return parsed.branding.newRideSound;
+      }
+    } catch {}
+    return 'new_ride_a';
+  });
+
+  useEffect(() => {
+    const handleSettingsUpdate = (e: any) => {
+      const snd = e.detail?.branding?.newRideSound;
+      if (snd) setCurrentActivePreset(snd);
+    };
+    window.addEventListener('drivehora_settings_updated', handleSettingsUpdate);
+    return () => window.removeEventListener('drivehora_settings_updated', handleSettingsUpdate);
+  }, []);
 
   if (!isOpen) return null;
 
@@ -296,28 +322,76 @@ export const SoundAuditionModal: React.FC<SoundAuditionModalProps> = ({ isOpen, 
                   </div>
                 </div>
 
-                <button
-                  onClick={() => sound.playCustom ? sound.playCustom() : playNotificationSound(sound.category)}
-                  style={{
-                    padding: '8px 16px',
-                    borderRadius: '12px',
-                    border: 'none',
-                    background: isPlaying ? '#10b981' : 'linear-gradient(135deg, #4f46e5, #6366f1)',
-                    color: '#ffffff',
-                    fontWeight: 700,
-                    fontSize: '0.82rem',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    flexShrink: 0,
-                    boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  <Volume2 size={15} style={{ animation: isPlaying ? 'pulse 0.8s infinite' : 'none' }} />
-                  <span>{isPlaying ? 'Tocando...' : 'Ouvir'}</span>
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                  {sound.id.startsWith('new_ride') && (
+                    sound.id === currentActivePreset ? (
+                      <span
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          fontSize: '0.72rem',
+                          fontWeight: 700,
+                          color: '#10b981',
+                          background: 'rgba(16, 185, 129, 0.15)',
+                          padding: '5px 10px',
+                          borderRadius: '10px',
+                          border: '1px solid rgba(16, 185, 129, 0.3)'
+                        }}
+                      >
+                        <CheckCircle2 size={14} />
+                        Padrão Ativo
+                      </span>
+                    ) : isAdmin ? (
+                      <button
+                        onClick={() => {
+                          if (onSaveSoundPreset) {
+                            onSaveSoundPreset(sound.id as any);
+                            setCurrentActivePreset(sound.id as any);
+                          }
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          fontSize: '0.72rem',
+                          fontWeight: 700,
+                          color: '#f59e0b',
+                          background: 'rgba(245, 158, 11, 0.12)',
+                          padding: '5px 10px',
+                          borderRadius: '10px',
+                          border: '1px solid rgba(245, 158, 11, 0.35)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <Crown size={13} />
+                        Definir Padrão
+                      </button>
+                    ) : null
+                  )}
+
+                  <button
+                    onClick={() => sound.playCustom ? sound.playCustom() : playNotificationSound(sound.category)}
+                    style={{
+                      padding: '8px 14px',
+                      borderRadius: '12px',
+                      border: 'none',
+                      background: isPlaying ? '#10b981' : 'linear-gradient(135deg, #4f46e5, #6366f1)',
+                      color: '#ffffff',
+                      fontWeight: 700,
+                      fontSize: '0.82rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <Volume2 size={15} style={{ animation: isPlaying ? 'pulse 0.8s infinite' : 'none' }} />
+                    <span>{isPlaying ? 'Tocando...' : 'Ouvir'}</span>
+                  </button>
+                </div>
               </div>
             );
           })}

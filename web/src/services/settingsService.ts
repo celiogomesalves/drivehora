@@ -48,6 +48,15 @@ export interface SystemSettings {
   appUrl: string;
   // Categorias de Veículos
   vehicleCategories: VehicleCategoryConfig[];
+  // Identidade Visual e Sons Padrão do Aplicativo (Configurado pelo Administrador)
+  branding: {
+    logoOption: 1 | 2 | 3;
+    newRideSound: 'new_ride_a' | 'new_ride_b' | 'new_ride_c';
+    acceptedSound: 'accepted_a';
+    inProgressSound: 'in_progress_a';
+    finishedSound: 'finished_a';
+    timeAlertSound: 'time_alert';
+  };
 }
 
 export const DEFAULT_VEHICLE_CATEGORIES: VehicleCategoryConfig[] = [
@@ -116,7 +125,15 @@ const DEFAULT_SETTINGS: SystemSettings = {
     freeCancellationMinutes: 5
   },
   appUrl: 'https://drivehora.agenc-ia.net',
-  vehicleCategories: DEFAULT_VEHICLE_CATEGORIES
+  vehicleCategories: DEFAULT_VEHICLE_CATEGORIES,
+  branding: {
+    logoOption: 2, // Opção 2 recomendada
+    newRideSound: 'new_ride_a', // Opção A aprovada pelo usuário
+    acceptedSound: 'accepted_a',
+    inProgressSound: 'in_progress_a',
+    finishedSound: 'finished_a',
+    timeAlertSound: 'time_alert'
+  }
 };
 
 import { getSupabase } from '../supabase';
@@ -130,10 +147,19 @@ export const getSystemSettings = (): SystemSettings => {
     if (!saved) return DEFAULT_SETTINGS;
     const parsed = JSON.parse(saved);
     const fb = parsed.firebase || {};
+    const br = parsed.branding || {};
 
     return {
       ...DEFAULT_SETTINGS,
       ...parsed,
+      branding: {
+        logoOption: (br.logoOption === 1 || br.logoOption === 2 || br.logoOption === 3) ? br.logoOption : DEFAULT_SETTINGS.branding.logoOption,
+        newRideSound: (br.newRideSound === 'new_ride_a' || br.newRideSound === 'new_ride_b' || br.newRideSound === 'new_ride_c') ? br.newRideSound : DEFAULT_SETTINGS.branding.newRideSound,
+        acceptedSound: 'accepted_a',
+        inProgressSound: 'in_progress_a',
+        finishedSound: 'finished_a',
+        timeAlertSound: 'time_alert'
+      },
       firebase: {
         projectId: fb.projectId?.trim() || DEFAULT_SETTINGS.firebase.projectId,
         apiKey: fb.apiKey?.trim() || DEFAULT_SETTINGS.firebase.apiKey,
