@@ -23,6 +23,29 @@ export function getDeviceName(): string {
   return `${browser} (${os})`;
 }
 
+/**
+ * Identificador Único e Persistente do Dispositivo / Navegador Local
+ * Permanece mesmo após logout para saber com certeza se é o mesmo aparelho.
+ */
+export function getLocalDeviceId(): string {
+  if (typeof window === 'undefined') return 'dev_server';
+  let devId = localStorage.getItem('drivehora_device_id');
+  if (!devId) {
+    devId = `dev_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+    localStorage.setItem('drivehora_device_id', devId);
+  }
+  return devId;
+}
+
+/**
+ * Monta a string completa de identificação do aparelho contendo nome amigável + ID de hardware/browser
+ */
+export function getFullDeviceSignature(): string {
+  const name = getDeviceName();
+  const devId = getLocalDeviceId();
+  return `${name} #${devId}`;
+}
+
 export function generateSessionToken(): string {
   return `sess_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 }
@@ -45,7 +68,7 @@ export function clearLocalSessionToken(): void {
 }
 
 /**
- * Sanitiza o nome do dispositivo cadastrado, prevenindo exibição de objetos JSON legados de carteira/usuário
+ * Sanitiza o nome do dispositivo cadastrado para exibição limpa ao usuário
  */
 export function formatDeviceName(raw?: string | null): string {
   if (!raw) return 'Outro Dispositivo';
@@ -59,5 +82,35 @@ export function formatDeviceName(raw?: string | null): string {
   ) {
     return 'Outro Dispositivo';
   }
+  // Remove a hash de identificação interna (#dev_...) para exibição amigável
+  if (trimmed.includes('#dev_')) {
+    return trimmed.split('#dev_')[0].trim();
+  }
   return trimmed;
+}
+
+/**
+ * Verifica se o dispositivo salvo no banco é rigorosamente o mesmo aparelho atual
+ */
+export function isSameDevice(savedDeviceRaw?: string | null): boolean {
+  if (!savedDeviceRaw) return false;
+  const currentDevId = getLocalDeviceId();
+  if (savedDeviceRaw.includes(currentDevId)) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Verifica se uma sessão anterior já está expirada por inatividade (padrão: 15 minutos)
+ */
+export function isSessionInactive(lastActiveAt?: string | null, maxInactiveMinutes = 15): boolean {
+  if (!lastActiveAt) return true;
+  try {
+    const diffMs = Date.now() - new Date(lastActiveAt).getTime();
+    const diffMinutes = diffMs / (1000 * 60);
+    return diffMinutes > maxInactiveMinutes;
+  } catch {
+    return true;
+  }
 }

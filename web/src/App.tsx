@@ -42,7 +42,7 @@ import { formatCurrency, formatCurrencyInput, parseCurrencyInput } from './utils
 import { 
   dbGetClientProfile, dbGetDriverProfile, dbGetAllDrivers, dbSaveProfile,
   dbCreateRide, dbUpdateRide, dbCancelRide, dbAcknowledgeRide, dbUpdateDriverOnlineStatus, dbUpdateDriverLocation,
-  dbGetFavoriteDriverIds, dbToggleFavoriteDriver, dbSaveUserDeviceToken, dbCheckUserSession,
+  dbGetFavoriteDriverIds, dbToggleFavoriteDriver, dbSaveUserDeviceToken, dbCheckUserSession, dbClearUserSession,
   dbCreditDriverCancellationFee, dbSendRideChatMessage, dbExtendRideHours,
   type DbRide, type DbRideChatMessage
 } from './services/dbService';
@@ -1427,6 +1427,13 @@ export function App() {
   // Logout do Usuário -> Volta imediatamente para a Página de Login
   // Se for motorista, garante que ele ficará OFFLINE antes de sair
   const handleLogout = async () => {
+    if (currentUser?.id) {
+      try {
+        await dbClearUserSession(currentUser.id);
+      } catch (e) {
+        console.warn('Erro ao limpar sessão no banco durante logout:', e);
+      }
+    }
     if (currentUser?.role === 'driver' && currentUser?.id) {
       try {
         await dbUpdateDriverOnlineStatus(currentUser.id, false);

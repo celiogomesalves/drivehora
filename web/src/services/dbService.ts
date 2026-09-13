@@ -212,6 +212,28 @@ export const dbUpdateUserSession = async (
   }
 };
 
+// 1.1b Limpar sessão no Supabase ao realizar Logout
+export const dbClearUserSession = async (userId: string): Promise<boolean> => {
+  if (!userId) return false;
+  const sb = getSupabase();
+  if (!sb) return false;
+
+  try {
+    await withTimeout(
+      sb.from('profiles').update({
+        active_session_token: null,
+        active_device_name: null,
+        updated_at: new Date().toISOString()
+      }).eq('id', userId),
+      5000
+    );
+    return true;
+  } catch (err) {
+    console.warn('Erro ao limpar sessão no logout:', err);
+    return false;
+  }
+};
+
 // 1.2 Verificar se a sessão local ainda é a sessão ativa autorizada
 export const dbCheckUserSession = async (
   userId: string,

@@ -12,8 +12,9 @@ import {
   dbForceDisconnectOtherSessions, dbUpdateUserSession 
 } from '../services/dbService';
 import { 
-  getDeviceName, getLocalSessionToken, setLocalSessionToken, 
-  generateSessionToken, formatDeviceName 
+  getLocalSessionToken, setLocalSessionToken, 
+  generateSessionToken, formatDeviceName, getFullDeviceSignature,
+  isSameDevice, isSessionInactive 
 } from '../utils/sessionHelper';
 import { TermsAndPrivacyModal } from './TermsAndPrivacyModal';
 
@@ -84,7 +85,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, theme = 'd
     const existingProfile = await dbFindProfileByEmail(cleanEmail);
     const userId = existingProfile?.id || generateUserIdFromEmail(cleanEmail);
     const localToken = getLocalSessionToken();
-    const deviceName = getDeviceName();
+    const deviceSignature = getFullDeviceSignature();
 
     const user: UserProfile = {
       id: userId,
@@ -99,22 +100,30 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, theme = 'd
     };
 
     // 🛡️ VERIFICAÇÃO DE SESSÃO ÚNICA (Single Device Session):
-    // Se o perfil já tiver uma sessão ativa registrada diferente deste aparelho:
-    if (
+    // Só bloqueia se:
+    // 1. O perfil já tiver sessão ativa registrada no banco;
+    // 2. A sessão registrada NÃO pertencer a este mesmo aparelho;
+    // 3. A sessão anterior NÃO estiver inativa/expirada (> 15 minutos sem batimento cardíaco);
+    // 4. Não for um novo cadastro.
+    const isAnotherDevice = Boolean(
       existingProfile?.activeSessionToken && 
+      !isSameDevice(existingProfile?.activeDeviceName) &&
+      !isSessionInactive(existingProfile?.lastActiveAt, 15) &&
       existingProfile.activeSessionToken !== localToken &&
       !isSignUp
-    ) {
+    );
+
+    if (isAnotherDevice) {
       setIsLoading(false);
       setConcurrentSessionData({
         user,
-        existingDevice: formatDeviceName(existingProfile.activeDeviceName)
+        existingDevice: formatDeviceName(existingProfile?.activeDeviceName)
       });
       return;
     }
 
-    // Se for novo cadastro ou mesmo aparelho, segue o login direto
-    await completeLogin(user, localToken, deviceName);
+    // Se for o mesmo aparelho, sessão expirada ou novo login, segue o login direto e renova a sessão
+    await completeLogin(user, localToken, deviceSignature);
   };
 
   // Forçar desconexão do outro aparelho e assumir acesso neste dispositivo
@@ -123,18 +132,18 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, theme = 'd
     setIsLoading(true);
 
     const newToken = generateSessionToken();
-    const deviceName = getDeviceName();
+    const deviceSignature = getFullDeviceSignature();
 
     await dbForceDisconnectOtherSessions(
       concurrentSessionData.user.id, 
       newToken, 
-      deviceName, 
+      deviceSignature, 
       concurrentSessionData.user.role
     );
 
     const sessionUser = concurrentSessionData.user;
     setConcurrentSessionData(null);
-    await completeLogin(sessionUser, newToken, deviceName);
+    await completeLogin(sessionUser, newToken, deviceSignature);
   };
 
   return (
