@@ -7,7 +7,7 @@ import {
   BellRing, Volume2, VolumeX, Ban, AlertOctagon, Heart, ShieldAlert, RotateCcw,
   Filter, Archive, ArchiveRestore, Trash2, CreditCard,
   ChevronDown, ChevronUp, AlertCircle, Headphones,
-  Calendar, Zap, Share2, Copy, Sun, Moon, Eye, EyeOff
+  Calendar, Zap, Share2, Copy, Sun, Moon, Eye, EyeOff, Music
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import confetti from 'canvas-confetti';
@@ -15,6 +15,7 @@ import { getSupabase, getSupabaseCredentials, saveSupabaseCredentials, initGloba
 import type { UserProfile, ClientProfile, DriverProfile, DriverPublicProfile } from './types/auth';
 import { isSuperAdminEmail } from './types/auth';
 import { LoginPage } from './components/LoginPage';
+import { DriveHoraLogo } from './components/DriveHoraLogo';
 import { ClientOnboarding } from './components/ClientOnboarding';
 import { DriverOnboarding } from './components/DriverOnboarding';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -27,6 +28,7 @@ import { ClientProfileManager } from './components/ClientProfileManager';
 import { RatingModal } from './components/RatingModal';
 import { DriverCancelModal } from './components/DriverCancelModal';
 import { ActiveRidePanel } from './components/ActiveRidePanel';
+import { SoundAuditionModal } from './components/SoundAuditionModal';
 import { getUserWallet, addWalletCredit, addWalletDebit, type UserWallet } from './services/walletService';
 import { dbCreateRideReport } from './services/dbService';
 import { GpsNavigationModal } from './components/GpsNavigationModal';
@@ -305,6 +307,7 @@ export function App() {
   // Supabase state & modal
   const [supabaseConfig, setSupabaseConfig] = useState(getSupabaseCredentials());
   const [showConfigModal, setShowConfigModal] = useState(false);
+  const [showSoundAuditionModal, setShowSoundAuditionModal] = useState(false);
   const [inputSupabaseUrl, setInputSupabaseUrl] = useState(supabaseConfig.url);
   const [inputSupabaseKey, setInputSupabaseKey] = useState(supabaseConfig.key);
   const [supabaseConnected, setSupabaseConnected] = useState(false);
@@ -2426,19 +2429,7 @@ export function App() {
           }}>
             {/* Logo & Marca */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{
-                background: 'var(--primary-gradient)',
-                width: '38px',
-                height: '38px',
-                borderRadius: '12px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                boxShadow: '0 4px 15px rgba(99, 102, 241, 0.4)',
-                flexShrink: 0
-              }}>
-                <Car size={22} color="#fff" />
-              </div>
+              <DriveHoraLogo size={38} />
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span className="app-brand-title">DriveHora</span>
@@ -2552,6 +2543,30 @@ export function App() {
                   <span className="hide-on-mobile">Escuro</span>
                 </div>
               </div>
+
+              {/* Botão de Degustação / Escolha de Sons */}
+              <button
+                onClick={() => setShowSoundAuditionModal(true)}
+                title="Identidade Sonora: Ouvir e escolher os toques exclusivos do DriveHora"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '4px 10px',
+                  borderRadius: '20px',
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(129, 140, 248, 0.2))',
+                  border: '1px solid rgba(99, 102, 241, 0.35)',
+                  color: 'var(--primary-color, #818cf8)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  boxShadow: '0 2px 8px rgba(99, 102, 241, 0.15)'
+                }}
+              >
+                <Music size={12} />
+                <span className="hide-on-mobile">Sons</span>
+              </button>
 
               <div className="user-header-card">
                 <div style={{
@@ -7910,6 +7925,12 @@ export function App() {
           }}
         />
       )}
+
+      {/* Modal de Degustação e Escolha de Sons Exclusivos */}
+      <SoundAuditionModal
+        isOpen={showSoundAuditionModal}
+        onClose={() => setShowSoundAuditionModal(false)}
+      />
 
       {/* Modal de Cancelamento de Atendimento pelo Motorista com Justificativa */}
       {driverCancelModalRide && (

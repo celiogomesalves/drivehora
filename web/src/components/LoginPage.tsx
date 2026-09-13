@@ -5,6 +5,7 @@ import {
   Users, Car, LogIn, Mail, Lock, User, Phone, ShieldCheck, 
   Clock, DollarSign, LogOut, X, ShieldAlert 
 } from 'lucide-react';
+import { DriveHoraLogo } from './DriveHoraLogo';
 import { formatPhone } from '../utils/formatters';
 import { 
   dbSaveProfile, dbFindProfileByEmail, generateUserIdFromEmail, 
@@ -139,18 +140,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         zIndex: 10
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{
-            background: 'var(--primary-gradient)',
-            width: '44px',
-            height: '44px',
-            borderRadius: '14px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: '0 4px 15px rgba(99, 102, 241, 0.4)'
-          }}>
-            <Car size={26} color="#fff" />
-          </div>
+          <DriveHoraLogo size={44} />
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--text-primary)' }}>DriveHora</span>
