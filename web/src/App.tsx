@@ -26,6 +26,7 @@ import { ReportIssueModal } from './components/ReportIssueModal';
 import { ClientProfileManager } from './components/ClientProfileManager';
 import { RatingModal } from './components/RatingModal';
 import { DriverCancelModal } from './components/DriverCancelModal';
+import { ActiveRidePanel } from './components/ActiveRidePanel';
 import { getUserWallet, addWalletCredit, addWalletDebit, type UserWallet } from './services/walletService';
 import { dbCreateRideReport } from './services/dbService';
 import { GpsNavigationModal } from './components/GpsNavigationModal';
@@ -37,8 +38,8 @@ import {
   dbGetClientProfile, dbGetDriverProfile, dbGetAllDrivers,
   dbCreateRide, dbUpdateRide, dbCancelRide, dbAcknowledgeRide, dbUpdateDriverOnlineStatus, dbUpdateDriverLocation,
   dbGetFavoriteDriverIds, dbToggleFavoriteDriver, dbSaveUserDeviceToken, dbCheckUserSession,
-  dbCreditDriverCancellationFee,
-  type DbRide 
+  dbCreditDriverCancellationFee, dbSendRideChatMessage, dbExtendRideHours,
+  type DbRide, type DbRideChatMessage
 } from './services/dbService';
 import { requestWebPushToken, onForegroundMessage } from './services/firebase';
 import { getSystemSettings, fetchSystemSettingsFromDb, type SystemSettings } from './services/settingsService';
@@ -622,6 +623,8 @@ export function App() {
     setClientSubTab('request');
   };
 
+  const [prioritizeFavorites, setPrioritizeFavorites] = useState(true);
+
   // Timer de 1 segundo para atualizar contadores regressivos
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -1135,7 +1138,10 @@ export function App() {
               isScheduled: Boolean((sub as any)?.isScheduled || d.ride_type === 'scheduled' || d.scheduled_for || d.is_scheduled || d.isScheduled),
               scheduledFor: (sub as any)?.scheduledFor || d.scheduled_for || d.scheduledFor,
               requiredAmenities: (sub as any)?.requiredAmenities || d.required_amenities || d.requiredAmenities || [],
-              favoriteDriverIds: (sub as any)?.favoriteDriverIds || d.favorite_driver_ids || d.favoriteDriverIds || []
+              favoriteDriverIds: (sub as any)?.favoriteDriverIds || d.favorite_driver_ids || d.favoriteDriverIds || [],
+              pinCode: (sub as any)?.pinCode || d.pin_code || d.pinCode,
+              extendedHours: (sub as any)?.extendedHours || d.extended_hours || d.extendedHours || 0,
+              chatMessages: (sub as any)?.chatMessages || d.chat_messages || d.chatMessages || []
             };
           });
           setRides(formatted);
@@ -1172,7 +1178,10 @@ export function App() {
             isScheduled: Boolean((sub as any)?.isScheduled || d.ride_type === 'scheduled' || d.scheduled_for || d.is_scheduled || d.isScheduled),
             scheduledFor: (sub as any)?.scheduledFor || d.scheduled_for || d.scheduledFor,
             requiredAmenities: (sub as any)?.requiredAmenities || d.required_amenities || d.requiredAmenities || [],
-            favoriteDriverIds: (sub as any)?.favoriteDriverIds || d.favorite_driver_ids || d.favoriteDriverIds || []
+            favoriteDriverIds: (sub as any)?.favoriteDriverIds || d.favorite_driver_ids || d.favoriteDriverIds || [],
+            pinCode: (sub as any)?.pinCode || d.pin_code || d.pinCode,
+            extendedHours: (sub as any)?.extendedHours || d.extended_hours || d.extendedHours || 0,
+            chatMessages: (sub as any)?.chatMessages || d.chat_messages || d.chatMessages || []
           };
         });
         setRides(mapped);
@@ -1434,7 +1443,7 @@ export function App() {
       isScheduled: isScheduledRide,
       scheduledFor: isScheduledRide ? `${scheduledDate}T${scheduledTime}` : undefined,
       requiredAmenities: selectedAmenities.length > 0 ? selectedAmenities : undefined,
-      favoriteDriverIds: favoriteDriverIds.length > 0 ? favoriteDriverIds : undefined
+      favoriteDriverIds: (prioritizeFavorites && favoriteDriverIds.length > 0) ? favoriteDriverIds : undefined
     };
 
     // 1. Atualização imediata no estado local do cliente
@@ -1688,6 +1697,40 @@ export function App() {
     }
     fetchRides();
     showToast('Corrida iniciada! Passageiro a bordo e tempo contratado em andamento.', 'success');
+  };
+
+  // Iniciar corrida com validação do PIN
+  const handleStartRideWithPin = async (rideId: string, enteredPin: string): Promise<{ success: boolean; message?: string }> => {
+    const targetRide = rides.find(r => r.id === rideId);
+    const expectedPin = targetRide?.pinCode || '2846';
+    if (enteredPin.trim() !== expectedPin.trim()) {
+      return { success: false, message: 'Código PIN incorreto. Peça os 4 dígitos que aparecem no app do passageiro.' };
+    }
+    await handleStartRide(rideId);
+    return { success: true };
+  };
+
+  // Estender horas da corrida em tempo real
+  const handleExtendRide = async (rideId: string, hoursToAdd: number) => {
+    await dbExtendRideHours(rideId, hoursToAdd);
+    fetchRides();
+    showToast(`Franquia de tempo estendida com sucesso em +${hoursToAdd}h!`, 'success');
+  };
+
+  // Enviar mensagem de chat rápido entre cliente e motorista
+  const handleSendRideChatMessage = async (rideId: string, text: string) => {
+    const senderRole = (currentUser?.role === 'driver' && activeTab === 'driver') ? 'driver' : 'client';
+    const senderName = currentUser?.fullName || (senderRole === 'driver' ? 'Motorista' : 'Passageiro');
+    const msg: DbRideChatMessage = {
+      id: 'msg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+      sender: senderRole,
+      senderName,
+      text,
+      timestamp: Date.now()
+    };
+    await dbSendRideChatMessage(rideId, msg);
+    fetchRides();
+    showToast('Mensagem enviada com sucesso!', 'info');
   };
 
   const handleFinishRide = async (rideId: string) => {
@@ -4124,6 +4167,55 @@ export function App() {
                       </div>
                     </div>
 
+                    {/* Opção de Priorização de Motoristas Favoritos (Fase 5) */}
+                    {favoriteDriverIds.length > 0 && (
+                      <div 
+                        onClick={() => setPrioritizeFavorites(prev => !prev)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '12px 16px',
+                          background: prioritizeFavorites 
+                            ? (theme === 'light' ? '#f0fdf4' : 'rgba(16, 185, 129, 0.12)') 
+                            : (theme === 'light' ? '#f8fafc' : 'rgba(255, 255, 255, 0.04)'),
+                          border: `1.5px solid ${prioritizeFavorites ? '#10b981' : (theme === 'light' ? '#e2e8f0' : 'rgba(255, 255, 255, 0.1)')}`,
+                          borderRadius: '14px',
+                          cursor: 'pointer',
+                          userSelect: 'none',
+                          transition: 'all 0.2s ease',
+                          marginBottom: '16px'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <span style={{ fontSize: '1.25rem' }}>⭐</span>
+                          <div>
+                            <strong style={{ fontSize: '0.84rem', color: theme === 'light' ? '#0f172a' : '#fff', display: 'block' }}>
+                              Priorizar Meus {favoriteDriverIds.length} Motorista{favoriteDriverIds.length > 1 ? 's' : ''} Favorito{favoriteDriverIds.length > 1 ? 's' : ''}
+                            </strong>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                              Janela exclusiva de 45 segundos para os seus favoritos aceitarem primeiro
+                            </span>
+                          </div>
+                        </div>
+                        <div style={{
+                          width: '22px',
+                          height: '22px',
+                          borderRadius: '6px',
+                          border: `2px solid ${prioritizeFavorites ? '#10b981' : 'var(--border-subtle)'}`,
+                          background: prioritizeFavorites ? '#10b981' : 'transparent',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#fff',
+                          fontWeight: 900,
+                          fontSize: '0.8rem'
+                        }}>
+                          {prioritizeFavorites && '✓'}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Card de Resumo da Contratação */}
                     <div className="ride-checkout-summary-card">
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -4579,234 +4671,22 @@ export function App() {
                         </div>
                       )}
 
-                      {/* Fase 1: Aceita / Confirmada (Motorista preparando saída) */}
-                      {activeClientRide.status === 'accepted' && (
-                        <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                          <div style={{
-                            background: 'rgba(99, 102, 241, 0.12)',
-                            border: '1px solid rgba(99, 102, 241, 0.35)',
-                            borderRadius: '14px',
-                            padding: '16px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '14px'
-                          }}>
-                            <div style={{ fontSize: '28px' }}>⏳</div>
-                            <div>
-                              <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#fff' }}>
-                                Motorista Confirmado • Preparando Saída
-                              </h4>
-                              <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: '#c7d2fe', lineHeight: 1.4 }}>
-                                O motorista aceitou sua corrida e está se preparando para iniciar o trajeto até você. Assim que ele iniciar o deslocamento, você poderá acompanhar o trajeto ao vivo no mapa!
-                              </p>
-                            </div>
-                          </div>
-
-                          <div style={{
-                            background: canCancelAccepted ? 'rgba(245, 158, 11, 0.12)' : 'rgba(239, 68, 68, 0.12)',
-                            border: `1px solid ${canCancelAccepted ? 'rgba(245, 158, 11, 0.4)' : 'rgba(239, 68, 68, 0.4)'}`,
-                            borderRadius: '12px',
-                            padding: '14px',
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center'
-                          }}>
-                            <div>
-                              <div style={{ fontSize: '0.75rem', color: canCancelAccepted ? '#f59e0b' : '#ef4444', fontWeight: 700 }}>
-                                {canCancelAccepted ? '⏱️ PRAZO DE CANCELAMENTO GRATUITO' : '⚠️ CANCELAMENTO COM TAXA (R$ 15,00)'}
-                              </div>
-                              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                                {canCancelAccepted 
-                                  ? 'Você tem até 5 minutos após o aceite para cancelar a chamada gratuitamente.' 
-                                  : 'Cancelamentos após 5 minutos têm taxa de R$ 15,00 repassada 100% ao motorista.'}
-                              </div>
-                            </div>
-                            {canCancelAccepted && (
-                              <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#f59e0b', fontFamily: 'monospace' }}>
-                                {formattedCountdown}
-                              </div>
-                            )}
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() => handleCancelRideByClient(activeClientRide.id)}
-                            className="btn-outline"
-                            style={{
-                              width: '100%',
-                              padding: '12px',
-                              color: '#ef4444',
-                              borderColor: 'rgba(239, 68, 68, 0.4)',
-                              background: canCancelAccepted ? 'transparent' : 'rgba(239, 68, 68, 0.08)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              gap: '8px',
-                              fontWeight: 700
-                            }}
-                          >
-                            <Ban size={16} />
-                            <span>
-                              {canCancelAccepted 
-                                ? `Cancelar Corrida (Gratuito • ${formattedCountdown} restantes)` 
-                                : 'Cancelar Corrida (Taxa de R$ 15,00 para o Motorista)'}
-                            </span>
-                          </button>
-                        </div>
-                      )}
-
-                      {/* Fase 2: Motorista a Caminho do Passageiro (Trajeto ao vivo até o embarque) */}
-                      {activeClientRide.status === 'to_pickup' && (
-                        <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                      {/* Fases Ativas da Corrida (Confirmada, A Caminho, No Embarque, Em Andamento) com Bottom Sheet Padrão Uber/Lyft */}
+                      {activeClientRide.status !== 'searching' && (
+                        <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
                           <LiveRideTrackerMap ride={activeClientRide} />
-
-                          <div style={{
-                            background: canCancelAccepted ? 'rgba(245, 158, 11, 0.12)' : 'rgba(239, 68, 68, 0.12)',
-                            border: `1px solid ${canCancelAccepted ? 'rgba(245, 158, 11, 0.4)' : 'rgba(239, 68, 68, 0.4)'}`,
-                            borderRadius: '12px',
-                            padding: '14px',
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center'
-                          }}>
-                            <div>
-                              <div style={{ fontSize: '0.75rem', color: canCancelAccepted ? '#f59e0b' : '#ef4444', fontWeight: 700 }}>
-                                {canCancelAccepted ? '⏱️ PRAZO DE CANCELAMENTO GRATUITO' : '⚠️ MOTORISTA EM DESLOCAMENTO (TAXA R$ 15,00)'}
-                              </div>
-                              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                                {canCancelAccepted 
-                                  ? 'Você tem até 5 minutos após o aceite para cancelar a chamada gratuitamente.' 
-                                  : 'O prazo de 5 minutos expirou. O cancelamento terá taxa de R$ 15,00 repassada 100% ao motorista.'}
-                              </div>
-                            </div>
-                            {canCancelAccepted && (
-                              <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#f59e0b', fontFamily: 'monospace' }}>
-                                {formattedCountdown}
-                              </div>
-                            )}
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() => handleCancelRideByClient(activeClientRide.id)}
-                            className="btn-outline"
-                            style={{
-                              width: '100%',
-                              padding: '12px',
-                              color: '#ef4444',
-                              borderColor: 'rgba(239, 68, 68, 0.4)',
-                              background: canCancelAccepted ? 'transparent' : 'rgba(239, 68, 68, 0.08)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              gap: '8px',
-                              fontWeight: 700
-                            }}
-                          >
-                            <Ban size={16} />
-                            <span>
-                              {canCancelAccepted 
-                                ? `Cancelar Corrida (Gratuito • ${formattedCountdown} restantes)` 
-                                : 'Cancelar Corrida (Taxa de R$ 15,00 para o Motorista)'}
-                            </span>
-                          </button>
-                        </div>
-                      )}
-
-                      {/* Fase 2.5: Motorista no Local de Embarque */}
-                      {activeClientRide.status === 'arrived_at_pickup' && (
-                        <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                          <LiveRideTrackerMap ride={activeClientRide} />
-
-                          <div style={{
-                            background: 'rgba(16, 185, 129, 0.12)',
-                            border: '1px solid rgba(16, 185, 129, 0.4)',
-                            borderRadius: '14px',
-                            padding: '16px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '14px'
-                          }}>
-                            <div style={{ fontSize: '28px' }}>📍</div>
-                            <div>
-                              <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#6ee7b7' }}>
-                                Motorista Chegou ao Ponto de Embarque!
-                              </h4>
-                              <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: '#cbd5e1', lineHeight: 1.4 }}>
-                                O motorista parceiro chegou ao seu endereço e está aguardando você. Dirija-se ao veículo para iniciar a viagem.
-                              </p>
-                            </div>
-                          </div>
-
-                          <div style={{
-                            background: canCancelAccepted ? 'rgba(245, 158, 11, 0.12)' : 'rgba(239, 68, 68, 0.12)',
-                            border: `1px solid ${canCancelAccepted ? 'rgba(245, 158, 11, 0.4)' : 'rgba(239, 68, 68, 0.4)'}`,
-                            borderRadius: '12px',
-                            padding: '14px',
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center'
-                          }}>
-                            <div>
-                              <div style={{ fontSize: '0.75rem', color: canCancelAccepted ? '#f59e0b' : '#ef4444', fontWeight: 700 }}>
-                                {canCancelAccepted ? '⏱️ PRAZO DE CANCELAMENTO GRATUITO' : '⚠️ CANCELAMENTO COM TAXA (R$ 15,00)'}
-                              </div>
-                              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                                {canCancelAccepted 
-                                  ? 'Você tem até 5 minutos após o aceite para cancelar a chamada gratuitamente.' 
-                                  : 'Cancelamentos após 5 minutos têm taxa de R$ 15,00 repassada 100% ao motorista.'}
-                              </div>
-                            </div>
-                            {canCancelAccepted && (
-                              <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#f59e0b', fontFamily: 'monospace' }}>
-                                {formattedCountdown}
-                              </div>
-                            )}
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() => handleCancelRideByClient(activeClientRide.id)}
-                            className="btn-outline"
-                            style={{
-                              width: '100%',
-                              padding: '12px',
-                              color: '#ef4444',
-                              borderColor: 'rgba(239, 68, 68, 0.4)',
-                              background: canCancelAccepted ? 'transparent' : 'rgba(239, 68, 68, 0.08)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              gap: '8px',
-                              fontWeight: 700
-                            }}
-                          >
-                            <Ban size={16} />
-                            <span>
-                              {canCancelAccepted 
-                                ? `Cancelar Corrida (Gratuito • ${formattedCountdown} restantes)` 
-                                : 'Cancelar Corrida (Taxa de R$ 15,00 para o Motorista)'}
-                            </span>
-                          </button>
-                        </div>
-                      )}
-
-                      {/* Fase 3: Corrida Iniciada até o Destino (Contabilização do tempo e trajeto final) */}
-                      {activeClientRide.status === 'in_progress' && (
-                        <div style={{ marginTop: '20px' }}>
-                          <LiveRideTrackerMap ride={activeClientRide} />
-                          <div style={{
-                            background: 'rgba(16, 185, 129, 0.1)',
-                            border: '1px solid rgba(16, 185, 129, 0.3)',
-                            borderRadius: '12px',
-                            padding: '12px',
-                            fontSize: '0.8rem',
-                            color: '#10b981',
-                            marginTop: '12px',
-                            textAlign: 'center'
-                          }}>
-                            ✅ <strong>Corrida em andamento:</strong> O tempo contratado está sendo contabilizado. Acompanhe a rota até o destino no mapa.
-                          </div>
+                          <ActiveRidePanel
+                            ride={activeClientRide}
+                            role="client"
+                            theme={theme}
+                            driverInfo={allDriversList.find(d => d.id === activeClientRide.driverId || d.userId === activeClientRide.driverId)}
+                            onCancelRide={handleCancelRideByClient}
+                            onExtendRide={handleExtendRide}
+                            onSendMessage={handleSendRideChatMessage}
+                            onCallSupport={() => setShowDebtSupportModal(true)}
+                            canCancelFree={canCancelAccepted}
+                            cancelCountdownFormatted={formattedCountdown}
+                          />
                         </div>
                       )}
                     </div>
@@ -6534,6 +6414,20 @@ export function App() {
                                         lineHeight: 1.4
                                       }}>
                                         ⚠️ <strong>Aguardando conclusão da corrida atual (#{sortedDriverRides[0].id.slice(-6)}):</strong> Os botões de início e atendimento desta corrida serão liberados automaticamente assim que a anterior for finalizada ou cancelada.
+                                      </div>
+                                    )}
+                                    {isCurrentActive && (
+                                      <div style={{ marginBottom: '14px' }}>
+                                        <ActiveRidePanel
+                                          ride={r}
+                                          role="driver"
+                                          theme={theme}
+                                          driverInfo={driverProfile || allDriversList.find(d => d.id === r.driverId || d.userId === r.driverId)}
+                                          onStartRideWithPin={handleStartRideWithPin}
+                                          onExtendRide={handleExtendRide}
+                                          onSendMessage={handleSendRideChatMessage}
+                                          onCallSupport={() => setShowDebtSupportModal(true)}
+                                        />
                                       </div>
                                     )}
 

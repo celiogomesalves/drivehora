@@ -3,6 +3,14 @@ import type { UserProfile, ClientProfile, DriverProfile, DriverPublicProfile, Dr
 import { isSuperAdminEmail } from '../types/auth';
 import { formatDeviceName } from '../utils/sessionHelper';
 
+export interface DbRideChatMessage {
+  id: string;
+  sender: 'client' | 'driver';
+  senderName: string;
+  text: string;
+  timestamp: number;
+}
+
 export interface DbRide {
   id: string;
   clientId: string;
@@ -39,6 +47,9 @@ export interface DbRide {
   scheduledFor?: string;
   requiredAmenities?: string[];
   favoriteDriverIds?: string[];
+  pinCode?: string;
+  extendedHours?: number;
+  chatMessages?: DbRideChatMessage[];
 }
 
 // Timeout helper para chamadas de banco nunca travarem
@@ -711,12 +722,14 @@ export const dbCreateRide = async (ride: DbRide): Promise<{ success: boolean; er
         res = await sb.from('rides').insert([payload]);
       }
 
-      // Persiste metadados estendidos na ponte global em tempo real (substatus, comodidades, agendamento, motoristas favoritos)
+      // Persiste metadados estendidos na ponte global em tempo real (substatus, comodidades, agendamento, motoristas favoritos, pin de segurança)
+      const pinCode = ride.pinCode || Math.floor(1000 + Math.random() * 9000).toString();
       await dbSetRideSubstatus(ride.id, ride.status || 'searching', {
         isScheduled: Boolean(ride.isScheduled),
         scheduledFor: ride.scheduledFor,
         requiredAmenities: ride.requiredAmenities || [],
-        favoriteDriverIds: ride.favoriteDriverIds || []
+        favoriteDriverIds: ride.favoriteDriverIds || [],
+        pinCode
       });
 
       if (res?.error) {
@@ -752,6 +765,9 @@ export const dbGetRidesSubstatusMap = async (): Promise<Record<string, {
   scheduledFor?: string; 
   requiredAmenities?: string[];
   favoriteDriverIds?: string[];
+  pinCode?: string;
+  extendedHours?: number;
+  chatMessages?: DbRideChatMessage[];
 }>> => {
   let map: Record<string, any> = {};
   try {
@@ -787,11 +803,16 @@ export const dbSetRideSubstatus = async (
     scheduledFor?: string;
     requiredAmenities?: string[];
     favoriteDriverIds?: string[];
+    pinCode?: string;
+    extendedHours?: number;
+    chatMessages?: DbRideChatMessage[];
   }
 ): Promise<void> => {
   try {
     const map = await dbGetRidesSubstatusMap();
+    const existing = map[rideId] || {};
     map[rideId] = {
+      ...existing,
       substatus,
       updatedAt: Date.now(),
       ...extra
@@ -839,6 +860,72 @@ export const dbClearRideSubstatus = async (rideId: string): Promise<void> => {
     }
   } catch (e) {
     console.warn('Erro ao limpar substatus:', e);
+  }
+};
+
+// Enviar mensagem de chat rápido entre passageiro e motorista
+export const dbSendRideChatMessage = async (
+  rideId: string,
+  message: DbRideChatMessage
+): Promise<void> => {
+  try {
+    const map = await dbGetRidesSubstatusMap();
+    const current = map[rideId] || { substatus: 'in_progress', updatedAt: Date.now() };
+    const currentMsgs = current.chatMessages || [];
+    current.chatMessages = [...currentMsgs, message];
+    current.updatedAt = Date.now();
+    map[rideId] = current;
+
+    localStorage.setItem(SUBSTATUS_STORAGE_KEY, JSON.stringify(map));
+    window.dispatchEvent(new CustomEvent('drivehora_substatus_updated', { detail: map }));
+
+    const sb = getSupabase();
+    if (sb) {
+      await sb.from('profiles').upsert({
+        id: SUBSTATUS_PROFILE_ID,
+        role: 'admin',
+        email: 'substatus@drivehora.app',
+        phone: '00000000000',
+        full_name: 'DriveHora Ride Substatus',
+        active_session_token: JSON.stringify(map),
+        updated_at: new Date().toISOString()
+      });
+    }
+  } catch (e) {
+    console.warn('Erro ao enviar mensagem de chat:', e);
+  }
+};
+
+// Estender pacote de horas da corrida em tempo real
+export const dbExtendRideHours = async (
+  rideId: string,
+  extraHours: number
+): Promise<void> => {
+  try {
+    const map = await dbGetRidesSubstatusMap();
+    const current = map[rideId] || { substatus: 'in_progress', updatedAt: Date.now() };
+    const currentExtra = Number(current.extendedHours) || 0;
+    current.extendedHours = currentExtra + extraHours;
+    current.updatedAt = Date.now();
+    map[rideId] = current;
+
+    localStorage.setItem(SUBSTATUS_STORAGE_KEY, JSON.stringify(map));
+    window.dispatchEvent(new CustomEvent('drivehora_substatus_updated', { detail: map }));
+
+    const sb = getSupabase();
+    if (sb) {
+      await sb.from('profiles').upsert({
+        id: SUBSTATUS_PROFILE_ID,
+        role: 'admin',
+        email: 'substatus@drivehora.app',
+        phone: '00000000000',
+        full_name: 'DriveHora Ride Substatus',
+        active_session_token: JSON.stringify(map),
+        updated_at: new Date().toISOString()
+      });
+    }
+  } catch (e) {
+    console.warn('Erro ao estender horas da corrida:', e);
   }
 };
 
