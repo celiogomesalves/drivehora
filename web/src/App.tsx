@@ -29,6 +29,7 @@ import { RatingModal } from './components/RatingModal';
 import { DriverCancelModal } from './components/DriverCancelModal';
 import { ActiveRidePanel } from './components/ActiveRidePanel';
 import { SoundAuditionModal } from './components/SoundAuditionModal';
+import { LogoProposalsModal } from './components/LogoProposalsModal';
 import { getUserWallet, addWalletCredit, addWalletDebit, type UserWallet } from './services/walletService';
 import { dbCreateRideReport } from './services/dbService';
 import { GpsNavigationModal } from './components/GpsNavigationModal';
@@ -308,6 +309,7 @@ export function App() {
   const [supabaseConfig, setSupabaseConfig] = useState(getSupabaseCredentials());
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [showSoundAuditionModal, setShowSoundAuditionModal] = useState(false);
+  const [showLogoModal, setShowLogoModal] = useState(false);
   const [inputSupabaseUrl, setInputSupabaseUrl] = useState(supabaseConfig.url);
   const [inputSupabaseKey, setInputSupabaseKey] = useState(supabaseConfig.key);
   const [supabaseConnected, setSupabaseConnected] = useState(false);
@@ -2428,7 +2430,11 @@ export function App() {
             gap: '12px'
           }}>
             {/* Logo & Marca */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div 
+              onClick={() => setShowLogoModal(true)} 
+              title="Clique para ver e escolher as propostas de Logo do DriveHora"
+              style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}
+            >
               <DriveHoraLogo size={38} />
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -7930,6 +7936,15 @@ export function App() {
       <SoundAuditionModal
         isOpen={showSoundAuditionModal}
         onClose={() => setShowSoundAuditionModal(false)}
+      />
+
+      {/* Modal de Visualização e Escolha de Logos */}
+      <LogoProposalsModal
+        isOpen={showLogoModal}
+        onClose={() => setShowLogoModal(false)}
+        onSelectLogo={(optionId) => {
+          showToast(`Opção ${optionId} de Logo selecionada como preferência!`, 'success');
+        }}
       />
 
       {/* Modal de Cancelamento de Atendimento pelo Motorista com Justificativa */}
