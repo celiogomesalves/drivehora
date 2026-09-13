@@ -183,65 +183,69 @@ export const SoundAuditionModal: React.FC<SoundAuditionModalProps> = ({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '16px'
+        padding: '12px'
       }}
       onClick={onClose}
     >
       <div
+        className="modal-themed-surface"
         style={{
-          background: 'var(--surface-color, #1e293b)',
-          color: 'var(--text-primary, #ffffff)',
           borderRadius: '24px',
           width: '100%',
-          maxWidth: '620px',
+          maxWidth: '640px',
           maxHeight: '90vh',
           display: 'flex',
           flexDirection: 'column',
+          backgroundColor: 'var(--bg-surface, #0f172a)',
+          color: 'var(--text-primary, #f8fafc)',
           boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(99, 102, 241, 0.25)',
           overflow: 'hidden'
         }}
         onClick={e => e.stopPropagation()}
       >
-        {/* Cabeçalho do Modal */}
+        {/* Cabeçalho do Modal com Contraste Perfeito e Fundo Sólido */}
         <div
+          className="modal-themed-header"
           style={{
-            padding: '20px 24px',
-            borderBottom: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))',
+            padding: '18px 20px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            background: 'linear-gradient(to right, rgba(99, 102, 241, 0.1), transparent)'
+            backgroundColor: 'var(--bg-secondary, #1e293b)',
+            borderBottom: '1px solid var(--border-subtle)'
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div
               style={{
-                width: '42px',
-                height: '42px',
+                width: '40px',
+                height: '40px',
                 borderRadius: '12px',
                 background: 'linear-gradient(135deg, #4f46e5, #818cf8)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 color: '#fff',
-                boxShadow: '0 4px 12px rgba(99, 102, 241, 0.4)'
+                boxShadow: '0 4px 12px rgba(99, 102, 241, 0.35)',
+                flexShrink: 0
               }}
             >
-              <Music size={22} />
+              <Music size={20} />
             </div>
             <div>
-              <h3 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0 }}>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
                 Identidade Acústica DriveHora
               </h3>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary, #94a3b8)', margin: '2px 0 0' }}>
+              <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: '2px 0 0' }}>
                 Degustação dos toques e assinaturas sonoras exclusivas da marca
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
+            aria-label="Fechar"
             style={{
-              background: 'rgba(255, 255, 255, 0.08)',
+              background: 'var(--border-subtle)',
               border: 'none',
               borderRadius: '50%',
               width: '36px',
@@ -249,146 +253,175 @@ export const SoundAuditionModal: React.FC<SoundAuditionModalProps> = ({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: 'var(--text-secondary, #94a3b8)',
-              cursor: 'pointer'
+              color: 'var(--text-secondary)',
+              cursor: 'pointer',
+              flexShrink: 0
             }}
           >
             <X size={18} />
           </button>
         </div>
 
-        {/* Banner Informativo */}
+        {/* Banner Informativo com Alto Contraste */}
         <div
           style={{
-            padding: '12px 20px',
+            padding: '11px 18px',
             background: 'rgba(99, 102, 241, 0.08)',
-            borderBottom: '1px solid rgba(99, 102, 241, 0.15)',
+            borderBottom: '1px solid var(--border-subtle)',
             display: 'flex',
             alignItems: 'center',
             gap: '10px',
             fontSize: '0.8rem',
-            color: '#a5b4fc'
+            color: 'var(--text-primary)'
           }}
         >
-          <Sparkles size={16} style={{ flexShrink: 0 }} />
+          <Sparkles size={16} style={{ flexShrink: 0, color: 'var(--primary)' }} />
           <span>
-            Clique no botão <strong>Ouvir</strong> de cada item para escutar as frequências harmônicas geradas em tempo real.
+            Clique no botão <strong>Ouvir</strong> de cada item para escutar as frequências harmônicas em tempo real.
           </span>
         </div>
 
-        {/* Lista de Sons Disponíveis */}
-        <div style={{ padding: '16px 20px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {/* Lista de Sons com Cards Responsivos para Celular */}
+        <div style={{ padding: '14px 16px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {soundCatalog.map(sound => {
             const isPlaying = playingId === sound.id;
+            const isPresetActive = sound.id === currentActivePreset;
+
             return (
               <div
                 key={sound.id}
+                className="modal-themed-card"
                 style={{
                   padding: '14px 16px',
                   borderRadius: '16px',
-                  background: isPlaying ? 'rgba(99, 102, 241, 0.15)' : 'var(--bg-card, rgba(255, 255, 255, 0.04))',
-                  border: isPlaying ? '1px solid #818cf8' : '1px solid var(--border-color, rgba(255, 255, 255, 0.08))',
+                  backgroundColor: 'var(--bg-card, #1e293b)',
+                  border: isPlaying ? '1px solid var(--primary)' : isPresetActive ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid var(--border-subtle)',
                   transition: 'all 0.2s ease',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px',
+                  width: '100%',
+                  boxSizing: 'border-box'
+                }}
+              >
+                {/* Linha 1: Título e Badge de Destinatário */}
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
+                  <span style={{ fontWeight: 700, fontSize: '0.94rem', color: 'var(--text-primary)', lineHeight: 1.4, flex: '1 1 200px' }}>
+                    {sound.name}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: '0.65rem',
+                      padding: '3px 8px',
+                      borderRadius: '8px',
+                      fontWeight: 700,
+                      textTransform: 'uppercase',
+                      flexShrink: 0,
+                      background: sound.targetUser === 'Motorista' ? 'rgba(245, 158, 11, 0.15)' : sound.targetUser === 'Passageiro' ? 'rgba(37, 99, 235, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                      color: sound.targetUser === 'Motorista' ? '#d97706' : sound.targetUser === 'Passageiro' ? '#2563eb' : '#059669'
+                    }}
+                  >
+                    {sound.targetUser}
+                  </span>
+                </div>
+
+                {/* Linha 2: Descrição com Leitura Clara e sem Quebras Artificiais */}
+                <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5, wordBreak: 'normal', width: '100%' }}>
+                  {sound.description}
+                </p>
+
+                {/* Linha 3: Notas de Frequência */}
+                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px', fontSize: '0.72rem' }}>
+                  <code style={{
+                    padding: '3px 8px',
+                    borderRadius: '6px',
+                    background: 'var(--border-subtle)',
+                    color: 'var(--text-secondary)',
+                    fontWeight: 600
+                  }}>
+                    {sound.frequencyInfo}
+                  </code>
+                </div>
+
+                {/* Linha 4: Botões de Ação Perfeitamente Alinhados e Responsivos */}
+                <div style={{
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  gap: '14px'
-                }}
-              >
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                    <span style={{ fontWeight: 700, fontSize: '0.92rem', color: isPlaying ? '#a5b4fc' : 'var(--text-primary)' }}>
-                      {sound.name}
-                    </span>
-                    <span
-                      style={{
-                        fontSize: '0.65rem',
-                        padding: '2px 6px',
-                        borderRadius: '6px',
-                        fontWeight: 700,
-                        textTransform: 'uppercase',
-                        background: sound.targetUser === 'Motorista' ? 'rgba(245, 158, 11, 0.2)' : sound.targetUser === 'Passageiro' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(16, 185, 129, 0.2)',
-                        color: sound.targetUser === 'Motorista' ? '#f59e0b' : sound.targetUser === 'Passageiro' ? '#60a5fa' : '#34d399'
-                      }}
-                    >
-                      {sound.targetUser}
-                    </span>
+                  gap: '8px',
+                  flexWrap: 'wrap',
+                  paddingTop: '8px',
+                  borderTop: '1px solid var(--border-subtle)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    {sound.id.startsWith('new_ride') && (
+                      isPresetActive ? (
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            color: '#059669',
+                            background: 'rgba(16, 185, 129, 0.12)',
+                            padding: '6px 12px',
+                            borderRadius: '10px',
+                            border: '1px solid rgba(16, 185, 129, 0.3)'
+                          }}
+                        >
+                          <CheckCircle2 size={15} />
+                          Padrão Ativo
+                        </span>
+                      ) : isAdmin ? (
+                        <button
+                          onClick={() => {
+                            if (onSaveSoundPreset) {
+                              onSaveSoundPreset(sound.id as any);
+                              setCurrentActivePreset(sound.id as any);
+                            }
+                          }}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            color: '#b45309',
+                            background: 'rgba(245, 158, 11, 0.12)',
+                            padding: '6px 12px',
+                            borderRadius: '10px',
+                            border: '1px solid rgba(245, 158, 11, 0.35)',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <Crown size={14} />
+                          Definir Padrão
+                        </button>
+                      ) : null
+                    )}
                   </div>
-                  <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary, #94a3b8)', margin: '0 0 6px' }}>
-                    {sound.description}
-                  </p>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.72rem', color: 'var(--text-muted, #64748b)' }}>
-                    <code>{sound.frequencyInfo}</code>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-                  {sound.id.startsWith('new_ride') && (
-                    sound.id === currentActivePreset ? (
-                      <span
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          fontSize: '0.72rem',
-                          fontWeight: 700,
-                          color: '#10b981',
-                          background: 'rgba(16, 185, 129, 0.15)',
-                          padding: '5px 10px',
-                          borderRadius: '10px',
-                          border: '1px solid rgba(16, 185, 129, 0.3)'
-                        }}
-                      >
-                        <CheckCircle2 size={14} />
-                        Padrão Ativo
-                      </span>
-                    ) : isAdmin ? (
-                      <button
-                        onClick={() => {
-                          if (onSaveSoundPreset) {
-                            onSaveSoundPreset(sound.id as any);
-                            setCurrentActivePreset(sound.id as any);
-                          }
-                        }}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          fontSize: '0.72rem',
-                          fontWeight: 700,
-                          color: '#f59e0b',
-                          background: 'rgba(245, 158, 11, 0.12)',
-                          padding: '5px 10px',
-                          borderRadius: '10px',
-                          border: '1px solid rgba(245, 158, 11, 0.35)',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        <Crown size={13} />
-                        Definir Padrão
-                      </button>
-                    ) : null
-                  )}
 
                   <button
                     onClick={() => sound.playCustom ? sound.playCustom() : playNotificationSound(sound.category)}
                     style={{
-                      padding: '8px 14px',
-                      borderRadius: '12px',
+                      padding: '7px 18px',
+                      borderRadius: '10px',
                       border: 'none',
                       background: isPlaying ? '#10b981' : 'linear-gradient(135deg, #4f46e5, #6366f1)',
                       color: '#ffffff',
                       fontWeight: 700,
                       fontSize: '0.82rem',
                       cursor: 'pointer',
-                      display: 'flex',
+                      display: 'inline-flex',
                       alignItems: 'center',
                       gap: '6px',
-                      boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
-                      transition: 'all 0.15s ease'
+                      boxShadow: '0 2px 8px rgba(99, 102, 241, 0.25)',
+                      transition: 'all 0.15s ease',
+                      marginLeft: 'auto'
                     }}
                   >
-                    <Volume2 size={15} style={{ animation: isPlaying ? 'pulse 0.8s infinite' : 'none' }} />
+                    <Volume2 size={16} style={{ animation: isPlaying ? 'pulse 0.8s infinite' : 'none' }} />
                     <span>{isPlaying ? 'Tocando...' : 'Ouvir'}</span>
                   </button>
                 </div>
@@ -397,31 +430,34 @@ export const SoundAuditionModal: React.FC<SoundAuditionModalProps> = ({
           })}
         </div>
 
-        {/* Rodapé com Instrução e Fechar */}
+        {/* Rodapé com Instrução e Fechar com Fundo Temático */}
         <div
+          className="modal-themed-footer"
           style={{
-            padding: '16px 20px',
-            borderTop: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))',
-            background: 'var(--surface-color, #1e293b)',
+            padding: '14px 20px',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'space-between'
+            justifyContent: 'space-between',
+            gap: '12px',
+            backgroundColor: 'var(--bg-secondary, #1e293b)',
+            borderTop: '1px solid var(--border-subtle)'
           }}
         >
-          <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary, #94a3b8)' }}>
-            Após definir suas preferências, fixaremos as opções escolhidas como padrão do sistema.
+          <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+            O som selecionado se aplica a toda a plataforma.
           </span>
           <button
             onClick={onClose}
             style={{
-              padding: '8px 20px',
+              padding: '7px 18px',
               borderRadius: '10px',
-              border: '1px solid rgba(255, 255, 255, 0.15)',
-              background: 'rgba(255, 255, 255, 0.08)',
-              color: 'var(--text-primary, #ffffff)',
+              border: '1px solid var(--border-subtle)',
+              background: 'var(--border-subtle)',
+              color: 'var(--text-primary)',
               fontWeight: 600,
-              fontSize: '0.85rem',
-              cursor: 'pointer'
+              fontSize: '0.82rem',
+              cursor: 'pointer',
+              flexShrink: 0
             }}
           >
             Fechar

@@ -2442,7 +2442,7 @@ export function App() {
                 cursor: isUserAdmin ? 'pointer' : 'default' 
               }}
             >
-              <DriveHoraLogo size={38} />
+              <DriveHoraLogo size={38} option={systemSettings.branding?.logoOption || 2} />
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span className="app-brand-title">DriveHora</span>

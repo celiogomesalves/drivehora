@@ -73,71 +73,75 @@ export const LogoProposalsModal: React.FC<LogoProposalsModalProps> = ({
       style={{
         position: 'fixed',
         inset: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.82)',
-        backdropFilter: 'blur(10px)',
+        backgroundColor: 'rgba(0, 0, 0, 0.75)',
+        backdropFilter: 'blur(8px)',
         zIndex: 99999,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '16px'
+        padding: '12px'
       }}
       onClick={onClose}
     >
       <div
+        className="modal-themed-surface"
         style={{
-          background: 'var(--surface-color, #111827)',
-          color: 'var(--text-primary, #ffffff)',
           borderRadius: '24px',
           width: '100%',
           maxWidth: '860px',
           maxHeight: '92vh',
           display: 'flex',
           flexDirection: 'column',
-          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(99, 102, 241, 0.3)',
+          backgroundColor: 'var(--bg-surface, #0f172a)',
+          color: 'var(--text-primary, #f8fafc)',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(99, 102, 241, 0.3)',
           overflow: 'hidden'
         }}
         onClick={e => e.stopPropagation()}
       >
-        {/* Cabeçalho */}
+        {/* Cabeçalho com fundo sólido e alto contraste */}
         <div
+          className="modal-themed-header"
           style={{
-            padding: '20px 24px',
-            borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+            padding: '18px 22px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            background: 'linear-gradient(to right, rgba(99, 102, 241, 0.15), transparent)'
+            backgroundColor: 'var(--bg-secondary, #1e293b)',
+            borderBottom: '1px solid var(--border-subtle)'
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div
               style={{
-                width: '42px',
-                height: '42px',
+                width: '40px',
+                height: '40px',
                 borderRadius: '12px',
                 background: 'linear-gradient(135deg, #3b82f6, #6366f1)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 color: '#fff',
-                boxShadow: '0 4px 15px rgba(59, 130, 246, 0.4)'
+                boxShadow: '0 4px 15px rgba(59, 130, 246, 0.4)',
+                flexShrink: 0
               }}
             >
               <Award size={22} />
             </div>
             <div>
-              <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0 }}>
+              <h3 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
                 Propostas de Identidade Visual DriveHora
               </h3>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary, #94a3b8)', margin: '2px 0 0' }}>
+              <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: '2px 0 0' }}>
                 Conceitos em alta resolução para o ícone oficial da plataforma
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
+            aria-label="Fechar"
             style={{
-              background: 'rgba(255, 255, 255, 0.08)',
+              background: 'var(--border-subtle)',
               border: 'none',
               borderRadius: '50%',
               width: '36px',
@@ -145,8 +149,9 @@ export const LogoProposalsModal: React.FC<LogoProposalsModalProps> = ({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: 'var(--text-secondary, #94a3b8)',
-              cursor: 'pointer'
+              color: 'var(--text-secondary)',
+              cursor: 'pointer',
+              flexShrink: 0
             }}
           >
             <X size={18} />
@@ -156,7 +161,7 @@ export const LogoProposalsModal: React.FC<LogoProposalsModalProps> = ({
         {/* Grade com as 3 Propostas */}
         <div
           style={{
-            padding: '20px',
+            padding: '18px',
             overflowY: 'auto',
             flex: 1,
             display: 'grid',
@@ -170,10 +175,11 @@ export const LogoProposalsModal: React.FC<LogoProposalsModalProps> = ({
               <div
                 key={p.id}
                 onClick={() => setSelectedId(p.id)}
+                className="modal-themed-card"
                 style={{
                   borderRadius: '20px',
-                  background: isSelected ? 'rgba(59, 130, 246, 0.12)' : 'rgba(255, 255, 255, 0.03)',
-                  border: isSelected ? '2px solid #3b82f6' : '1px solid rgba(255, 255, 255, 0.08)',
+                  border: isSelected ? '2px solid #2563eb' : '1px solid var(--border-subtle)',
+                  background: isSelected ? 'rgba(37, 99, 235, 0.08)' : undefined,
                   padding: '16px',
                   display: 'flex',
                   flexDirection: 'column',
@@ -191,8 +197,8 @@ export const LogoProposalsModal: React.FC<LogoProposalsModalProps> = ({
                       fontWeight: 700,
                       padding: '3px 8px',
                       borderRadius: '8px',
-                      background: isSelected ? 'rgba(59, 130, 246, 0.25)' : 'rgba(255, 255, 255, 0.08)',
-                      color: isSelected ? '#60a5fa' : '#cbd5e1'
+                      background: isSelected ? 'rgba(37, 99, 235, 0.15)' : 'var(--border-subtle)',
+                      color: isSelected ? '#2563eb' : 'var(--text-secondary)'
                     }}
                   >
                     {p.tag}
@@ -204,7 +210,7 @@ export const LogoProposalsModal: React.FC<LogoProposalsModalProps> = ({
                   )}
                 </div>
 
-                {/* Imagem em Alta Resolução */}
+                {/* Imagem em Alta Resolução - Exibida em sua Total Integridade */}
                 <div
                   style={{
                     width: '100%',
@@ -215,7 +221,9 @@ export const LogoProposalsModal: React.FC<LogoProposalsModalProps> = ({
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.4)'
+                    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.25)',
+                    padding: '4px',
+                    boxSizing: 'border-box'
                   }}
                 >
                   <img
@@ -224,29 +232,33 @@ export const LogoProposalsModal: React.FC<LogoProposalsModalProps> = ({
                     style={{
                       width: '100%',
                       height: '100%',
-                      objectFit: 'cover'
+                      objectFit: 'contain',
+                      borderRadius: '12px',
+                      display: 'block'
                     }}
                   />
                 </div>
 
                 {/* Título & Descrição */}
                 <div>
-                  <h4 style={{ margin: '0 0 4px', fontSize: '1rem', fontWeight: 800, color: '#ffffff' }}>
+                  <h4 style={{ margin: '0 0 4px', fontSize: '0.98rem', fontWeight: 800, color: 'var(--text-primary)' }}>
                     {p.title}
                   </h4>
-                  <p style={{ margin: 0, fontSize: '0.78rem', color: '#94a3b8', lineHeight: 1.4 }}>
+                  <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
                     {p.description}
                   </p>
                 </div>
 
-                {/* Highlights */}
+                {/* Highlights com Contraste Perfeito */}
                 <div
                   style={{
-                    padding: '8px 10px',
+                    padding: '8px 12px',
                     borderRadius: '10px',
-                    background: 'rgba(255, 255, 255, 0.04)',
-                    fontSize: '0.72rem',
-                    color: '#cbd5e1',
+                    background: 'rgba(99, 102, 241, 0.08)',
+                    border: '1px solid rgba(99, 102, 241, 0.2)',
+                    fontSize: '0.76rem',
+                    color: 'var(--text-primary)',
+                    fontWeight: 500,
                     marginTop: 'auto'
                   }}
                 >
@@ -257,31 +269,33 @@ export const LogoProposalsModal: React.FC<LogoProposalsModalProps> = ({
           })}
         </div>
 
-        {/* Rodapé de Ação */}
+        {/* Rodapé de Ação com Fundo Temático */}
         <div
+          className="modal-themed-footer"
           style={{
-            padding: '16px 24px',
-            borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+            padding: '14px 22px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            background: 'rgba(0, 0, 0, 0.3)'
+            gap: '12px',
+            backgroundColor: 'var(--bg-secondary, #1e293b)',
+            borderTop: '1px solid var(--border-subtle)'
           }}
         >
-          <span style={{ fontSize: '0.82rem', color: '#94a3b8' }}>
-            Opção selecionada no momento: <strong>Opção {selectedId}</strong>
+          <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+            Opção selecionada no momento: <strong style={{ color: 'var(--text-primary)' }}>Opção {selectedId}</strong>
           </span>
           <div style={{ display: 'flex', gap: '10px' }}>
             <button
               onClick={onClose}
               style={{
-                padding: '8px 16px',
+                padding: '7px 16px',
                 borderRadius: '10px',
-                border: '1px solid rgba(255, 255, 255, 0.15)',
-                background: 'rgba(255, 255, 255, 0.05)',
-                color: '#ffffff',
+                border: '1px solid var(--border-subtle)',
+                background: 'var(--border-subtle)',
+                color: 'var(--text-primary)',
                 fontWeight: 600,
-                fontSize: '0.85rem',
+                fontSize: '0.82rem',
                 cursor: 'pointer'
               }}
             >
@@ -293,15 +307,15 @@ export const LogoProposalsModal: React.FC<LogoProposalsModalProps> = ({
                 onClose();
               }}
               style={{
-                padding: '8px 20px',
+                padding: '7px 20px',
                 borderRadius: '10px',
                 border: 'none',
-                background: 'linear-gradient(135deg, #3b82f6, #6366f1)',
+                background: 'linear-gradient(135deg, #2563eb, #6366f1)',
                 color: '#ffffff',
                 fontWeight: 700,
-                fontSize: '0.85rem',
+                fontSize: '0.84rem',
                 cursor: 'pointer',
-                boxShadow: '0 4px 15px rgba(59, 130, 246, 0.35)'
+                boxShadow: '0 4px 15px rgba(37, 99, 235, 0.35)'
               }}
             >
               Confirmar Escolha (Opção {selectedId})

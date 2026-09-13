@@ -2,6 +2,8 @@
   color-scheme: dark;
   --bg-primary: #090d16;
   --bg-secondary: #0f172a;
+  --surface-color: #0f172a;
+  --bg-surface: #0f172a;
   --bg-card: rgba(19, 29, 49, 0.75);
   --bg-card-hover: rgba(28, 41, 68, 0.85);
   --bg-glass: rgba(15, 23, 42, 0.65);
@@ -42,6 +44,8 @@ html.theme-light,
   color-scheme: light;
   --bg-primary: #f8fafc;
   --bg-secondary: #ffffff;
+  --surface-color: #ffffff;
+  --bg-surface: #ffffff;
   --bg-card: #ffffff;
   --bg-card-hover: #f1f5f9;
   --bg-glass: rgba(255, 255, 255, 0.95);
@@ -2452,6 +2456,72 @@ html.theme-light .radar-floating-btn {
 html.theme-light .radar-floating-btn:hover {
   background: #eef2ff !important;
   color: #4338ca !important;
+}
+
+/* Modais Customizados: Suporte Total aos Temas Claro e Escuro */
+.modal-themed-surface {
+  background-color: var(--bg-surface, #0f172a) !important;
+  color: var(--text-primary, #f8fafc) !important;
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1)) !important;
+}
+
+.modal-themed-card {
+  background-color: var(--bg-card, #1e293b) !important;
+  color: var(--text-primary, #f8fafc) !important;
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08)) !important;
+}
+
+.modal-themed-header {
+  background-color: var(--bg-secondary, #1e293b) !important;
+  border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08)) !important;
+  color: var(--text-primary, #f8fafc) !important;
+}
+
+.modal-themed-footer {
+  border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08)) !important;
+  background-color: var(--bg-secondary, #1e293b) !important;
+  color: var(--text-secondary, #94a3b8) !important;
+}
+
+html.theme-light .modal-themed-surface,
+.theme-light .modal-themed-surface {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.15) !important;
+}
+
+html.theme-light .modal-themed-card,
+.theme-light .modal-themed-card {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03) !important;
+}
+
+html.theme-light .modal-themed-header,
+.theme-light .modal-themed-header {
+  background-color: #f8fafc !important;
+  background-image: linear-gradient(to right, #eff6ff, #f8fafc) !important;
+  color: #0f172a !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+}
+
+html.theme-light .modal-themed-header h3,
+.theme-light .modal-themed-header h3 {
+  color: #0f172a !important;
+}
+
+html.theme-light .modal-themed-header p,
+.theme-light .modal-themed-header p {
+  color: #475569 !important;
+}
+
+html.theme-light .modal-themed-footer,
+.theme-light .modal-themed-footer {
+  background-color: #f8fafc !important;
+  border-top: 1px solid #e2e8f0 !important;
+  color: #475569 !important;
 }
 
 

@@ -30,11 +30,15 @@ export const DriveHoraLogo: React.FC<DriveHoraLogoProps> = ({
     return 2;
   });
 
+  // Reatividade imediata: sincroniza com a prop option sempre que ela for atualizada
   useEffect(() => {
-    if (option) {
+    if (option && (option === 1 || option === 2 || option === 3)) {
       setActiveOption(option);
-      return;
     }
+  }, [option]);
+
+  // Escuta atualizações de sistema transmitidas em tempo real (ex: troca de logo pelo Admin)
+  useEffect(() => {
     const handleSettingsUpdated = (e: any) => {
       const opt = e.detail?.branding?.logoOption;
       if (opt && (opt === 1 || opt === 2 || opt === 3)) {
@@ -43,7 +47,7 @@ export const DriveHoraLogo: React.FC<DriveHoraLogoProps> = ({
     };
     window.addEventListener('drivehora_settings_updated', handleSettingsUpdated);
     return () => window.removeEventListener('drivehora_settings_updated', handleSettingsUpdated);
-  }, [option]);
+  }, []);
 
   return (
     <div
@@ -55,23 +59,27 @@ export const DriveHoraLogo: React.FC<DriveHoraLogoProps> = ({
         position: 'relative',
         width: size,
         height: size,
-        borderRadius: Math.round(size * 0.28),
-        background: 'linear-gradient(135deg, #0a0d14 0%, #1e1b4b 50%, #0f172a 100%)',
-        boxShadow: '0 4px 20px rgba(59, 130, 246, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.2)',
-        border: '1px solid rgba(129, 140, 248, 0.3)',
+        borderRadius: Math.round(size * 0.22),
+        background: '#090d16',
+        boxShadow: '0 3px 12px rgba(0, 0, 0, 0.35)',
+        border: '1px solid rgba(255, 255, 255, 0.12)',
         flexShrink: 0,
         overflow: 'hidden',
+        padding: '2px',
+        boxSizing: 'border-box',
         ...style
       }}
     >
-      {/* Imagem de Alta Fidelidade do Conceito Selecionado */}
+      {/* Imagem de Alta Fidelidade do Conceito Selecionado - Exibida em sua Total Integridade */}
       <img
+        key={`drivehora-logo-${activeOption}`}
         src={`/branding/logo_option_${activeOption}.jpg`}
-        alt="DriveHora Logo"
+        alt={`DriveHora Logo Oficial (Opção ${activeOption})`}
         style={{
           width: '100%',
           height: '100%',
-          objectFit: 'cover',
+          objectFit: 'contain',
+          borderRadius: Math.max(2, Math.round(size * 0.16)),
           display: 'block'
         }}
         onError={(e) => {
