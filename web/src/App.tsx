@@ -30,6 +30,7 @@ import { DriverCancelModal } from './components/DriverCancelModal';
 import { ActiveRidePanel } from './components/ActiveRidePanel';
 import { SoundAuditionModal } from './components/SoundAuditionModal';
 import { LogoProposalsModal } from './components/LogoProposalsModal';
+import { AboutAppModal } from './components/AboutAppModal';
 import { getUserWallet, addWalletCredit, addWalletDebit, type UserWallet } from './services/walletService';
 import { dbCreateRideReport } from './services/dbService';
 import { GpsNavigationModal } from './components/GpsNavigationModal';
@@ -310,6 +311,7 @@ export function App() {
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [showSoundAuditionModal, setShowSoundAuditionModal] = useState(false);
   const [showLogoModal, setShowLogoModal] = useState(false);
+  const [showAboutAppModal, setShowAboutAppModal] = useState(false);
   const [inputSupabaseUrl, setInputSupabaseUrl] = useState(supabaseConfig.url);
   const [inputSupabaseKey, setInputSupabaseKey] = useState(supabaseConfig.key);
   const [supabaseConnected, setSupabaseConnected] = useState(false);
@@ -2432,14 +2434,18 @@ export function App() {
             {/* Logo & Marca */}
             <div 
               onClick={() => {
-                if (isUserAdmin) setShowLogoModal(true);
+                if (isUserAdmin) {
+                  setShowLogoModal(true);
+                } else {
+                  setShowAboutAppModal(true);
+                }
               }} 
-              title={isUserAdmin ? "Painel Admin: Clique para escolher a Logo oficial do sistema" : "DriveHora"}
+              title={isUserAdmin ? "Painel Admin: Clique para escolher a Logo oficial do sistema" : "Clique para ver a logo e saber mais sobre o DriveHora"}
               style={{ 
                 display: 'flex', 
                 alignItems: 'center', 
                 gap: '10px', 
-                cursor: isUserAdmin ? 'pointer' : 'default' 
+                cursor: 'pointer' 
               }}
             >
               <DriveHoraLogo 
@@ -7985,6 +7991,14 @@ export function App() {
           }
           await saveSystemSettings(updated);
         }}
+      />
+
+      {/* Modal Informativo com Zoom da Logo (Para Passageiros e Motoristas) */}
+      <AboutAppModal
+        isOpen={showAboutAppModal}
+        onClose={() => setShowAboutAppModal(false)}
+        logoOption={systemSettings.branding?.logoOption || 2}
+        theme={theme}
       />
 
       {/* Modal de Cancelamento de Atendimento pelo Motorista com Justificativa */}

@@ -6,7 +6,7 @@ import {
   TrendingUp, Database, Image, AlertTriangle, Eye, X, Check,
   Settings, Bell, CreditCard, Sliders, Send, Save, Trash2,
   Calendar, Filter, Globe, Key, Radio, Power, MessageSquare, Edit3,
-  EyeOff, LayoutDashboard, Star, LogOut, ChevronDown, ChevronUp
+  EyeOff, LayoutDashboard, Star, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { formatCurrency, formatCurrencyInput, parseCurrencyInput, formatPhone, formatCpf, formatPlate } from '../utils/formatters';
 import { 
@@ -60,9 +60,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onOpenSupabaseConfig, 
   supabaseConnected,
   onReloadRides,
-  onLogout,
+  onLogout: _onLogout,
   theme = 'dark'
 }) => {
+  void _onLogout;
   const { showAlert, showConfirm, showToast } = useSystemDialog();
   const [activeSubTab, setActiveSubTab] = useState<'overview' | 'drivers' | 'clients' | 'rides' | 'reports' | 'ratings' | 'settings'>('overview');
   const [drivers, setDrivers] = useState<DriverProfile[]>([]);
@@ -511,82 +512,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       
-      {/* Banner de Boas-Vindas do Super Admin */}
+      {/* Banner de Boas-Vindas do Admin */}
       <div style={{
-        background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(16, 185, 129, 0.15))',
-        border: '1px solid rgba(99, 102, 241, 0.3)',
+        background: theme === 'light' 
+          ? 'linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(16, 185, 129, 0.06))' 
+          : 'linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(16, 185, 129, 0.15))',
+        border: theme === 'light' ? '1px solid #cbd5e1' : '1px solid rgba(99, 102, 241, 0.3)',
         borderRadius: '16px',
-        padding: '24px 28px',
+        padding: '20px 24px',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
         gap: '16px'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div style={{
-            background: 'var(--primary-gradient)',
-            width: '52px',
-            height: '52px',
-            borderRadius: '16px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#fff',
-            boxShadow: '0 6px 20px rgba(99, 102, 241, 0.4)'
-          }}>
-            <ShieldCheck size={30} />
-          </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <h2 style={{ fontSize: '1.4rem', fontWeight: 800 }}>Painel Geral de Administração</h2>
-              <span style={{
-                background: '#f59e0b',
-                color: '#000',
-                fontWeight: 800,
-                fontSize: '0.65rem',
-                padding: '2px 8px',
-                borderRadius: '10px',
-                textTransform: 'uppercase'
-              }}>Super Admin</span>
-            </div>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-              Gestão central de motoristas, clientes, aprovação de documentos e faturamento
-            </p>
-          </div>
+        <div style={{
+          background: 'var(--primary-gradient)',
+          width: '48px',
+          height: '48px',
+          minWidth: '48px',
+          borderRadius: '14px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#fff',
+          boxShadow: '0 6px 20px rgba(99, 102, 241, 0.35)'
+        }}>
+          <ShieldCheck size={28} />
         </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <button
-            onClick={loadAdminData}
-            disabled={isLoading}
-            className="btn-outline"
-            style={{ fontSize: '0.8rem', padding: '8px 14px' }}
-          >
-            <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
-            <span>Atualizar Dados</span>
-          </button>
-
-          <button
-            onClick={onOpenSupabaseConfig}
-            className="btn-primary"
-            style={{ fontSize: '0.8rem', padding: '8px 14px' }}
-          >
-            <Database size={14} />
-            <span>{supabaseConnected ? 'Banco Conectado' : 'Conectar Banco'}</span>
-          </button>
-
-          {onLogout && (
-            <button
-              onClick={onLogout}
-              className="btn-outline"
-              style={{ fontSize: '0.8rem', padding: '8px 14px', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.4)' }}
-              title="Sair do painel administrativo"
-            >
-              <LogOut size={14} />
-              <span>Sair</span>
-            </button>
-          )}
+        <div>
+          <h2 style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
+            Painel Geral de Administração
+          </h2>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px', margin: 0 }}>
+            Gestão central de motoristas, clientes, aprovação de documentos e faturamento
+          </p>
         </div>
       </div>
 
@@ -2873,8 +2831,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 {/* 1. Status do Admin SDK e do Projeto */}
                 <div style={{
-                  background: 'rgba(16, 185, 129, 0.08)',
-                  border: '1px solid rgba(16, 185, 129, 0.25)',
+                  background: theme === 'light' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(16, 185, 129, 0.08)',
+                  border: theme === 'light' ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(16, 185, 129, 0.25)',
                   borderRadius: '12px',
                   padding: '12px 16px',
                   display: 'flex',
@@ -2897,10 +2855,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <CheckCircle2 size={18} />
                     </div>
                     <div>
-                      <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#fff' }}>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)' }}>
                         Firebase Conectado • Projeto: <strong style={{ color: '#10b981' }}>{systemSettings.firebase.projectId || 'drivehora'}</strong>
                       </div>
-                      <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
+                      <div style={{ fontSize: '0.72rem', color: theme === 'light' ? '#475569' : '#94a3b8' }}>
                         Admin SDK: firebase-adminsdk-fbsvc@drivehora.iam.gserviceaccount.com
                       </div>
                     </div>
@@ -2922,32 +2880,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   display: 'grid',
                   gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
                   gap: '10px',
-                  background: 'rgba(255, 255, 255, 0.02)',
+                  background: theme === 'light' ? '#f8fafc' : 'rgba(255, 255, 255, 0.02)',
                   padding: '12px',
                   borderRadius: '12px',
-                  border: '1px solid rgba(255, 255, 255, 0.06)'
+                  border: theme === 'light' ? '1px solid #e2e8f0' : '1px solid rgba(255, 255, 255, 0.06)'
                 }}>
                   <div>
                     <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', display: 'block' }}>Messaging Sender ID</span>
-                    <strong style={{ fontSize: '0.8rem', color: '#cbd5e1' }}>
+                    <strong style={{ fontSize: '0.8rem', color: 'var(--text-primary)' }}>
                       {systemSettings.firebase.messagingSenderId || '1017992679969'}
                     </strong>
                   </div>
                   <div>
                     <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', display: 'block' }}>Web API Key</span>
-                    <strong style={{ fontSize: '0.8rem', color: '#cbd5e1' }}>
+                    <strong style={{ fontSize: '0.8rem', color: 'var(--text-primary)' }}>
                       {systemSettings.firebase.apiKey ? `${systemSettings.firebase.apiKey.substring(0, 14)}...` : 'AIzaSyCXJFdo...'}
                     </strong>
                   </div>
                   <div>
                     <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', display: 'block' }}>App ID (Web)</span>
-                    <strong style={{ fontSize: '0.8rem', color: '#cbd5e1' }}>
+                    <strong style={{ fontSize: '0.8rem', color: 'var(--text-primary)' }}>
                       {systemSettings.firebase.appId ? `${systemSettings.firebase.appId.substring(0, 16)}...` : '1:1017992679969...'}
                     </strong>
                   </div>
                   <div>
                     <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', display: 'block' }}>Auth Domain</span>
-                    <strong style={{ fontSize: '0.8rem', color: '#cbd5e1' }}>
+                    <strong style={{ fontSize: '0.8rem', color: 'var(--text-primary)' }}>
                       {systemSettings.firebase.authDomain || 'drivehora.firebaseapp.com'}
                     </strong>
                   </div>
@@ -2955,8 +2913,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                 {/* 3. CAMPO PRINCIPAL: O QUE FALTA DEFINIR (VAPID KEY) */}
                 <div style={{
-                  background: !systemSettings.firebase.vapidKey ? 'rgba(245, 158, 11, 0.08)' : 'rgba(16, 185, 129, 0.05)',
-                  border: !systemSettings.firebase.vapidKey ? '1px solid rgba(245, 158, 11, 0.4)' : '1px solid rgba(16, 185, 129, 0.3)',
+                  background: !systemSettings.firebase.vapidKey 
+                    ? (theme === 'light' ? '#fffbeb' : 'rgba(245, 158, 11, 0.08)') 
+                    : (theme === 'light' ? '#f0fdf4' : 'rgba(16, 185, 129, 0.05)'),
+                  border: !systemSettings.firebase.vapidKey 
+                    ? (theme === 'light' ? '1px solid #fcd34d' : '1px solid rgba(245, 158, 11, 0.4)') 
+                    : (theme === 'light' ? '1px solid #86efac' : '1px solid rgba(16, 185, 129, 0.3)'),
                   borderRadius: '12px',
                   padding: '14px 16px',
                   display: 'flex',
@@ -2964,7 +2926,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   gap: '8px'
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <label style={{ fontSize: '0.8rem', fontWeight: 700, color: !systemSettings.firebase.vapidKey ? '#f59e0b' : '#10b981', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <label style={{ fontSize: '0.8rem', fontWeight: 700, color: !systemSettings.firebase.vapidKey ? '#d97706' : '#059669', display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <span>{!systemSettings.firebase.vapidKey ? '⚠️ PENDENTE:' : '✅ CONFIGURADO:'}</span>
                       <span>Chave VAPID (Web Push Certificate)</span>
                     </label>
@@ -2973,7 +2935,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       padding: '2px 8px',
                       borderRadius: '6px',
                       background: !systemSettings.firebase.vapidKey ? 'rgba(245, 158, 11, 0.2)' : 'rgba(16, 185, 129, 0.2)',
-                      color: !systemSettings.firebase.vapidKey ? '#f59e0b' : '#10b981',
+                      color: !systemSettings.firebase.vapidKey ? (theme === 'light' ? '#b45309' : '#f59e0b') : '#10b981',
                       fontWeight: 800
                     }}>
                       {!systemSettings.firebase.vapidKey ? 'Único Campo Faltante' : 'Pronto para Uso'}
@@ -2997,7 +2959,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       width: '100%',
                       fontSize: '0.85rem',
                       borderColor: !systemSettings.firebase.vapidKey ? 'rgba(245, 158, 11, 0.5)' : 'rgba(16, 185, 129, 0.4)',
-                      background: 'rgba(0, 0, 0, 0.3)'
+                      background: theme === 'light' ? '#ffffff' : 'rgba(0, 0, 0, 0.3)',
+                      color: 'var(--text-primary)'
                     }}
                   />
                 </div>
@@ -3012,7 +2975,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       fontSize: '0.8rem',
                       padding: '8px 16px',
                       borderColor: '#6366f1',
-                      color: '#a5b4fc',
+                      color: theme === 'light' ? '#4f46e5' : '#a5b4fc',
                       display: 'flex',
                       alignItems: 'center',
                       gap: '6px'
@@ -3060,7 +3023,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <Sliders size={20} />
                 </div>
                 <div>
-                  <h4 style={{ fontSize: '1rem', fontWeight: 700 }}>Central de Regras de Notificação</h4>
+                  <h4 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>Central de Regras de Notificação</h4>
                   <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Defina exatamente quais eventos disparam alertas</p>
                 </div>
               </div>
@@ -3090,23 +3053,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
-                        padding: '10px 14px',
-                        borderRadius: '10px',
-                        background: isChecked ? 'rgba(99, 102, 241, 0.1)' : 'rgba(255, 255, 255, 0.02)',
-                        border: isChecked ? '1px solid rgba(99, 102, 241, 0.3)' : '1px solid rgba(255, 255, 255, 0.05)',
+                        padding: '12px 16px',
+                        borderRadius: '12px',
+                        background: isChecked 
+                          ? (theme === 'light' ? '#eff6ff' : 'rgba(99, 102, 241, 0.12)') 
+                          : (theme === 'light' ? '#f8fafc' : 'rgba(255, 255, 255, 0.02)'),
+                        border: isChecked 
+                          ? (theme === 'light' ? '1px solid #93c5fd' : '1px solid rgba(99, 102, 241, 0.35)') 
+                          : (theme === 'light' ? '1px solid #e2e8f0' : '1px solid rgba(255, 255, 255, 0.06)'),
+                        boxShadow: theme === 'light' ? '0 1px 3px rgba(0, 0, 0, 0.04)' : 'none',
                         cursor: 'pointer',
                         transition: 'all 0.15s'
                       }}
                     >
-                      <div>
-                        <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#fff' }}>{rule.label}</div>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{rule.desc}</div>
+                      <div style={{ paddingRight: '10px' }}>
+                        <div style={{ fontSize: '0.86rem', fontWeight: 700, color: 'var(--text-primary)' }}>{rule.label}</div>
+                        <div style={{ fontSize: '0.74rem', color: theme === 'light' ? '#475569' : '#94a3b8', marginTop: '2px' }}>{rule.desc}</div>
                       </div>
                       <input
                         type="checkbox"
                         checked={isChecked}
                         onChange={() => {}}
-                        style={{ width: '18px', height: '18px', accentColor: '#6366f1', cursor: 'pointer' }}
+                        style={{ width: '18px', height: '18px', accentColor: '#6366f1', cursor: 'pointer', flexShrink: 0 }}
                       />
                     </div>
                   );
@@ -4730,20 +4698,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
           <span>Config</span>
         </button>
-
-        {onLogout && (
-          <button
-            onClick={onLogout}
-            className="mobile-nav-item"
-            style={{ color: '#ef4444' }}
-            title="Sair da Conta"
-          >
-            <div className="icon-wrapper" style={{ color: '#ef4444' }}>
-              <LogOut size={17} />
-            </div>
-            <span style={{ color: '#ef4444', fontWeight: 700 }}>Sair</span>
-          </button>
-        )}
       </nav>
     </div>
   );
