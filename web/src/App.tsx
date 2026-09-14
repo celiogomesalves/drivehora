@@ -110,6 +110,41 @@ export function App() {
     typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported'
   );
 
+  // Sincronização em tempo real da permissão de notificações do navegador
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('Notification' in window)) return;
+
+    const syncPermission = async () => {
+      const currentPerm = Notification.permission;
+      setPushPermission(currentPerm);
+
+      // Se já foi concedida permissão pelo navegador, registra o device token imediatamente
+      if (currentPerm === 'granted' && currentUser?.id) {
+        try {
+          const settings = getSystemSettings();
+          if (settings.firebase?.enabled) {
+            const token = await requestWebPushToken(settings.firebase.vapidKey);
+            if (token) {
+              await dbSaveUserDeviceToken(
+                currentUser.id,
+                token,
+                currentUser.role,
+                currentUser.fullName || (currentUser as any).name || 'Usuário DriveHora',
+                currentUser.email
+              );
+            }
+          }
+        } catch (e) {
+          console.warn('Sync FCM token silencioso:', e);
+        }
+      }
+    };
+
+    syncPermission();
+    window.addEventListener('focus', syncPermission);
+    return () => window.removeEventListener('focus', syncPermission);
+  }, [currentUser?.id, isNotificationsOpen]);
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const userKey = currentUser?.id ? `drivehora_notifications_${currentUser.id}` : 'drivehora_notifications_guest';

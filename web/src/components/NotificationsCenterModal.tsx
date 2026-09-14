@@ -47,6 +47,12 @@ export function NotificationsCenterModal({
 }: NotificationsCenterModalProps) {
   if (!isOpen) return null;
 
+  // Checagem em tempo real direto da API do navegador
+  const effectivePermission: NotificationPermission | 'unsupported' = 
+    typeof window !== 'undefined' && 'Notification' in window
+      ? Notification.permission
+      : (pushPermission || 'unsupported');
+
   const isLight = theme === 'light';
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -143,6 +149,19 @@ export function NotificationsCenterModal({
                     {unreadCount} nova{unreadCount > 1 ? 's' : ''}
                   </span>
                 )}
+                {effectivePermission === 'granted' && (
+                  <span style={{
+                    fontSize: '0.68rem',
+                    fontWeight: 700,
+                    padding: '1px 7px',
+                    borderRadius: '10px',
+                    background: isLight ? 'rgba(16, 185, 129, 0.12)' : 'rgba(16, 185, 129, 0.2)',
+                    color: '#10b981',
+                    border: '1px solid rgba(16, 185, 129, 0.3)'
+                  }}>
+                    Ativo ✅
+                  </span>
+                )}
               </div>
               <p style={{ margin: '1px 0 0', fontSize: '0.72rem', color: isLight ? '#64748b' : '#94a3b8' }}>
                 Avisos do sistema e corridas
@@ -170,14 +189,14 @@ export function NotificationsCenterModal({
           </button>
         </div>
 
-        {/* Banner de Ativação de Notificações Mobile (compacto e direto) */}
-        {pushPermission !== 'granted' && onEnablePush && (
+        {/* Banner de Ativação de Notificações Mobile (ocultado automaticamente se já permitido) */}
+        {effectivePermission !== 'granted' && onEnablePush && (
           <div style={{
             padding: '10px 16px',
-            background: pushPermission === 'denied'
+            background: effectivePermission === 'denied'
               ? (isLight ? '#fffbeb' : 'rgba(245, 158, 11, 0.12)')
               : (isLight ? '#eff6ff' : 'rgba(59, 130, 246, 0.12)'),
-            borderBottom: pushPermission === 'denied'
+            borderBottom: effectivePermission === 'denied'
               ? (isLight ? '1px solid #fef3c7' : '1px solid rgba(245, 158, 11, 0.25)')
               : (isLight ? '1px solid #dbeafe' : '1px solid rgba(59, 130, 246, 0.25)'),
             display: 'flex',
@@ -186,13 +205,13 @@ export function NotificationsCenterModal({
             gap: '10px'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-              <Volume2 size={16} color={pushPermission === 'denied' ? '#f59e0b' : '#3b82f6'} style={{ flexShrink: 0 }} />
+              <Volume2 size={16} color={effectivePermission === 'denied' ? '#f59e0b' : '#3b82f6'} style={{ flexShrink: 0 }} />
               <span style={{ 
                 fontSize: '0.75rem', 
-                color: pushPermission === 'denied' ? (isLight ? '#92400e' : '#fde68a') : (isLight ? '#1e3a8a' : '#bfdbfe'), 
+                color: effectivePermission === 'denied' ? (isLight ? '#92400e' : '#fde68a') : (isLight ? '#1e3a8a' : '#bfdbfe'), 
                 lineHeight: 1.3 
               }}>
-                {pushPermission === 'denied'
+                {effectivePermission === 'denied'
                   ? 'Notificações bloqueadas no Chrome. Toque ao lado para ver como liberar.'
                   : 'Ative as notificações push no celular para receber chamados em tempo real.'}
               </span>
@@ -201,7 +220,7 @@ export function NotificationsCenterModal({
               type="button"
               onClick={onEnablePush}
               style={{
-                background: pushPermission === 'denied' ? '#f59e0b' : '#3b82f6',
+                background: effectivePermission === 'denied' ? '#f59e0b' : '#3b82f6',
                 border: 'none',
                 color: '#ffffff',
                 padding: '5px 12px',
@@ -213,7 +232,7 @@ export function NotificationsCenterModal({
                 flexShrink: 0
               }}
             >
-              {pushPermission === 'denied' ? 'Como Liberar' : 'Ativar'}
+              {effectivePermission === 'denied' ? 'Como Liberar' : 'Ativar'}
             </button>
           </div>
         )}
