@@ -325,6 +325,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   useEffect(() => {
     setIsLoading(true);
     loadAdminData().finally(() => setIsLoading(false));
+    loadRecentTokens();
     fetchSystemSettingsFromDb().then(dbSettings => {
       setSystemSettings(dbSettings);
     });

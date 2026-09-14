@@ -111,7 +111,7 @@ const DEFAULT_SETTINGS: SystemSettings = {
     authDomain: 'drivehora.firebaseapp.com',
     messagingSenderId: '1017992679969',
     appId: '1:1017992679969:web:1a85c4d6007f51cd4f4960',
-    vapidKey: '',
+    vapidKey: 'BNPWXZbLEl64kql8ej1VQeCWRljWjzZrIA7B_K_e_VAyFWWrxLYuamzF-bUhElpTJfNBhzhrq8us90bYvAjcztQ',
     serverKey: '',
     enabled: true
   },

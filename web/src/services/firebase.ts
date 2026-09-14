@@ -33,6 +33,8 @@ if (typeof window !== "undefined" && "Notification" in window) {
   }
 }
 
+export const DEFAULT_VAPID_KEY = 'BNPWXZbLEl64kql8ej1VQeCWRljWjzZrIA7B_K_e_VAyFWWrxLYuamzF-bUhElpTJfNBhzhrq8us90bYvAjcztQ';
+
 /**
  * Registra o Service Worker do Firebase se suportado pelo navegador
  */
@@ -44,8 +46,14 @@ export async function getOrRegisterServiceWorker(): Promise<ServiceWorkerRegistr
     const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
       scope: '/'
     });
-    await navigator.serviceWorker.ready;
-    return registration;
+    
+    // Timeout de segurança de 3.5 segundos para não travar aguardando ready
+    const readyPromise = navigator.serviceWorker.ready;
+    const timeoutPromise = new Promise<ServiceWorkerRegistration>((resolve) => {
+      setTimeout(() => resolve(registration), 3500);
+    });
+    const finalReg = await Promise.race([readyPromise, timeoutPromise]);
+    return finalReg || registration;
   } catch (err) {
     console.warn("Falha ao registrar Service Worker do Firebase:", err);
     return null;
@@ -62,8 +70,14 @@ export async function requestWebPushToken(vapidKey?: string): Promise<string | n
     return null;
   }
 
+  const activeVapid = (vapidKey && vapidKey.trim().length > 0) ? vapidKey.trim() : DEFAULT_VAPID_KEY;
+
   try {
-    const permission = await Notification.requestPermission();
+    let permission = Notification.permission;
+    if (permission !== "granted") {
+      permission = await Notification.requestPermission();
+    }
+    
     if (permission !== "granted") {
       console.warn("Permissão de notificação não concedida:", permission);
       return null;
@@ -75,10 +89,19 @@ export async function requestWebPushToken(vapidKey?: string): Promise<string | n
 
     const swReg = await getOrRegisterServiceWorker();
 
-    const currentToken = await getToken(messaging, {
-      vapidKey: vapidKey || undefined,
+    const fetchTokenPromise = getToken(messaging, {
+      vapidKey: activeVapid,
       serviceWorkerRegistration: swReg || undefined
     });
+
+    const timeoutTokenPromise = new Promise<string | null>((resolve) => {
+      setTimeout(() => {
+        console.warn("Timeout ao aguardar resposta do FCM para getToken");
+        resolve(null);
+      }, 7000);
+    });
+
+    const currentToken = await Promise.race([fetchTokenPromise, timeoutTokenPromise]);
 
     if (currentToken) {
       console.log("Token FCM obtido com sucesso:", currentToken);
@@ -131,21 +154,22 @@ export async function testLocalPushNotification(vapidKey?: string): Promise<Push
     // Registra o Service Worker
     const swReg = await getOrRegisterServiceWorker();
 
-    // Obtém o token se houver chave VAPID
+    // Obtém o token FCM do dispositivo com fallback seguro da chave VAPID oficial
     let token: string | undefined = undefined;
-    if (vapidKey) {
-      try {
-        if (!messaging) {
-          messaging = getMessaging(firebaseApp);
-        }
-        const tokenResult = await getToken(messaging, {
-          vapidKey,
-          serviceWorkerRegistration: swReg || undefined
-        });
-        if (tokenResult) token = tokenResult;
-      } catch (tokenErr: any) {
-        console.warn("Aviso ao obter token FCM durante o teste:", tokenErr?.message);
+    const activeVapid = (vapidKey && vapidKey.trim().length > 0) ? vapidKey.trim() : DEFAULT_VAPID_KEY;
+    try {
+      if (!messaging) {
+        messaging = getMessaging(firebaseApp);
       }
+      const fetchPromise = getToken(messaging, {
+        vapidKey: activeVapid,
+        serviceWorkerRegistration: swReg || undefined
+      });
+      const timeoutPromise = new Promise<string | null>((resolve) => setTimeout(() => resolve(null), 6000));
+      const tokenResult = await Promise.race([fetchPromise, timeoutPromise]);
+      if (tokenResult) token = tokenResult;
+    } catch (tokenErr: any) {
+      console.warn("Aviso ao obter token FCM durante o teste:", tokenErr?.message);
     }
 
     // Dispara notificação nativa via Service Worker (ou fallback Notification API)
