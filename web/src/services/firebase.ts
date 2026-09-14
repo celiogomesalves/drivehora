@@ -46,11 +46,16 @@ export async function getOrRegisterServiceWorker(): Promise<ServiceWorkerRegistr
     const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
       scope: '/'
     });
-    
-    // Timeout de segurança de 3.5 segundos para não travar aguardando ready
+
+    try {
+      // Força a atualização do Service Worker para aplicar as últimas alterações
+      await registration.update();
+    } catch {}
+
+    // Aguarda o worker estar pronto com timeout defensivo
     const readyPromise = navigator.serviceWorker.ready;
     const timeoutPromise = new Promise<ServiceWorkerRegistration>((resolve) => {
-      setTimeout(() => resolve(registration), 3500);
+      setTimeout(() => resolve(registration), 3000);
     });
     const finalReg = await Promise.race([readyPromise, timeoutPromise]);
     return finalReg || registration;
@@ -60,14 +65,24 @@ export async function getOrRegisterServiceWorker(): Promise<ServiceWorkerRegistr
   }
 }
 
+export interface WebPushTokenResult {
+  success: boolean;
+  token: string | null;
+  permission: NotificationPermission | 'unsupported';
+  error?: string;
+}
+
 /**
- * Solicita permissão e retorna o token de Push FCM do dispositivo Web
- * @param vapidKey Chave VAPID pública gerada no console do Firebase
+ * Solicitação com diagnóstico detalhado de token FCM Web Push
  */
-export async function requestWebPushToken(vapidKey?: string): Promise<string | null> {
+export async function requestWebPushTokenDetailed(vapidKey?: string): Promise<WebPushTokenResult> {
   if (typeof window === "undefined" || !("Notification" in window)) {
-    console.warn("Notificações não são suportadas neste navegador.");
-    return null;
+    return {
+      success: false,
+      token: null,
+      permission: 'unsupported',
+      error: 'Notificações não são suportadas neste navegador ou dispositivo.'
+    };
   }
 
   const activeVapid = (vapidKey && vapidKey.trim().length > 0) ? vapidKey.trim() : DEFAULT_VAPID_KEY;
@@ -77,10 +92,16 @@ export async function requestWebPushToken(vapidKey?: string): Promise<string | n
     if (permission !== "granted") {
       permission = await Notification.requestPermission();
     }
-    
+
     if (permission !== "granted") {
-      console.warn("Permissão de notificação não concedida:", permission);
-      return null;
+      return {
+        success: false,
+        token: null,
+        permission,
+        error: permission === 'denied'
+          ? 'Permissão bloqueada no navegador. Clique no ícone de configurações na barra de endereços e altere para "Permitir".'
+          : 'Permissão de notificação não foi concedida pelo usuário.'
+      };
     }
 
     if (!messaging) {
@@ -89,37 +110,71 @@ export async function requestWebPushToken(vapidKey?: string): Promise<string | n
 
     const swReg = await getOrRegisterServiceWorker();
 
-    const fetchTokenPromise = getToken(messaging, {
-      vapidKey: activeVapid,
-      serviceWorkerRegistration: swReg || undefined
-    });
+    let currentToken: string | null = null;
+    let lastError: string = '';
 
-    const timeoutTokenPromise = new Promise<string | null>((resolve) => {
-      setTimeout(() => {
-        console.warn("Timeout ao aguardar resposta do FCM para getToken");
-        resolve(null);
-      }, 7000);
-    });
+    // Tentativa 1: com a registration obtida
+    try {
+      const fetchPromise = getToken(messaging, {
+        vapidKey: activeVapid,
+        serviceWorkerRegistration: swReg || undefined
+      });
+      const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 8000));
+      currentToken = await Promise.race([fetchPromise, timeoutPromise]);
+    } catch (e: any) {
+      lastError = e?.message || String(e);
+      console.warn("Tentativa 1 de getToken com swReg falhou:", lastError);
+    }
 
-    const currentToken = await Promise.race([fetchTokenPromise, timeoutTokenPromise]);
+    // Tentativa 2 (fallback): sem passar registration explicitamente
+    if (!currentToken) {
+      try {
+        const fetchPromise2 = getToken(messaging, { vapidKey: activeVapid });
+        const timeoutPromise2 = new Promise<null>((resolve) => setTimeout(() => resolve(null), 8000));
+        currentToken = await Promise.race([fetchPromise2, timeoutPromise2]);
+      } catch (e: any) {
+        lastError = e?.message || String(e);
+        console.warn("Tentativa 2 de getToken fallback falhou:", lastError);
+      }
+    }
 
     if (currentToken) {
       console.log("Token FCM obtido com sucesso:", currentToken);
-      return currentToken;
+      return { success: true, token: currentToken, permission };
     } else {
-      console.warn("Nenhum token FCM retornado pelo Firebase.");
-      return null;
+      console.warn("Nenhum token FCM retornado pelo Firebase:", lastError);
+      return {
+        success: false,
+        token: null,
+        permission,
+        error: lastError || 'Firebase não retornou o token FCM (verifique chave VAPID ou conectividade).'
+      };
     }
-  } catch (err) {
+  } catch (err: any) {
     console.error("Erro ao solicitar token de Push FCM:", err);
-    return null;
+    return {
+      success: false,
+      token: null,
+      permission: (typeof window !== 'undefined' && 'Notification' in window) ? Notification.permission : 'unsupported',
+      error: err?.message || String(err)
+    };
   }
+}
+
+/**
+ * Solicita permissão e retorna o token de Push FCM do dispositivo Web
+ * @param vapidKey Chave VAPID pública gerada no console do Firebase
+ */
+export async function requestWebPushToken(vapidKey?: string): Promise<string | null> {
+  const result = await requestWebPushTokenDetailed(vapidKey);
+  return result.token;
 }
 
 export interface PushTestResult {
   success: boolean;
   permission: NotificationPermission | 'unsupported';
   token?: string;
+  tokenError?: string;
   error?: string;
 }
 
@@ -154,28 +209,17 @@ export async function testLocalPushNotification(vapidKey?: string): Promise<Push
     // Registra o Service Worker
     const swReg = await getOrRegisterServiceWorker();
 
-    // Obtém o token FCM do dispositivo com fallback seguro da chave VAPID oficial
-    let token: string | undefined = undefined;
-    const activeVapid = (vapidKey && vapidKey.trim().length > 0) ? vapidKey.trim() : DEFAULT_VAPID_KEY;
-    try {
-      if (!messaging) {
-        messaging = getMessaging(firebaseApp);
-      }
-      const fetchPromise = getToken(messaging, {
-        vapidKey: activeVapid,
-        serviceWorkerRegistration: swReg || undefined
-      });
-      const timeoutPromise = new Promise<string | null>((resolve) => setTimeout(() => resolve(null), 6000));
-      const tokenResult = await Promise.race([fetchPromise, timeoutPromise]);
-      if (tokenResult) token = tokenResult;
-    } catch (tokenErr: any) {
-      console.warn("Aviso ao obter token FCM durante o teste:", tokenErr?.message);
-    }
+    // Obtém o token FCM com diagnóstico detalhado
+    const tokenDetailed = await requestWebPushTokenDetailed(vapidKey);
+    const token = tokenDetailed.token || undefined;
+    const tokenError = tokenDetailed.error;
 
     // Dispara notificação nativa via Service Worker (ou fallback Notification API)
     const title = '🔔 DriveHora: Teste de Push FCM';
     const options: NotificationOptions = {
-      body: 'Excelente! O canal de notificações Push está conectado e operando no seu navegador.',
+      body: token 
+        ? 'Excelente! Seu aparelho está registrado e conectado para notificações em primeiro e segundo plano.'
+        : 'Notificação local exibida, mas atenção: o token FCM em segundo plano ainda não foi gerado.',
       icon: '/favicon.svg',
       badge: '/favicon.svg',
       tag: 'drivehora-test-push'
@@ -190,7 +234,8 @@ export async function testLocalPushNotification(vapidKey?: string): Promise<Push
     return {
       success: true,
       permission,
-      token
+      token,
+      tokenError
     };
   } catch (err: any) {
     return {

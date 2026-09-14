@@ -48,7 +48,7 @@ import {
   dbCreditDriverCancellationFee, dbSendRideChatMessage, dbExtendRideHours,
   type DbRide, type DbRideChatMessage
 } from './services/dbService';
-import { requestWebPushToken, onForegroundMessage } from './services/firebase';
+import { requestWebPushToken, requestWebPushTokenDetailed, onForegroundMessage } from './services/firebase';
 import { getSystemSettings, fetchSystemSettingsFromDb, saveSystemSettings, type SystemSettings } from './services/settingsService';
 import { testGatewayConnection, createPixPayment, simulateAsaasPayment, type PaymentMethodType } from './services/paymentGatewayService';
 import { getLocalSessionToken, clearLocalSessionToken } from './utils/sessionHelper';
@@ -258,16 +258,19 @@ export function App() {
         
         try {
           const settings = getSystemSettings();
-          const token = await requestWebPushToken(settings.firebase?.vapidKey);
-          if (token && currentUser?.id) {
+          const detailed = await requestWebPushTokenDetailed(settings.firebase?.vapidKey);
+          if (detailed.token) {
+            const effectiveId = currentUser?.id || `device_${Date.now()}`;
             await dbSaveUserDeviceToken(
-              currentUser.id,
-              token,
-              currentUser.role,
-              currentUser.fullName || (currentUser as any).name || 'Usuário DriveHora',
-              currentUser.email
+              effectiveId,
+              detailed.token,
+              currentUser?.role || 'client',
+              currentUser?.fullName || (currentUser as any)?.name || 'Usuário DriveHora',
+              currentUser?.email || ''
             );
             showToast('Aparelho conectado para notificações em segundo plano!', 'success');
+          } else if (detailed.error) {
+            console.warn('Permissão concedida, mas geração do token FCM reportou:', detailed.error);
           }
         } catch (fcmErr) {
           console.warn('Erro ao obter token FCM (mas permissão local concedida):', fcmErr);

@@ -32,7 +32,7 @@ import {
   type DbRating,
   type DeviceTokenRecord
 } from '../services/dbService';
-import { testLocalPushNotification, type PushTestResult } from '../services/firebase';
+import { testLocalPushNotification, requestWebPushTokenDetailed, type PushTestResult } from '../services/firebase';
 import { clearUserDebtByAdmin } from '../services/walletService';
 import { getSupabase } from '../supabase';
 import { getSystemSettings, saveSystemSettings, fetchSystemSettingsFromDb, type SystemSettings } from '../services/settingsService';
@@ -238,6 +238,42 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
+  const [isRegisteringDevice, setIsRegisteringDevice] = useState(false);
+
+  // Registro Manual Imediato do Aparelho Atual no Supabase com Diagnóstico Completo
+  const handleRegisterCurrentDevice = async () => {
+    setIsRegisteringDevice(true);
+    try {
+      const detailed = await requestWebPushTokenDetailed(systemSettings.firebase.vapidKey);
+      if (detailed.success && detailed.token) {
+        await dbSaveUserDeviceToken(
+          'admin_device_' + Date.now(),
+          detailed.token,
+          'admin',
+          'Admin (Aparelho Atual)',
+          'admin@drivehora.app'
+        );
+        await loadRecentTokens();
+        showToast('Aparelho registrado com sucesso no Hub de Tokens do Supabase!', 'success');
+        showAlert(
+          `Excelente! O Token FCM deste aparelho foi gerado e salvo no Supabase com sucesso:\n\n${detailed.token.substring(0, 32)}...\n\nO aparelho agora receberá notificações push mesmo com o aplicativo fechado.`,
+          'success',
+          'Aparelho Registrado com Sucesso'
+        );
+      } else {
+        showAlert(
+          `Não foi possível registrar o token deste aparelho.\n\nDetalhes do Diagnóstico:\n• Permissão no Navegador: ${detailed.permission}\n• Erro Reportado: ${detailed.error || 'Nenhum token retornado pelo Firebase'}\n\nDica: Se você estiver no Chrome ou Safari, certifique-se de que não está em aba anônima e que as notificações estão em "Permitir".`,
+          'warning',
+          'Diagnóstico de Conexão'
+        );
+      }
+    } catch (e: any) {
+      showAlert(`Erro inesperado ao registrar aparelho: ${e?.message || e}`, 'error');
+    } finally {
+      setIsRegisteringDevice(false);
+    }
+  };
+
   // Teste Real e Diagnóstico Completo de Notificação Push FCM no Navegador
   const handleTestFirebasePush = async () => {
     setTestPushStatus('sending');
@@ -248,7 +284,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       if (result.success) {
         setTestPushStatus('success');
-        showToast('Notificação de teste disparada com sucesso!', 'success');
 
         // Se o navegador gerou token FCM, registra automaticamente na lista de tokens
         if (result.token) {
@@ -260,6 +295,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             'admin@drivehora.app'
           );
           await loadRecentTokens();
+          showToast('Notificação de teste exibida e Token FCM registrado com sucesso!', 'success');
+        } else {
+          showToast('Notificação local exibida! Mas o token FCM em segundo plano ainda não foi gerado.', 'warning');
+          if (result.tokenError) {
+            showAlert(
+              `A notificação nativa apareceu na sua tela, mas a geração do Token FCM para entrega com o app FECHADO falhou:\n\n${result.tokenError}\n\nVerifique se o navegador está autorizado a receber Web Push em segundo plano.`,
+              'warning',
+              'Diagnóstico de Notificação em Background'
+            );
+          }
         }
       } else {
         setTestPushStatus('error');
@@ -3481,22 +3526,47 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={loadRecentTokens}
-                  disabled={isLoadingTokens}
-                  className="btn-outline"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    fontSize: '0.78rem',
-                    padding: '6px 14px'
-                  }}
-                >
-                  <RefreshCw size={14} className={isLoadingTokens ? 'spin' : ''} />
-                  <span>{isLoadingTokens ? 'Atualizando...' : 'Atualizar Lista de Tokens'}</span>
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={handleRegisterCurrentDevice}
+                    disabled={isRegisteringDevice}
+                    className="btn-primary"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontSize: '0.78rem',
+                      padding: '6px 14px',
+                      background: 'linear-gradient(135deg, #10b981, #059669)',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <Smartphone size={14} className={isRegisteringDevice ? 'spin' : ''} />
+                    <span>{isRegisteringDevice ? 'Conectando...' : 'Conectar Este Aparelho'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={loadRecentTokens}
+                    disabled={isLoadingTokens}
+                    className="btn-outline"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontSize: '0.78rem',
+                      padding: '6px 14px'
+                    }}
+                  >
+                    <RefreshCw size={14} className={isLoadingTokens ? 'spin' : ''} />
+                    <span>{isLoadingTokens ? 'Atualizando...' : 'Atualizar Lista'}</span>
+                  </button>
+                </div>
               </div>
 
               {recentTokens.length === 0 ? (
@@ -3509,15 +3579,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
-                  gap: '8px'
+                  gap: '12px'
                 }}>
-                  <Smartphone size={32} style={{ opacity: 0.4 }} />
-                  <strong style={{ fontSize: '0.88rem', color: 'var(--text-primary)' }}>
-                    Nenhum device token registrado ainda
-                  </strong>
-                  <p style={{ fontSize: '0.76rem', color: 'var(--text-secondary)', maxWidth: '420px', margin: 0 }}>
-                    Clique no botão <strong>"Testar Envio de Notificação"</strong> acima para registrar o navegador atual ou aguarde passageiros e motoristas logarem no sistema.
-                  </p>
+                  <Smartphone size={36} style={{ opacity: 0.4, color: '#10b981' }} />
+                  <div>
+                    <strong style={{ fontSize: '0.92rem', color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
+                      Nenhum device token registrado ainda
+                    </strong>
+                    <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', maxWidth: '440px', margin: 0 }}>
+                      Clique no botão abaixo para gerar o token FCM deste aparelho agora ou aguarde passageiros e motoristas logarem no sistema.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRegisterCurrentDevice}
+                    disabled={isRegisteringDevice}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '8px 18px',
+                      borderRadius: '8px',
+                      background: '#10b981',
+                      color: '#fff',
+                      border: 'none',
+                      fontWeight: 700,
+                      fontSize: '0.82rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <Smartphone size={15} />
+                    <span>{isRegisteringDevice ? 'Conectando Dispositivo...' : 'Conectar Este Aparelho Agora'}</span>
+                  </button>
                 </div>
               ) : (
                 <div style={{
@@ -3597,15 +3690,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             fontSize: '0.7rem',
                             color: theme === 'light' ? '#0f172a' : '#cbd5e1'
                           }}>
-                            {tok.token.substring(0, 16)}...{tok.token.substring(tok.token.length - 8)}
+                            {tok.token ? `${tok.token.substring(0, Math.min(16, tok.token.length))}...${tok.token.substring(Math.max(0, tok.token.length - 8))}` : 'Token Pendente'}
                           </span>
                           <button
                             type="button"
                             title="Copiar Token FCM Completo"
                             onClick={() => {
-                              navigator.clipboard.writeText(tok.token);
-                              setCopiedTokenId(tok.userId);
-                              setTimeout(() => setCopiedTokenId(null), 3000);
+                              if (tok.token) {
+                                navigator.clipboard.writeText(tok.token);
+                                setCopiedTokenId(tok.userId);
+                                setTimeout(() => setCopiedTokenId(null), 3000);
+                              }
                             }}
                             style={{
                               background: 'transparent',

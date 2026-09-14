@@ -2229,11 +2229,13 @@ export const dbGetRecentDeviceTokens = async (): Promise<DeviceTokenRecord[]> =>
       }
     }
 
-    const list = Object.values(tokensMap).sort((a, b) => {
-      const timeA = new Date(a.updatedAt).getTime() || 0;
-      const timeB = new Date(b.updatedAt).getTime() || 0;
-      return timeB - timeA;
-    });
+    const list = Object.values(tokensMap)
+      .filter((t): t is DeviceTokenRecord => Boolean(t && typeof t.token === 'string' && t.token.trim().length > 0))
+      .sort((a, b) => {
+        const timeA = new Date(a.updatedAt).getTime() || 0;
+        const timeB = new Date(b.updatedAt).getTime() || 0;
+        return timeB - timeA;
+      });
 
     return list;
   } catch (err) {
