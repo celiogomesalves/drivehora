@@ -223,3 +223,24 @@ BEGIN
         ALTER PUBLICATION supabase_realtime ADD TABLE public.profiles;
     END IF;
 END $$;
+
+-- 10. Dados Iniciais de Administrador, Configurações Globais e Hub de Tokens
+INSERT INTO public.profiles (id, email, password_hash, full_name, role, phone)
+VALUES ('admin_master', 'admin@drivehora.com', '123456', 'Administrador DriveHora', 'admin', '11999999999')
+ON CONFLICT (id) DO UPDATE SET role = 'admin';
+
+INSERT INTO public.profiles (id, email, full_name, role, phone, active_session_token)
+VALUES (
+    'app_global_system_settings',
+    'settings@drivehora.app',
+    'System Settings',
+    'admin',
+    '00000000000',
+    '{"firebase":{"projectId":"drivehora","apiKey":"AIzaSyCXJFdoJHbgUbEtIlLCJxvUvNbiHZ4nRZc","authDomain":"drivehora.firebaseapp.com","messagingSenderId":"1017992679969","appId":"1:1017992679969:web:1a85c4d6007f51cd4f4960","vapidKey":"BNPWXZbLEl64kql8ej1VQeCWRljWjzZrIA7B_K_e_VAyFWWrxLYuamzF-bUhElpTJfNBhzhrq8us90bYvAjcztQ","enabled":true}}'
+)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO public.profiles (id, email, full_name, role, phone, active_session_token)
+VALUES ('app_global_device_tokens', 'tokens@drivehora.app', 'Device Tokens Hub', 'admin', '00000000000', '{}')
+ON CONFLICT (id) DO NOTHING;
+
