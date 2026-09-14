@@ -2589,5 +2589,73 @@ html.theme-light .modal-themed-footer,
   color: #10b981 !important;
 }
 
+/* ========================================================
+   Toast Notificações (Garante Alto Contraste no Light e Dark)
+   ======================================================== */
+.app-toast-item,
+html.theme-light .app-toast-item {
+  background: #0f172a !important;
+  color: #ffffff !important;
+  border-radius: 12px !important;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45) !important;
+}
+
+.app-toast-item span,
+html.theme-light .app-toast-item span {
+  color: #ffffff !important;
+  font-weight: 600 !important;
+}
+
+/* ========================================================
+   Dropdown de Autocomplete de Endereços (Alto Contraste)
+   ======================================================== */
+.address-suggestions-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  border-radius: 12px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+  z-index: 1000;
+  margin-top: 4px;
+  max-height: 250px;
+  overflow-y: auto;
+  background: #0f172a;
+  border: 1px solid rgba(99, 102, 241, 0.35);
+}
+
+html.theme-light .address-suggestions-dropdown {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15) !important;
+}
+
+.address-suggestion-item {
+  padding: 12px 14px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #f1f5f9;
+  transition: background 0.15s;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+html.theme-light .address-suggestion-item {
+  color: #0f172a !important;
+  border-bottom: 1px solid #f1f5f9 !important;
+}
+
+.address-suggestion-item:hover {
+  background: rgba(99, 102, 241, 0.15);
+}
+
+html.theme-light .address-suggestion-item:hover {
+  background: #f1f5f9 !important;
+  color: #2563eb !important;
+}
+
+
 
 

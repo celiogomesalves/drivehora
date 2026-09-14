@@ -4,7 +4,7 @@ import {
   Smartphone, Users, RefreshCw, CheckCircle2, 
   Radio, Award, PlayCircle, Compass, Database, 
   X, Check, LogOut, MapPin, Crown, AlertTriangle, UserCheck,
-  BellRing, Volume2, VolumeX, Ban, AlertOctagon, Heart, ShieldAlert, RotateCcw,
+  Bell, BellRing, Volume2, VolumeX, Ban, AlertOctagon, Heart, ShieldAlert, RotateCcw,
   Filter, Archive, ArchiveRestore, Trash2, CreditCard,
   ChevronDown, ChevronUp, AlertCircle, Headphones,
   Calendar, Zap, Share2, Copy, Sun, Moon, Eye, EyeOff, Music
@@ -30,6 +30,7 @@ import { DriverCancelModal } from './components/DriverCancelModal';
 import { ActiveRidePanel } from './components/ActiveRidePanel';
 import { playNotificationSound } from './services/soundAndNotificationService';
 import { SoundAuditionModal } from './components/SoundAuditionModal';
+import { NotificationsCenterModal, type AppNotification } from './components/NotificationsCenterModal';
 import { LogoProposalsModal } from './components/LogoProposalsModal';
 import { AboutAppModal } from './components/AboutAppModal';
 import { TermsAndPrivacyModal } from './components/TermsAndPrivacyModal';
@@ -57,6 +58,8 @@ import { triggerHaptic } from './utils/haptics';
 export function App() {
   const { showAlert, showConfirm, showToast } = useSystemDialog();
   const [systemSettings, setSystemSettings] = useState<SystemSettings>(getSystemSettings);
+
+
 
   // Tema da Interface: 'dark' (Escuro Futurista) vs 'light' (Claro Clean Modern SaaS)
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
@@ -99,6 +102,118 @@ export function App() {
   });
 
   const isUserAdmin = Boolean(currentUser?.isAdmin || currentUser?.role === 'admin' || isSuperAdminEmail(currentUser?.email));
+
+  // Central de Notificações Unificada
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [pushPermission, setPushPermission] = useState<NotificationPermission | 'unsupported'>(
+    typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported'
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const userKey = currentUser?.id ? `drivehora_notifications_${currentUser.id}` : 'drivehora_notifications_guest';
+    try {
+      const saved = localStorage.getItem(userKey);
+      if (saved) {
+        setNotifications(JSON.parse(saved));
+      } else {
+        const welcome: AppNotification[] = [
+          {
+            id: 'welcome_' + Date.now(),
+            title: '🎉 Bem-vindo ao DriveHora!',
+            body: 'Agora você pode solicitar ou agendar motoristas executivos por hora com total segurança.',
+            timestamp: Date.now(),
+            read: false,
+            type: 'system'
+          }
+        ];
+        setNotifications(welcome);
+        localStorage.setItem(userKey, JSON.stringify(welcome));
+      }
+    } catch (e) {
+      console.warn('Erro ao ler notificações:', e);
+    }
+  }, [currentUser?.id]);
+
+  const saveNotifications = (newNotifs: AppNotification[]) => {
+    setNotifications(newNotifs);
+    if (typeof window === 'undefined') return;
+    const userKey = currentUser?.id ? `drivehora_notifications_${currentUser.id}` : 'drivehora_notifications_guest';
+    try {
+      localStorage.setItem(userKey, JSON.stringify(newNotifs));
+    } catch {}
+  };
+
+  const addAppNotification = (title: string, body: string, type: 'system' | 'ride' | 'promo' | 'alert' = 'system') => {
+    const newNotif: AppNotification = {
+      id: 'notif_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+      title,
+      body,
+      timestamp: Date.now(),
+      read: false,
+      type
+    };
+    setNotifications(prev => {
+      const updated = [newNotif, ...prev];
+      if (typeof window !== 'undefined') {
+        const userKey = currentUser?.id ? `drivehora_notifications_${currentUser.id}` : 'drivehora_notifications_guest';
+        try { localStorage.setItem(userKey, JSON.stringify(updated)); } catch {}
+      }
+      return updated;
+    });
+  };
+
+  const handleMarkAllNotificationsRead = () => {
+    const updated = notifications.map(n => ({ ...n, read: true }));
+    saveNotifications(updated);
+    showToast('Todas as notificações foram marcadas como lidas.', 'info');
+  };
+
+  const handleClearAllNotifications = () => {
+    showConfirm('Tem certeza que deseja excluir definitivamente todas as notificações?', () => {
+      saveNotifications([]);
+      showToast('Todas as notificações foram excluídas.', 'info');
+    });
+  };
+
+  const handleMarkNotificationRead = (id: string) => {
+    const updated = notifications.map(n => n.id === id ? { ...n, read: true } : n);
+    saveNotifications(updated);
+  };
+
+  const handleDeleteNotification = (id: string) => {
+    const updated = notifications.filter(n => n.id !== id);
+    saveNotifications(updated);
+  };
+
+  const handleEnablePushViaUserGesture = async () => {
+    try {
+      const settings = getSystemSettings();
+      const token = await requestWebPushToken(settings.firebase?.vapidKey);
+      if (token && currentUser?.id) {
+        await dbSaveUserDeviceToken(
+          currentUser.id,
+          token,
+          currentUser.role,
+          currentUser.fullName || (currentUser as any).name || 'Usuário DriveHora',
+          currentUser.email
+        );
+        showToast('Notificações push ativadas com sucesso neste aparelho!', 'success');
+      } else if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+        showToast('Permissão de notificações concedida com sucesso!', 'success');
+      } else {
+        showToast('Permissão de notificação não autorizada pelo navegador.', 'warning');
+      }
+      if (typeof window !== 'undefined' && 'Notification' in window) {
+        setPushPermission(Notification.permission);
+      }
+    } catch (err: any) {
+      showToast(`Erro ao ativar notificações: ${err?.message || err}`, 'error');
+    }
+  };
+
+  const unreadNotificationsCount = notifications.filter(n => !n.read).length;
 
   const isRideActive = (status?: string) => 
     status === 'searching' || 
@@ -700,6 +815,7 @@ export function App() {
     const unsubscribeForeground = onForegroundMessage((payload) => {
       const title = payload.notification?.title || '🔔 DriveHora Notificação';
       const body = payload.notification?.body || '';
+      addAppNotification(title, body, 'system');
       if ('Notification' in window && Notification.permission === 'granted') {
         new Notification(title, { body, icon: '/favicon.svg' });
       }
@@ -726,6 +842,8 @@ export function App() {
               playNotificationSound('new_ride');
               // Exibe toast proeminente
               showToast(`📢 ${payload.title}: ${payload.body}`, 'info');
+              // Registra na Central de Notificações do Usuário
+              addAppNotification(payload.title, payload.body, 'alert');
               // Dispara notificação nativa se autorizado
               if ('Notification' in window && Notification.permission === 'granted') {
                 new Notification(payload.title, {
@@ -2675,6 +2793,51 @@ export function App() {
                 </button>
               )}
 
+                            {/* Central de Notificações com Badge Contador */}
+              <button
+                type="button"
+                onClick={() => setIsNotificationsOpen(true)}
+                title="Central de Notificações"
+                style={{
+                  position: 'relative',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '34px',
+                  height: '34px',
+                  borderRadius: '50%',
+                  background: theme === 'light' ? '#f1f5f9' : 'rgba(255, 255, 255, 0.08)',
+                  border: `1px solid ${theme === 'light' ? '#cbd5e1' : 'rgba(255, 255, 255, 0.15)'}`,
+                  color: theme === 'light' ? '#0f172a' : '#f8fafc',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  flexShrink: 0
+                }}
+              >
+                <Bell size={16} />
+                {unreadNotificationsCount > 0 && (
+                  <span style={{
+                    position: 'absolute',
+                    top: '-3px',
+                    right: '-3px',
+                    background: '#ef4444',
+                    color: '#ffffff',
+                    fontSize: '0.62rem',
+                    fontWeight: 800,
+                    width: '18px',
+                    height: '18px',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: `2px solid ${theme === 'light' ? '#ffffff' : '#050810'}`,
+                    boxShadow: '0 2px 4px rgba(239, 68, 68, 0.5)'
+                  }}>
+                    {unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount}
+                  </span>
+                )}
+              </button>
+
               <div className="user-header-card">
                 <div style={{
                   width: '24px',
@@ -4164,10 +4327,9 @@ export function App() {
                             setOriginSuggestions([]);
                           }
                         }}
-                        onFocus={() => {
-                          if (origin.trim().length >= 2) {
-                            searchAddressPlaces(origin, clientOriginCoords).then(res => setOriginSuggestions(res));
-                          }
+                        // Sem reabertura automática no onFocus
+                        onBlur={() => {
+                          setTimeout(() => setOriginSuggestions([]), 250);
                         }}
                         placeholder="Ex: Av. Paulista, 1000..."
                         required
@@ -4175,41 +4337,22 @@ export function App() {
 
                       {/* Dropdown de Sugestões de Partida */}
                       {originSuggestions.length > 0 && (
-                        <div style={{
-                          position: 'absolute',
-                          top: '100%',
-                          left: 0,
-                          right: 0,
-                          background: 'rgba(15, 23, 42, 0.98)',
-                          border: '1px solid rgba(99, 102, 241, 0.4)',
-                          borderRadius: '10px',
-                          boxShadow: '0 10px 25px rgba(0,0,0,0.6)',
-                          zIndex: 30,
-                          marginTop: '4px',
-                          maxHeight: '240px',
-                          overflowY: 'auto'
-                        }}>
+                        <div className="address-suggestions-dropdown">
                           {originSuggestions.map((sug, idx) => (
                             <div
                               key={idx}
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                setOrigin(sug);
+                                setOriginSuggestions([]);
+                              }}
                               onClick={() => {
                                 setOrigin(sug);
                                 setOriginSuggestions([]);
                               }}
-                              style={{
-                                padding: '10px 14px',
-                                fontSize: '0.8rem',
-                                color: '#e2e8f0',
-                                cursor: 'pointer',
-                                borderBottom: idx < originSuggestions.length - 1 ? '1px solid rgba(255, 255, 255, 0.06)' : 'none',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '8px'
-                              }}
-                              onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(99, 102, 241, 0.2)')}
-                              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                              className="address-suggestion-item"
                             >
-                              <MapPin size={14} color="#818cf8" style={{ flexShrink: 0 }} />
+                              <MapPin size={15} color="#818cf8" style={{ flexShrink: 0 }} />
                               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sug}</span>
                             </div>
                           ))}
@@ -4254,46 +4397,32 @@ export function App() {
                           className="custom-input"
                           value={stopVal}
                           onChange={(e) => handleUpdateStop(sIdx, e.target.value)}
+                          onBlur={() => {
+                            setTimeout(() => {
+                              setStopSuggestions(prev => ({ ...prev, [sIdx]: [] }));
+                            }, 250);
+                          }}
                           placeholder={`Endereço da Parada ${sIdx + 1} (ex: Farmácia, Cartório, Supermercado...)`}
                           style={{ borderColor: 'rgba(245, 158, 11, 0.4)' }}
                         />
                         {/* Sugestões de Endereço para esta Parada */}
                         {stopSuggestions[sIdx] && stopSuggestions[sIdx].length > 0 && (
-                          <div style={{
-                            position: 'absolute',
-                            top: '100%',
-                            left: 0,
-                            right: 0,
-                            background: 'rgba(15, 23, 42, 0.98)',
-                            border: '1px solid rgba(245, 158, 11, 0.4)',
-                            borderRadius: '10px',
-                            boxShadow: '0 10px 25px rgba(0,0,0,0.6)',
-                            zIndex: 30,
-                            marginTop: '4px',
-                            maxHeight: '200px',
-                            overflowY: 'auto'
-                          }}>
+                          <div className="address-suggestions-dropdown">
                             {stopSuggestions[sIdx].map((sug, idx) => (
                               <div
                                 key={idx}
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  handleUpdateStop(sIdx, sug);
+                                  setStopSuggestions(prev => ({ ...prev, [sIdx]: [] }));
+                                }}
                                 onClick={() => {
                                   handleUpdateStop(sIdx, sug);
                                   setStopSuggestions(prev => ({ ...prev, [sIdx]: [] }));
                                 }}
-                                style={{
-                                  padding: '9px 12px',
-                                  fontSize: '0.8rem',
-                                  color: '#e2e8f0',
-                                  cursor: 'pointer',
-                                  borderBottom: idx < stopSuggestions[sIdx].length - 1 ? '1px solid rgba(255, 255, 255, 0.06)' : 'none',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '8px'
-                                }}
-                                onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(245, 158, 11, 0.2)')}
-                                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                                className="address-suggestion-item"
                               >
-                                <MapPin size={13} color="#f59e0b" style={{ flexShrink: 0 }} />
+                                <MapPin size={14} color="#f59e0b" style={{ flexShrink: 0 }} />
                                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sug}</span>
                               </div>
                             ))}
@@ -4308,25 +4437,20 @@ export function App() {
                         <button
                           type="button"
                           onClick={handleAddStop}
+                          className="btn-outline"
                           style={{
-                            background: 'rgba(99, 102, 241, 0.08)',
-                            border: '1px dashed rgba(99, 102, 241, 0.35)',
-                            color: '#818cf8',
-                            borderRadius: '10px',
-                            padding: '6px 12px',
                             fontSize: '0.78rem',
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                            display: 'inline-flex',
+                            padding: '6px 12px',
+                            borderRadius: '8px',
+                            borderStyle: 'dashed',
+                            borderColor: '#818cf8',
+                            color: theme === 'light' ? '#4338ca' : '#a5b4fc',
+                            display: 'flex',
                             alignItems: 'center',
-                            gap: '6px',
-                            transition: 'all 0.15s ease'
+                            gap: '6px'
                           }}
-                          onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(99, 102, 241, 0.18)')}
-                          onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(99, 102, 241, 0.08)')}
                         >
-                          <span style={{ fontSize: '1rem', lineHeight: 1 }}>+</span>
-                          <span>Adicionar Parada Intermediária {stops.length > 0 ? `(${stops.length}/3)` : ''}</span>
+                          <span>+ Adicionar Parada Intermediária</span>
                         </button>
                       </div>
                     )}
@@ -4358,10 +4482,9 @@ export function App() {
                             setDestSuggestions([]);
                           }
                         }}
-                        onFocus={() => {
-                          if (destination.trim().length >= 2) {
-                            searchAddressPlaces(destination, clientOriginCoords).then(res => setDestSuggestions(res));
-                          }
+                        // Sem reabertura automática no onFocus
+                        onBlur={() => {
+                          setTimeout(() => setDestSuggestions([]), 250);
                         }}
                         placeholder="Digite o destino ou local (ex: Aeroporto, Paulista, Shopping...)"
                         required
@@ -4369,41 +4492,22 @@ export function App() {
 
                       {/* Dropdown de Sugestões de Destino */}
                       {destSuggestions.length > 0 && (
-                        <div style={{
-                          position: 'absolute',
-                          top: '100%',
-                          left: 0,
-                          right: 0,
-                          background: 'rgba(15, 23, 42, 0.98)',
-                          border: '1px solid rgba(16, 185, 129, 0.4)',
-                          borderRadius: '10px',
-                          boxShadow: '0 10px 25px rgba(0,0,0,0.6)',
-                          zIndex: 30,
-                          marginTop: '4px',
-                          maxHeight: '240px',
-                          overflowY: 'auto'
-                        }}>
+                        <div className="address-suggestions-dropdown">
                           {destSuggestions.map((sug, idx) => (
                             <div
                               key={idx}
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                setDestination(sug);
+                                setDestSuggestions([]);
+                              }}
                               onClick={() => {
                                 setDestination(sug);
                                 setDestSuggestions([]);
                               }}
-                              style={{
-                                padding: '10px 14px',
-                                fontSize: '0.8rem',
-                                color: '#e2e8f0',
-                                cursor: 'pointer',
-                                borderBottom: idx < destSuggestions.length - 1 ? '1px solid rgba(255, 255, 255, 0.06)' : 'none',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '8px'
-                              }}
-                              onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(16, 185, 129, 0.2)')}
-                              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                              className="address-suggestion-item"
                             >
-                              <MapPin size={14} color="#10b981" style={{ flexShrink: 0 }} />
+                              <MapPin size={15} color="#10b981" style={{ flexShrink: 0 }} />
                               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sug}</span>
                             </div>
                           ))}
@@ -4628,7 +4732,7 @@ export function App() {
                     </div>
 
                     {/* Selo de Proteção e Seguro da Viagem (Lei 13.640/2018) */}
-                    {systemSettings.insurance?.providerName && systemSettings.insurance?.policyNumber && (
+                    {(systemSettings.insurance?.enabled || (systemSettings.insurance?.providerName && systemSettings.insurance?.policyNumber)) && (
                       <div style={{
                         padding: '10px 14px',
                         borderRadius: '12px',
@@ -4642,7 +4746,7 @@ export function App() {
                       }}>
                         <ShieldCheck size={18} color="#10b981" style={{ flexShrink: 0 }} />
                         <div style={{ lineHeight: 1.4 }}>
-                          <strong style={{ color: '#10b981' }}>Viagem 100% Assegurada (Seguro APP):</strong> Cobertura de acidentes pessoais durante todo o período ({systemSettings.insurance.providerName} • Apólice nº {systemSettings.insurance.policyNumber}).
+                          <strong style={{ color: '#10b981' }}>Viagem 100% Assegurada (Seguro APP):</strong> Cobertura de acidentes pessoais aos ocupantes durante todo o período contratado.
                         </div>
                       </div>
                     )}
@@ -4703,6 +4807,7 @@ export function App() {
 
                     <button
                       type="submit"
+                      onClick={(e) => handleRequestRide(e)}
                       disabled={isRequesting || !gatewayOperational}
                       className="btn-primary"
                       style={{
@@ -7672,6 +7777,20 @@ export function App() {
         </div>
       </footer>
 
+      {/* Central de Notificações Unificada */}
+      <NotificationsCenterModal
+        isOpen={isNotificationsOpen}
+        onClose={() => setIsNotificationsOpen(false)}
+        notifications={notifications}
+        onMarkAllAsRead={handleMarkAllNotificationsRead}
+        onClearAll={handleClearAllNotifications}
+        onMarkAsRead={handleMarkNotificationRead}
+        onDeleteNotification={handleDeleteNotification}
+        onEnablePush={handleEnablePushViaUserGesture}
+        pushPermission={pushPermission}
+        theme={theme}
+      />
+
       {/* Modal da Ficha Executiva do Motorista (Segura e sem dados sensíveis) */}
       {selectedDriverForProfile && (
         <DriverProfileModal
@@ -7679,6 +7798,7 @@ export function App() {
           onClose={() => setSelectedDriverForProfile(null)}
           onToggleFavorite={handleToggleFavorite}
           onRequestDirectRide={handleSelectDriverForBooking}
+          theme={theme}
         />
       )}
 

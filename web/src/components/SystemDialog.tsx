@@ -231,15 +231,16 @@ export function SystemDialogProvider({ children }: { children: ReactNode }) {
           {toasts.map(t => (
             <div
               key={t.id}
+              className="app-toast-item"
               style={{
-                background: 'rgba(15, 23, 42, 0.95)',
+                background: '#0f172a',
                 border: `1px solid ${
                   t.type === 'success' ? '#10b981' : t.type === 'error' ? '#ef4444' : t.type === 'warning' ? '#f59e0b' : '#6366f1'
                 }`,
                 borderRadius: '12px',
                 padding: '12px 16px',
-                boxShadow: '0 10px 30px rgba(0,0,0,0.7)',
-                color: '#fff',
+                boxShadow: '0 10px 30px rgba(0,0,0,0.8)',
+                color: '#ffffff',
                 fontSize: '0.85rem',
                 display: 'flex',
                 alignItems: 'center',
@@ -251,10 +252,10 @@ export function SystemDialogProvider({ children }: { children: ReactNode }) {
                t.type === 'error' ? <AlertOctagon size={18} color="#ef4444" /> :
                t.type === 'warning' ? <AlertTriangle size={18} color="#f59e0b" /> :
                <Info size={18} color="#818cf8" />}
-              <span style={{ flex: 1 }}>{t.message}</span>
+              <span style={{ flex: 1, color: '#ffffff' }}>{t.message}</span>
               <button
                 onClick={() => setToasts(prev => prev.filter(item => item.id !== t.id))}
-                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 0 }}
+                style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: 0 }}
               >
                 <X size={14} />
               </button>
