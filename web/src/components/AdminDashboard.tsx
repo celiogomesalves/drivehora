@@ -6,7 +6,8 @@ import {
   TrendingUp, Database, Image, AlertTriangle, Eye, X, Check,
   Settings, Bell, CreditCard, Sliders, Send, Save, Trash2,
   Calendar, Filter, Globe, Key, Radio, Power, MessageSquare, Edit3,
-  EyeOff, LayoutDashboard, Star, ChevronDown, ChevronUp
+  EyeOff, LayoutDashboard, Star, ChevronDown, ChevronUp,
+  Smartphone, Copy, CheckCheck, SendHorizontal
 } from 'lucide-react';
 import { formatCurrency, formatCurrencyInput, parseCurrencyInput, formatPhone, formatCpf, formatPlate } from '../utils/formatters';
 import { 
@@ -23,10 +24,15 @@ import {
   dbUpdateRideReportStatus, 
   dbCreateRideReport,
   dbGetRatings,
+  dbSaveUserDeviceToken,
+  dbGetRecentDeviceTokens,
+  dbSendManualNotification,
   type DbRide, 
   type RideReport,
-  type DbRating
+  type DbRating,
+  type DeviceTokenRecord
 } from '../services/dbService';
+import { testLocalPushNotification, type PushTestResult } from '../services/firebase';
 import { clearUserDebtByAdmin } from '../services/walletService';
 import { getSupabase } from '../supabase';
 import { getSystemSettings, saveSystemSettings, fetchSystemSettingsFromDb, type SystemSettings } from '../services/settingsService';
@@ -172,6 +178,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [testPushStatus, setTestPushStatus] = useState<string | null>(null);
   const [saveSuccessNotice, setSaveSuccessNotice] = useState(false);
+  const [pushDiagnostic, setPushDiagnostic] = useState<PushTestResult | null>(null);
+
+  // Estados para Device Tokens e Dispositivos Conectados
+  const [recentTokens, setRecentTokens] = useState<DeviceTokenRecord[]>([]);
+  const [isLoadingTokens, setIsLoadingTokens] = useState(false);
+  const [copiedTokenId, setCopiedTokenId] = useState<string | null>(null);
+
+  // Estados para Disparo Manual de Notificações
+  const [manualTarget, setManualTarget] = useState<'all' | 'drivers' | 'clients' | string>('all');
+  const [manualTitle, setManualTitle] = useState('🚗 DriveHora: Aviso da Central');
+  const [manualBody, setManualBody] = useState('');
+  const [manualSound, setManualSound] = useState<'new_ride_a' | 'accepted_a' | 'finished_a' | 'time_alert'>('new_ride_a');
+  const [isSendingManual, setIsSendingManual] = useState(false);
+  const [manualSendResult, setManualSendResult] = useState<{ success: boolean; message: string; count?: number } | null>(null);
+
+  const loadRecentTokens = async () => {
+    setIsLoadingTokens(true);
+    try {
+      const list = await dbGetRecentDeviceTokens();
+      setRecentTokens(list);
+    } catch (e) {
+      console.warn('Erro ao carregar lista de tokens:', e);
+    } finally {
+      setIsLoadingTokens(false);
+    }
+  };
 
   const handleSaveAllSettings = async () => {
     setIsSavingSettings(true);
@@ -206,30 +238,76 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  const handleTestFirebasePush = () => {
+  // Teste Real e Diagnóstico Completo de Notificação Push FCM no Navegador
+  const handleTestFirebasePush = async () => {
     setTestPushStatus('sending');
-    setTimeout(() => {
-      setTestPushStatus('success');
-      if ('Notification' in window) {
-        if (Notification.permission === 'granted') {
-          new Notification('🔔 DriveHora Teste de Push FCM', {
-            body: 'Tudo certo! As notificações Push do Firebase e regras do sistema estão operando normalmente.',
-            icon: '/favicon.ico'
-          });
-        } else if (Notification.permission !== 'denied') {
-          Notification.requestPermission().then(permission => {
-            if (permission === 'granted') {
-              new Notification('🔔 DriveHora Teste de Push FCM', {
-                body: 'Notificação de teste recebida com sucesso!',
-                icon: '/favicon.ico'
-              });
-            }
-          });
+    setPushDiagnostic(null);
+    try {
+      const result = await testLocalPushNotification(systemSettings.firebase.vapidKey);
+      setPushDiagnostic(result);
+
+      if (result.success) {
+        setTestPushStatus('success');
+        showToast('Notificação de teste disparada com sucesso!', 'success');
+
+        // Se o navegador gerou token FCM, registra automaticamente na lista de tokens
+        if (result.token) {
+          await dbSaveUserDeviceToken(
+            'admin_master',
+            result.token,
+            'admin',
+            'Painel Administrador (Navegador Atual)',
+            'admin@drivehora.app'
+          );
+          await loadRecentTokens();
         }
+      } else {
+        setTestPushStatus('error');
+        showAlert(result.error || 'Falha ao disparar teste de notificação.', 'error', 'Diagnóstico de Notificações');
       }
-      setTimeout(() => setTestPushStatus(null), 5000);
-    }, 700);
+    } catch (err: any) {
+      setTestPushStatus('error');
+      setPushDiagnostic({
+        success: false,
+        permission: (typeof window !== 'undefined' && 'Notification' in window) ? Notification.permission : 'unsupported',
+        error: err?.message || 'Erro inesperado durante o teste.'
+      });
+    }
   };
+
+  // Disparo Manual de Notificações para Usuários Selecionados
+  const handleSendManualNotification = async () => {
+    if (!manualTitle.trim() || !manualBody.trim()) {
+      showAlert('Por favor, informe o título e o conteúdo da mensagem antes de disparar.', 'warning', 'Campos Obrigatórios');
+      return;
+    }
+
+    setIsSendingManual(true);
+    setManualSendResult(null);
+    try {
+      const res = await dbSendManualNotification({
+        target: manualTarget,
+        title: manualTitle.trim(),
+        body: manualBody.trim(),
+        sound: manualSound,
+        sentBy: 'Administrador'
+      });
+
+      setManualSendResult({ success: res.success, message: res.message, count: res.sentCount });
+
+      if (res.success) {
+        showToast(res.message, 'success');
+        setManualBody('');
+      } else {
+        showAlert(res.message, 'error', 'Falha no Disparo');
+      }
+    } catch (err: any) {
+      showAlert(`Erro: ${err?.message || 'Falha no envio'}`, 'error');
+    } finally {
+      setIsSendingManual(false);
+    }
+  };
+
 
   const loadAdminData = async () => {
     const [driverList, clientList, reportsList, ratingsData] = await Promise.all([
@@ -2982,7 +3060,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     }}
                   >
                     <Send size={14} />
-                    <span>{testPushStatus === 'sending' ? 'Disparando Teste...' : 'Testar Envio de Notificação'}</span>
+                    <span>{testPushStatus === 'sending' ? 'Executando Diagnóstico & Disparo...' : 'Testar Envio de Notificação'}</span>
                   </button>
 
                   <button
@@ -3002,9 +3080,104 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </button>
                 </div>
 
-                {testPushStatus === 'success' && (
-                  <div style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 700, textAlign: 'center' }}>
-                    ✅ Disparo de teste executado com sucesso no navegador!
+                {/* PAINEL DE DIAGNÓSTICO DO TESTE PUSH */}
+                {pushDiagnostic && (
+                  <div style={{
+                    borderRadius: '12px',
+                    padding: '12px 14px',
+                    background: pushDiagnostic.success
+                      ? (theme === 'light' ? '#f0fdf4' : 'rgba(16, 185, 129, 0.1)')
+                      : (theme === 'light' ? '#fef2f2' : 'rgba(239, 68, 68, 0.1)'),
+                    border: pushDiagnostic.success
+                      ? (theme === 'light' ? '1px solid #86efac' : '1px solid rgba(16, 185, 129, 0.35)')
+                      : (theme === 'light' ? '1px solid #fca5a5' : '1px solid rgba(239, 68, 68, 0.35)'),
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        {pushDiagnostic.success ? (
+                          <CheckCircle2 size={16} color="#10b981" />
+                        ) : (
+                          <AlertTriangle size={16} color="#ef4444" />
+                        )}
+                        <strong style={{
+                          fontSize: '0.82rem',
+                          color: pushDiagnostic.success ? (theme === 'light' ? '#15803d' : '#6ee7b7') : '#ef4444'
+                        }}>
+                          {pushDiagnostic.success ? 'Diagnóstico Positivo: Notificação Enviada!' : 'Falha no Diagnóstico de Push'}
+                        </strong>
+                      </div>
+                      <span style={{
+                        fontSize: '0.7rem',
+                        fontWeight: 700,
+                        padding: '2px 8px',
+                        borderRadius: '6px',
+                        background: pushDiagnostic.permission === 'granted' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                        color: pushDiagnostic.permission === 'granted' ? '#10b981' : '#ef4444'
+                      }}>
+                        Permissão no Navegador: {pushDiagnostic.permission === 'granted' ? 'Concedida ✅' : pushDiagnostic.permission}
+                      </span>
+                    </div>
+
+                    {pushDiagnostic.error && (
+                      <p style={{ fontSize: '0.74rem', color: theme === 'light' ? '#b91c1c' : '#fca5a5', margin: 0, lineHeight: 1.4 }}>
+                        {pushDiagnostic.error}
+                      </p>
+                    )}
+
+                    {pushDiagnostic.token && (
+                      <div style={{
+                        background: theme === 'light' ? '#ffffff' : 'rgba(0, 0, 0, 0.3)',
+                        borderRadius: '8px',
+                        padding: '8px 10px',
+                        border: theme === 'light' ? '1px solid #e2e8f0' : '1px solid rgba(255, 255, 255, 0.08)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '8px'
+                      }}>
+                        <div style={{ overflow: 'hidden' }}>
+                          <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', display: 'block' }}>
+                            🔑 Device Token FCM Gerado para este Navegador:
+                          </span>
+                          <span style={{
+                            fontSize: '0.72rem',
+                            fontFamily: 'monospace',
+                            color: theme === 'light' ? '#0f172a' : '#f1f5f9',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            display: 'block'
+                          }}>
+                            {pushDiagnostic.token.substring(0, 32)}...{pushDiagnostic.token.substring(pushDiagnostic.token.length - 12)}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (pushDiagnostic.token) {
+                              navigator.clipboard.writeText(pushDiagnostic.token);
+                              setCopiedTokenId('diagnostic');
+                              setTimeout(() => setCopiedTokenId(null), 3000);
+                            }
+                          }}
+                          className="btn-outline"
+                          style={{
+                            padding: '4px 10px',
+                            fontSize: '0.72rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            flexShrink: 0
+                          }}
+                        >
+                          {copiedTokenId === 'diagnostic' ? <CheckCheck size={12} color="#10b981" /> : <Copy size={12} />}
+                          <span>{copiedTokenId === 'diagnostic' ? 'Copiado!' : 'Copiar'}</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -3080,6 +3253,397 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   );
                 })}
               </div>
+            </div>
+
+            {/* CARD 2.1: DISPARO MANUAL DE NOTIFICAÇÕES (PASSAGEIROS OU MOTORISTAS) */}
+            <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{
+                    background: 'rgba(99, 102, 241, 0.15)',
+                    padding: '8px',
+                    borderRadius: '10px',
+                    color: '#818cf8'
+                  }}>
+                    <SendHorizontal size={20} />
+                  </div>
+                  <div>
+                    <h4 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>Disparo Manual de Notificações</h4>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                      Envie comunicados, avisos ou alertas em tempo real para grupos ou usuários específicos
+                    </p>
+                  </div>
+                </div>
+
+                <span style={{
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  background: 'rgba(99, 102, 241, 0.1)',
+                  color: '#818cf8',
+                  padding: '4px 10px',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(99, 102, 241, 0.25)'
+                }}>
+                  Broadcast Realtime + Push FCM
+                </span>
+              </div>
+
+              {/* Formulário de Disparo */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '4px' }}>
+                
+                {/* Seleção do Público Alvo */}
+                <div>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
+                    Destinatários da Notificação:
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' }}>
+                    {[
+                      { key: 'all', label: '👥 Todos', desc: 'Passageiros e Motoristas' },
+                      { key: 'drivers', label: '🚗 Motoristas', desc: 'Apenas condutores' },
+                      { key: 'clients', label: '🙋 Passageiros', desc: 'Apenas clientes' }
+                    ].map(targetOpt => (
+                      <button
+                        key={targetOpt.key}
+                        type="button"
+                        onClick={() => setManualTarget(targetOpt.key)}
+                        style={{
+                          padding: '8px 12px',
+                          borderRadius: '10px',
+                          border: manualTarget === targetOpt.key
+                            ? '2px solid #6366f1'
+                            : (theme === 'light' ? '1px solid #cbd5e1' : '1px solid rgba(255, 255, 255, 0.1)'),
+                          background: manualTarget === targetOpt.key
+                            ? (theme === 'light' ? '#e0e7ff' : 'rgba(99, 102, 241, 0.25)')
+                            : (theme === 'light' ? '#f8fafc' : 'rgba(255, 255, 255, 0.03)'),
+                          cursor: 'pointer',
+                          textAlign: 'left',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '2px',
+                          transition: 'all 0.15s'
+                        }}
+                      >
+                        <strong style={{ fontSize: '0.8rem', color: manualTarget === targetOpt.key ? '#4f46e5' : 'var(--text-primary)' }}>
+                          {targetOpt.label}
+                        </strong>
+                        <span style={{ fontSize: '0.68rem', color: 'var(--text-secondary)' }}>
+                          {targetOpt.desc}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Opção de Selecionar Usuário Específico */}
+                  <div style={{ marginTop: '10px' }}>
+                    <select
+                      value={manualTarget}
+                      onChange={(e) => setManualTarget(e.target.value)}
+                      className="input-field"
+                      style={{
+                        width: '100%',
+                        fontSize: '0.82rem',
+                        padding: '8px 12px',
+                        background: theme === 'light' ? '#ffffff' : 'rgba(0, 0, 0, 0.3)',
+                        borderColor: manualTarget !== 'all' && manualTarget !== 'drivers' && manualTarget !== 'clients' ? '#6366f1' : undefined
+                      }}
+                    >
+                      <option value="all">👥 Seleção Direta: Todos os Usuários</option>
+                      <option value="drivers">🚗 Seleção Direta: Apenas Motoristas</option>
+                      <option value="clients">🙋 Seleção Direta: Apenas Passageiros</option>
+                      <optgroup label="── Destinatário Individual (Tokens Registrados) ──">
+                        {recentTokens.map(tok => (
+                          <option key={tok.userId} value={tok.userId}>
+                            {tok.role === 'driver' ? '🚗 [Motorista]' : tok.role === 'admin' ? '🛡️ [Admin]' : '🙋 [Passageiro]'} {tok.name} ({tok.email || tok.phone || tok.userId.substring(0, 8)})
+                          </option>
+                        ))}
+                      </optgroup>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Título e Som */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
+                  <div>
+                    <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                      Título do Alerta:
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ex: 🚗 DriveHora: Aviso da Central"
+                      value={manualTitle}
+                      onChange={(e) => setManualTitle(e.target.value)}
+                      className="input-field"
+                      style={{ width: '100%', fontSize: '0.85rem' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                      Som de Alerta:
+                    </label>
+                    <select
+                      value={manualSound}
+                      onChange={(e) => setManualSound(e.target.value as any)}
+                      className="input-field"
+                      style={{ width: '100%', fontSize: '0.85rem' }}
+                    >
+                      <option value="new_ride_a">Som A: Nova Corrida (Oficial)</option>
+                      <option value="accepted_a">Som B: Corrida Aceita</option>
+                      <option value="finished_a">Som C: Corrida Finalizada</option>
+                      <option value="time_alert">Som D: Alerta de Tempo</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Mensagem / Conteúdo */}
+                <div>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                    Conteúdo da Mensagem:
+                  </label>
+                  <textarea
+                    rows={3}
+                    placeholder="Digite a mensagem que será exibida na tela e no push dos usuários selecionados..."
+                    value={manualBody}
+                    onChange={(e) => setManualBody(e.target.value)}
+                    className="input-field"
+                    style={{ width: '100%', fontSize: '0.85rem', resize: 'vertical' }}
+                  />
+                </div>
+
+                {/* Botão de Disparo */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', paddingTop: '4px' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                    Alvo atual: <strong>{
+                      manualTarget === 'all' ? 'Todos os usuários' :
+                      manualTarget === 'drivers' ? 'Todos os motoristas' :
+                      manualTarget === 'clients' ? 'Todos os passageiros' :
+                      (recentTokens.find(t => t.userId === manualTarget)?.name || 'Usuário específico')
+                    }</strong>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleSendManualNotification}
+                    disabled={isSendingManual || !manualTitle.trim() || !manualBody.trim()}
+                    className="btn-primary"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '10px 22px',
+                      fontSize: '0.85rem',
+                      fontWeight: 700,
+                      background: 'linear-gradient(135deg, #6366f1, #3b82f6)',
+                      boxShadow: '0 4px 14px rgba(99, 102, 241, 0.4)'
+                    }}
+                  >
+                    <SendHorizontal size={16} />
+                    <span>{isSendingManual ? 'Disparando Notificações...' : 'Disparar Notificação Agora'}</span>
+                  </button>
+                </div>
+
+                {manualSendResult && (
+                  <div style={{
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    fontSize: '0.78rem',
+                    fontWeight: 600,
+                    background: manualSendResult.success ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                    color: manualSendResult.success ? '#10b981' : '#ef4444',
+                    border: manualSendResult.success ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(239, 68, 68, 0.3)'
+                  }}>
+                    {manualSendResult.success ? '✅ ' : '❌ '} {manualSendResult.message}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* CARD 2.2: DEVICE TOKENS RECENTES & DISPOSITIVOS CONECTADOS */}
+            <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{
+                    background: 'rgba(16, 185, 129, 0.15)',
+                    padding: '8px',
+                    borderRadius: '10px',
+                    color: '#10b981'
+                  }}>
+                    <Smartphone size={20} />
+                  </div>
+                  <div>
+                    <h4 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                      Device Tokens Recentes ({recentTokens.length})
+                    </h4>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                      Dispositivos com Push FCM ativo registrados no Supabase
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={loadRecentTokens}
+                  disabled={isLoadingTokens}
+                  className="btn-outline"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontSize: '0.78rem',
+                    padding: '6px 14px'
+                  }}
+                >
+                  <RefreshCw size={14} className={isLoadingTokens ? 'spin' : ''} />
+                  <span>{isLoadingTokens ? 'Atualizando...' : 'Atualizar Lista de Tokens'}</span>
+                </button>
+              </div>
+
+              {recentTokens.length === 0 ? (
+                <div style={{
+                  padding: '30px 20px',
+                  borderRadius: '12px',
+                  background: theme === 'light' ? '#f8fafc' : 'rgba(255, 255, 255, 0.02)',
+                  border: theme === 'light' ? '1px dashed #cbd5e1' : '1px dashed rgba(255, 255, 255, 0.1)',
+                  textAlign: 'center',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  <Smartphone size={32} style={{ opacity: 0.4 }} />
+                  <strong style={{ fontSize: '0.88rem', color: 'var(--text-primary)' }}>
+                    Nenhum device token registrado ainda
+                  </strong>
+                  <p style={{ fontSize: '0.76rem', color: 'var(--text-secondary)', maxWidth: '420px', margin: 0 }}>
+                    Clique no botão <strong>"Testar Envio de Notificação"</strong> acima para registrar o navegador atual ou aguarde passageiros e motoristas logarem no sistema.
+                  </p>
+                </div>
+              ) : (
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                  maxHeight: '360px',
+                  overflowY: 'auto'
+                }}>
+                  {recentTokens.map((tok, idx) => (
+                    <div
+                      key={tok.userId || idx}
+                      style={{
+                        padding: '12px 14px',
+                        borderRadius: '10px',
+                        background: theme === 'light' ? '#ffffff' : 'rgba(255, 255, 255, 0.03)',
+                        border: theme === 'light' ? '1px solid #e2e8f0' : '1px solid rgba(255, 255, 255, 0.06)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: '10px'
+                      }}
+                    >
+                      {/* Dados do Usuário */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: '180px' }}>
+                        <div style={{
+                          width: '32px',
+                          height: '32px',
+                          borderRadius: '8px',
+                          background: tok.role === 'driver' ? 'rgba(16, 185, 129, 0.15)' : tok.role === 'admin' ? 'rgba(139, 92, 246, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                          color: tok.role === 'driver' ? '#10b981' : tok.role === 'admin' ? '#8b5cf6' : '#3b82f6',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '0.75rem',
+                          fontWeight: 800
+                        }}>
+                          {tok.role === 'driver' ? '🚗' : tok.role === 'admin' ? '🛡️' : '🙋'}
+                        </div>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <strong style={{ fontSize: '0.82rem', color: 'var(--text-primary)' }}>
+                              {tok.name}
+                            </strong>
+                            <span style={{
+                              fontSize: '0.62rem',
+                              fontWeight: 700,
+                              textTransform: 'uppercase',
+                              padding: '1px 6px',
+                              borderRadius: '4px',
+                              background: tok.role === 'driver' ? '#dcfce7' : tok.role === 'admin' ? '#f3e8ff' : '#dbeafe',
+                              color: tok.role === 'driver' ? '#15803d' : tok.role === 'admin' ? '#7e22ce' : '#1d4ed8'
+                            }}>
+                              {tok.role === 'driver' ? 'Motorista' : tok.role === 'admin' ? 'Admin' : 'Passageiro'}
+                            </span>
+                          </div>
+                          <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                            {tok.email || tok.deviceInfo}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Token e Ações */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{
+                          padding: '4px 8px',
+                          borderRadius: '6px',
+                          background: theme === 'light' ? '#f1f5f9' : 'rgba(0, 0, 0, 0.3)',
+                          border: theme === 'light' ? '1px solid #cbd5e1' : '1px solid rgba(255, 255, 255, 0.08)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}>
+                          <span style={{
+                            fontFamily: 'monospace',
+                            fontSize: '0.7rem',
+                            color: theme === 'light' ? '#0f172a' : '#cbd5e1'
+                          }}>
+                            {tok.token.substring(0, 16)}...{tok.token.substring(tok.token.length - 8)}
+                          </span>
+                          <button
+                            type="button"
+                            title="Copiar Token FCM Completo"
+                            onClick={() => {
+                              navigator.clipboard.writeText(tok.token);
+                              setCopiedTokenId(tok.userId);
+                              setTimeout(() => setCopiedTokenId(null), 3000);
+                            }}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              cursor: 'pointer',
+                              padding: '2px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              color: copiedTokenId === tok.userId ? '#10b981' : 'var(--text-secondary)'
+                            }}
+                          >
+                            {copiedTokenId === tok.userId ? <CheckCheck size={13} /> : <Copy size={13} />}
+                          </button>
+                        </div>
+
+                        {/* Botão de Disparo Direto */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setManualTarget(tok.userId);
+                            showToast(`Destinatário definido para ${tok.name}. Preencha a mensagem acima!`, 'info');
+                          }}
+                          className="btn-outline"
+                          style={{
+                            fontSize: '0.72rem',
+                            padding: '4px 10px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          <Send size={11} />
+                          <span>Notificar</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
           </div>

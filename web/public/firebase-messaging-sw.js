@@ -25,8 +25,27 @@ messaging.onBackgroundMessage((payload) => {
     body: payload.notification?.body || 'Você tem uma nova notificação.',
     icon: '/favicon.svg',
     badge: '/favicon.svg',
+    tag: payload.data?.tag || 'drivehora-notification',
     data: payload.data || {}
   };
 
   self.registration.showNotification(notificationTitle, notificationOptions);
 });
+
+// Ação de clique na notificação: foca ou abre a janela da aplicação
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if (client.url && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow('/');
+      }
+    })
+  );
+});
+

@@ -2090,33 +2090,86 @@ export const dbGetFavoriteDrivers = async (clientId: string): Promise<DriverPubl
   return list;
 };
 
+export interface DeviceTokenRecord {
+  userId: string;
+  token: string;
+  role: 'client' | 'driver' | 'admin' | string;
+  name: string;
+  email: string;
+  phone?: string;
+  deviceInfo: string;
+  updatedAt: string;
+}
+
 // 18. Salvar Token de Dispositivo (FCM Device Token) no Banco de Dados
-export const dbSaveUserDeviceToken = async (userId: string, token: string, role?: string): Promise<boolean> => {
+export const dbSaveUserDeviceToken = async (
+  userId: string,
+  token: string,
+  role?: string,
+  userName?: string,
+  userEmail?: string
+): Promise<boolean> => {
   if (!userId || !token) return false;
   try {
     const sb = getSupabase();
     if (!sb) return false;
 
-    // Atualiza na tabela principal de perfis
-    await sb
-      .from('profiles')
-      .update({ fcm_token: token, updated_at: new Date().toISOString() })
-      .eq('id', userId);
+    const deviceInfo = typeof navigator !== 'undefined'
+      ? (navigator.userAgent.includes('Mobile') ? 'Dispositivo Móvel' : 'Computador / Desktop') + ' • ' +
+        (navigator.userAgent.includes('Chrome') ? 'Google Chrome' : navigator.userAgent.includes('Safari') ? 'Apple Safari' : 'Navegador Web')
+      : 'Dispositivo Web';
 
-    // Se for motorista, também atualiza na tabela de motoristas
-    if (role === 'driver') {
-      await sb
-        .from('drivers')
-        .update({ fcm_token: token })
-        .eq('user_id', userId);
-    }
+    const nowIso = new Date().toISOString();
 
-    // Se for cliente, também atualiza na tabela de clientes
-    if (role === 'client') {
+    // 1. Tenta atualizar na tabela principal de perfis
+    try {
       await sb
-        .from('clients')
-        .update({ fcm_token: token })
-        .eq('user_id', userId);
+        .from('profiles')
+        .update({ 
+          active_device_name: JSON.stringify({ fcmToken: token, updatedAt: nowIso, deviceInfo }),
+          updated_at: nowIso 
+        })
+        .eq('id', userId);
+    } catch {}
+
+    // 2. Registra no Hub Central de Tokens (profiles id: 'app_global_device_tokens')
+    try {
+      const { data: globalRow } = await sb
+        .from('profiles')
+        .select('active_session_token')
+        .eq('id', 'app_global_device_tokens')
+        .maybeSingle();
+
+      let currentMap: Record<string, DeviceTokenRecord> = {};
+      if (globalRow?.active_session_token) {
+        try {
+          currentMap = JSON.parse(globalRow.active_session_token);
+        } catch {}
+      }
+
+      currentMap[userId] = {
+        userId,
+        token,
+        role: role || currentMap[userId]?.role || 'client',
+        name: userName || currentMap[userId]?.name || 'Usuário DriveHora',
+        email: userEmail || currentMap[userId]?.email || '',
+        deviceInfo,
+        updatedAt: nowIso
+      };
+
+      await sb
+        .from('profiles')
+        .upsert({
+          id: 'app_global_device_tokens',
+          full_name: 'Device Tokens Hub',
+          email: 'tokens@drivehora.app',
+          phone: '00000000000',
+          role: 'admin',
+          active_session_token: JSON.stringify(currentMap),
+          updated_at: nowIso
+        });
+    } catch (e) {
+      console.warn('Falha ao registrar token no Hub Global:', e);
     }
 
     console.log(`[FCM] Device token registrado com sucesso para o usuário ${userId}`);
@@ -2126,6 +2179,170 @@ export const dbSaveUserDeviceToken = async (userId: string, token: string, role?
     return false;
   }
 };
+
+// 18.1 Buscar Device Tokens Recentes Cadastrados
+export const dbGetRecentDeviceTokens = async (): Promise<DeviceTokenRecord[]> => {
+  try {
+    const sb = getSupabase();
+    if (!sb) return [];
+
+    // Lê do Hub Global
+    const { data: globalRow } = await sb
+      .from('profiles')
+      .select('active_session_token')
+      .eq('id', 'app_global_device_tokens')
+      .maybeSingle();
+
+    let tokensMap: Record<string, DeviceTokenRecord> = {};
+    if (globalRow?.active_session_token) {
+      try {
+        tokensMap = JSON.parse(globalRow.active_session_token);
+      } catch {}
+    }
+
+    // Busca dados complementares dos profiles para enriquecer nomes e papéis
+    const { data: profilesList } = await sb
+      .from('profiles')
+      .select('id, full_name, email, phone, role, active_device_name')
+      .neq('id', 'app_global_system_settings')
+      .neq('id', 'app_global_device_tokens');
+
+    if (profilesList && profilesList.length > 0) {
+      for (const p of profilesList) {
+        if (p.active_device_name && p.active_device_name.includes('fcmToken')) {
+          try {
+            const parsed = JSON.parse(p.active_device_name);
+            if (parsed.fcmToken && !tokensMap[p.id]) {
+              tokensMap[p.id] = {
+                userId: p.id,
+                token: parsed.fcmToken,
+                role: p.role || 'client',
+                name: p.full_name || 'Usuário',
+                email: p.email || '',
+                phone: p.phone,
+                deviceInfo: parsed.deviceInfo || 'Dispositivo Web',
+                updatedAt: parsed.updatedAt || new Date().toISOString()
+              };
+            }
+          } catch {}
+        }
+      }
+    }
+
+    const list = Object.values(tokensMap).sort((a, b) => {
+      const timeA = new Date(a.updatedAt).getTime() || 0;
+      const timeB = new Date(b.updatedAt).getTime() || 0;
+      return timeB - timeA;
+    });
+
+    return list;
+  } catch (err) {
+    console.warn('Erro ao buscar lista de device tokens:', err);
+    return [];
+  }
+};
+
+export interface ManualNotificationPayload {
+  target: 'all' | 'drivers' | 'clients' | string; // 'all', 'drivers', 'clients' ou um userId específico
+  title: string;
+  body: string;
+  sound?: string;
+  sentBy?: string;
+}
+
+// 18.2 Disparar Notificação Manual (Via Broadcast Realtime + Backend FCM se disponível)
+export const dbSendManualNotification = async (payload: ManualNotificationPayload): Promise<{
+  success: boolean;
+  sentCount: number;
+  message: string;
+}> => {
+  try {
+    const sb = getSupabase();
+    if (!sb) {
+      return { success: false, sentCount: 0, message: 'Banco Supabase não conectado.' };
+    }
+
+    const allTokens = await dbGetRecentDeviceTokens();
+    
+    // Filtra os destinatários alvo
+    let targetTokens: DeviceTokenRecord[] = [];
+    if (payload.target === 'all') {
+      targetTokens = allTokens;
+    } else if (payload.target === 'drivers') {
+      targetTokens = allTokens.filter(t => t.role === 'driver');
+    } else if (payload.target === 'clients') {
+      targetTokens = allTokens.filter(t => t.role === 'client');
+    } else {
+      // Usuário específico por userId
+      targetTokens = allTokens.filter(t => t.userId === payload.target);
+    }
+
+    // 1. Broadcast em tempo real via Supabase Realtime para todos os navegadores/apps abertos
+    const channel = sb.channel('drivehora_manual_notifications');
+    await channel.send({
+      type: 'broadcast',
+      event: 'manual_notification',
+      payload: {
+        id: `notif_${Date.now()}`,
+        target: payload.target,
+        title: payload.title,
+        body: payload.body,
+        sound: payload.sound || 'new_ride_a',
+        sentAt: new Date().toISOString(),
+        sentBy: payload.sentBy || 'Admin'
+      }
+    });
+
+    // 2. Disparo via Backend API FCM (se backend Node estiver rodando)
+    const tokensList = targetTokens.map(t => t.token).filter(Boolean);
+    if (tokensList.length > 0) {
+      try {
+        await fetch('/api/notifications/push', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tokens: tokensList,
+            title: payload.title,
+            body: payload.body,
+            data: {
+              target: payload.target,
+              timestamp: String(Date.now())
+            }
+          })
+        });
+      } catch {}
+    }
+
+    // 3. Disparo local nativo via Service Worker se o admin tiver notificação ativa
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator && Notification.permission === 'granted') {
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        if (reg && 'showNotification' in reg) {
+          reg.showNotification(payload.title, {
+            body: payload.body,
+            icon: '/favicon.svg',
+            badge: '/favicon.svg',
+            tag: `manual-notif-${Date.now()}`
+          });
+        }
+      } catch {}
+    }
+
+    return {
+      success: true,
+      sentCount: targetTokens.length,
+      message: `Notificação enviada com sucesso para ${targetTokens.length > 0 ? `${targetTokens.length} dispositivo(s)` : 'todos os usuários conectados via Realtime'}.`
+    };
+  } catch (err: any) {
+    console.error('Erro ao enviar notificação manual:', err);
+    return {
+      success: false,
+      sentCount: 0,
+      message: `Falha no disparo: ${err?.message || 'Erro desconhecido'}`
+    };
+  }
+};
+
 
 // 19. Sistema de Ocorrências e Problemas Reportados (Ride Reports)
 export interface RideReport {

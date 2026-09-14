@@ -28,6 +28,7 @@ import { ClientProfileManager } from './components/ClientProfileManager';
 import { RatingModal } from './components/RatingModal';
 import { DriverCancelModal } from './components/DriverCancelModal';
 import { ActiveRidePanel } from './components/ActiveRidePanel';
+import { playNotificationSound } from './services/soundAndNotificationService';
 import { SoundAuditionModal } from './components/SoundAuditionModal';
 import { LogoProposalsModal } from './components/LogoProposalsModal';
 import { AboutAppModal } from './components/AboutAppModal';
@@ -679,7 +680,13 @@ export function App() {
 
         const token = await requestWebPushToken(settings.firebase.vapidKey);
         if (token) {
-          await dbSaveUserDeviceToken(currentUser.id, token, currentUser.role);
+          await dbSaveUserDeviceToken(
+            currentUser.id,
+            token,
+            currentUser.role,
+            currentUser.fullName || (currentUser as any).name || 'Usuário DriveHora',
+            currentUser.email
+          );
         }
       } catch (e) {
         console.warn('Registro de push token postergado ou não autorizado:', e);
@@ -689,7 +696,7 @@ export function App() {
     // Delay suave para a interface carregar antes de pedir permissão
     const timer = setTimeout(registerPushToken, 1200);
 
-    // Listener de mensagens recebidas em primeiro plano (In-App Push)
+    // Listener de mensagens recebidas em primeiro plano (In-App Push FCM)
     const unsubscribeForeground = onForegroundMessage((payload) => {
       const title = payload.notification?.title || '🔔 DriveHora Notificação';
       const body = payload.notification?.body || '';
@@ -698,11 +705,51 @@ export function App() {
       }
     });
 
+    // Listener de notificações manuais disparadas pelo Administrador em tempo real via Supabase Broadcast
+    let manualNotifChannel: any = null;
+    try {
+      const sb = getSupabase();
+      if (sb) {
+        manualNotifChannel = sb.channel('drivehora_manual_notifications');
+        manualNotifChannel
+          .on('broadcast', { event: 'manual_notification' }, ({ payload }: any) => {
+            if (!payload) return;
+            const target = payload.target;
+            const isTarget =
+              target === 'all' ||
+              (target === 'drivers' && currentUser.role === 'driver') ||
+              (target === 'clients' && currentUser.role === 'client') ||
+              target === currentUser.id;
+
+            if (isTarget) {
+              // Toca som de alerta
+              playNotificationSound('new_ride');
+              // Exibe toast proeminente
+              showToast(`📢 ${payload.title}: ${payload.body}`, 'info');
+              // Dispara notificação nativa se autorizado
+              if ('Notification' in window && Notification.permission === 'granted') {
+                new Notification(payload.title, {
+                  body: payload.body,
+                  icon: '/favicon.svg'
+                });
+              }
+            }
+          })
+          .subscribe();
+      }
+    } catch {}
+
     return () => {
       clearTimeout(timer);
       if (unsubscribeForeground) unsubscribeForeground();
+      if (manualNotifChannel) {
+        try {
+          const sb = getSupabase();
+          if (sb) sb.removeChannel(manualNotifChannel);
+        } catch {}
+      }
     };
-  }, [currentUser?.id, currentUser?.role]);
+  }, [currentUser?.id, currentUser?.role, currentUser?.fullName, currentUser?.email]);
 
   // Alternar favorito do cliente
   const handleToggleFavorite = async (driverId: string) => {
