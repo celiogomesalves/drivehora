@@ -36,6 +36,24 @@ if (typeof window !== "undefined" && "Notification" in window) {
 export const DEFAULT_VAPID_KEY = 'BNPWXZbLEl64kql8ej1VQeCWRljWjzZrIA7B_K_e_VAyFWWrxLYuamzF-bUhElpTJfNBhzhrq8us90bYvAjcztQ';
 
 /**
+ * Converte chave pública VAPID base64url para Uint8Array exigido pelo W3C PushManager
+ */
+export function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding)
+    .replace(/-/g, '+')
+    .replace(/_/g, '/');
+
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
+/**
  * Registra o Service Worker do Firebase se suportado pelo navegador
  */
 export async function getOrRegisterServiceWorker(): Promise<ServiceWorkerRegistration | null> {
@@ -135,6 +153,33 @@ export async function requestWebPushTokenDetailed(vapidKey?: string): Promise<We
       } catch (e: any) {
         lastError = e?.message || String(e);
         console.warn("Tentativa 2 de getToken fallback falhou:", lastError);
+      }
+    }
+
+    // Tentativa 3 (Fallback Nativo W3C PushManager direto do navegador)
+    // Contorna erros de restrição de credencial/API Key do Google (messaging/token-subscribe-failed)
+    if (!currentToken && swReg && 'pushManager' in swReg) {
+      try {
+        console.log("[Push] Acionando fallback nativo W3C pushManager.subscribe...");
+        let sub = await swReg.pushManager.getSubscription();
+        if (!sub) {
+          sub = await swReg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(activeVapid) as unknown as BufferSource
+          });
+        }
+
+        if (sub && sub.endpoint) {
+          if (sub.endpoint.includes('/fcm/send/')) {
+            currentToken = sub.endpoint.split('/fcm/send/')[1];
+          } else {
+            currentToken = sub.endpoint;
+          }
+          console.log("[Push] Token FCM obtido via fallback nativo PushManager com sucesso!");
+        }
+      } catch (nativeErr: any) {
+        lastError = nativeErr?.message || String(nativeErr);
+        console.warn("Tentativa 3 de PushManager nativo falhou:", lastError);
       }
     }
 

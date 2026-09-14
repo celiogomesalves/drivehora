@@ -118,19 +118,25 @@ export function App() {
       const currentPerm = Notification.permission;
       setPushPermission(currentPerm);
 
-      // Se já foi concedida permissão pelo navegador, registra o device token imediatamente
-      if (currentPerm === 'granted' && currentUser?.id) {
+      // Se já foi concedida permissão pelo navegador, registra o device token imediatamente de forma transparente
+      if (currentPerm === 'granted') {
         try {
           const settings = getSystemSettings();
           if (settings.firebase?.enabled) {
-            const token = await requestWebPushToken(settings.firebase.vapidKey);
-            if (token) {
+            const detailed = await requestWebPushTokenDetailed(settings.firebase.vapidKey);
+            if (detailed.token) {
+              let deviceId = typeof window !== 'undefined' ? localStorage.getItem('drivehora_device_id') : null;
+              if (!deviceId) {
+                deviceId = 'dev_' + Math.random().toString(36).substring(2, 10);
+                if (typeof window !== 'undefined') localStorage.setItem('drivehora_device_id', deviceId);
+              }
+              const effectiveId = currentUser?.id || deviceId;
               await dbSaveUserDeviceToken(
-                currentUser.id,
-                token,
-                currentUser.role,
-                currentUser.fullName || (currentUser as any).name || 'Usuário DriveHora',
-                currentUser.email
+                effectiveId,
+                detailed.token,
+                currentUser?.role || 'client',
+                currentUser?.fullName || (currentUser as any)?.name || 'Usuário Conectado',
+                currentUser?.email || ''
               );
             }
           }
@@ -144,6 +150,21 @@ export function App() {
     window.addEventListener('focus', syncPermission);
     return () => window.removeEventListener('focus', syncPermission);
   }, [currentUser?.id, isNotificationsOpen]);
+
+  // Prompt proativo de permissão na tela inicial para novos usuários (sem precisar ir em Configurações)
+  const [showPushPromptBanner, setShowPushPromptBanner] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('Notification' in window)) return;
+    if (pushPermission === 'default') {
+      const dismissed = sessionStorage.getItem('drivehora_push_prompt_dismissed');
+      if (!dismissed) {
+        const timer = setTimeout(() => setShowPushPromptBanner(true), 2500);
+        return () => clearTimeout(timer);
+      }
+    } else {
+      setShowPushPromptBanner(false);
+    }
+  }, [pushPermission]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -8519,6 +8540,92 @@ export function App() {
                 {isSubmittingDebtSupport ? 'Enviando...' : 'Enviar ao Suporte'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Banner Proativo de Notificações Push na Tela Inicial (Automático e Sem Ir em Configurações) */}
+      {showPushPromptBanner && pushPermission === 'default' && (
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 9999,
+          width: 'calc(100% - 32px)',
+          maxWidth: '480px',
+          background: theme === 'light' ? '#ffffff' : '#0f172a',
+          border: theme === 'light' ? '1px solid #cbd5e1' : '1px solid rgba(255, 255, 255, 0.15)',
+          borderRadius: '16px',
+          padding: '12px 16px',
+          boxShadow: '0 20px 45px rgba(0, 0, 0, 0.45)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '12px',
+          animation: 'fadeInUp 0.3s ease-out'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+            <div style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '10px',
+              background: 'linear-gradient(135deg, #10b981, #059669)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#fff',
+              flexShrink: 0
+            }}>
+              <Bell size={18} />
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <strong style={{ fontSize: '0.84rem', color: theme === 'light' ? '#0f172a' : '#f8fafc', display: 'block' }}>
+                Ative as Notificações
+              </strong>
+              <span style={{ fontSize: '0.72rem', color: theme === 'light' ? '#64748b' : '#94a3b8', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                Receba chamados e alertas mesmo com o app fechado
+              </span>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+            <button
+              type="button"
+              onClick={async () => {
+                setShowPushPromptBanner(false);
+                await handleEnablePushViaUserGesture();
+              }}
+              style={{
+                background: '#10b981',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '7px 12px',
+                fontSize: '0.78rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              Ativar
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowPushPromptBanner(false);
+                sessionStorage.setItem('drivehora_push_prompt_dismissed', 'true');
+              }}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-secondary)',
+                fontSize: '0.75rem',
+                cursor: 'pointer',
+                padding: '4px'
+              }}
+            >
+              Agora não
+            </button>
           </div>
         </div>
       )}
