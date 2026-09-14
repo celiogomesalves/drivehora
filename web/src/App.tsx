@@ -2475,7 +2475,7 @@ export function App() {
                   setShowAboutAppModal(true);
                 }
               }} 
-              title={isUserAdmin ? "Painel Admin: Clique para escolher a Logo oficial do sistema" : "Clique para ver a logo e saber mais sobre o DriveHora"}
+              title={isUserAdmin ? "Painel Admin: Clique para escolher a Logo oficial do sistema" : "Sobre do DriveHora"}
               style={{ 
                 display: 'flex', 
                 alignItems: 'center', 
@@ -8066,6 +8066,7 @@ export function App() {
           setShowTermsModal(true);
         }}
         logoOption={systemSettings.branding?.logoOption || 2}
+        insurance={systemSettings.insurance}
         theme={theme}
       />
 

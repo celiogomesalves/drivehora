@@ -1,6 +1,7 @@
 import React from 'react';
-import { X, Clock, ShieldCheck, MapPin, Star, Heart } from 'lucide-react';
+import { X, Clock, ShieldCheck, MapPin, Star, Heart, PhoneCall } from 'lucide-react';
 import { DriveHoraLogo } from './DriveHoraLogo';
+import type { SystemSettings } from '../services/settingsService';
 
 interface AboutAppModalProps {
   isOpen: boolean;
@@ -8,6 +9,7 @@ interface AboutAppModalProps {
   onOpenTerms?: () => void;
   logoOption?: 1 | 2 | 3 | 'custom';
   theme?: 'light' | 'dark';
+  insurance?: SystemSettings['insurance'];
 }
 
 export const AboutAppModal: React.FC<AboutAppModalProps> = ({
@@ -15,7 +17,8 @@ export const AboutAppModal: React.FC<AboutAppModalProps> = ({
   onClose,
   onOpenTerms,
   logoOption = 2,
-  theme = 'dark'
+  theme = 'dark',
+  insurance
 }) => {
   if (!isOpen) return null;
 
@@ -262,6 +265,176 @@ export const AboutAppModal: React.FC<AboutAppModalProps> = ({
             </span>
           </div>
         </div>
+
+        {/* Informações da Apólice de Seguro Ativa (Lei 13.640/2018) */}
+        {insurance && insurance.enabled && insurance.providerName && (
+          <div
+            style={{
+              borderRadius: '14px',
+              padding: '14px 16px',
+              background: theme === 'light'
+                ? 'linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%)'
+                : 'linear-gradient(135deg, rgba(6, 78, 59, 0.35) 0%, rgba(15, 23, 42, 0.6) 100%)',
+              border: theme === 'light' ? '1px solid #86efac' : '1px solid rgba(16, 185, 129, 0.4)',
+              boxShadow: theme === 'light'
+                ? '0 4px 12px rgba(16, 185, 129, 0.08)'
+                : '0 4px 16px rgba(0, 0, 0, 0.25)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{
+                  width: '28px',
+                  height: '28px',
+                  borderRadius: '8px',
+                  backgroundColor: '#10b981',
+                  color: '#ffffff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 2px 8px rgba(16, 185, 129, 0.4)'
+                }}>
+                  <ShieldCheck size={18} />
+                </div>
+                <div>
+                  <h4 style={{
+                    fontSize: '0.84rem',
+                    fontWeight: 800,
+                    margin: 0,
+                    color: theme === 'light' ? '#065f46' : '#6ee7b7'
+                  }}>
+                    Viagem 100% Assegurada
+                  </h4>
+                  <span style={{
+                    fontSize: '0.68rem',
+                    color: theme === 'light' ? '#047857' : '#a7f3d0',
+                    display: 'block'
+                  }}>
+                    Seguro APP • Lei Federal nº 13.640/2018
+                  </span>
+                </div>
+              </div>
+              <span style={{
+                fontSize: '0.62rem',
+                fontWeight: 800,
+                textTransform: 'uppercase',
+                background: theme === 'light' ? '#dcfce7' : 'rgba(16, 185, 129, 0.25)',
+                color: theme === 'light' ? '#15803d' : '#34d399',
+                padding: '3px 8px',
+                borderRadius: '6px',
+                border: theme === 'light' ? '1px solid #bbf7d0' : '1px solid rgba(16, 185, 129, 0.4)'
+              }}>
+                Ativo
+              </span>
+            </div>
+
+            {/* Companhia e Apólice */}
+            <div style={{
+              background: theme === 'light' ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.25)',
+              borderRadius: '10px',
+              padding: '8px 10px',
+              border: theme === 'light' ? '1px solid #d1fae5' : '1px solid rgba(255, 255, 255, 0.05)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '4px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.74rem' }}>
+                <span style={{ color: theme === 'light' ? '#64748b' : '#94a3b8' }}>Seguradora:</span>
+                <strong style={{ color: theme === 'light' ? '#0f172a' : '#f8fafc', fontWeight: 700 }}>
+                  {insurance.providerName}
+                </strong>
+              </div>
+              {insurance.policyNumber && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.74rem' }}>
+                  <span style={{ color: theme === 'light' ? '#64748b' : '#94a3b8' }}>Nº da Apólice:</span>
+                  <span style={{
+                    fontFamily: 'monospace',
+                    fontWeight: 700,
+                    color: theme === 'light' ? '#065f46' : '#34d399',
+                    fontSize: '0.72rem'
+                  }}>
+                    {insurance.policyNumber}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Coberturas por Ocupante */}
+            <div>
+              <span style={{
+                fontSize: '0.68rem',
+                fontWeight: 700,
+                color: theme === 'light' ? '#047857' : '#a7f3d0',
+                display: 'block',
+                marginBottom: '6px'
+              }}>
+                Cobertura por passageiro e motorista durante a corrida:
+              </span>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: '6px'
+              }}>
+                <div style={{
+                  background: theme === 'light' ? '#ffffff' : 'rgba(255, 255, 255, 0.04)',
+                  padding: '6px',
+                  borderRadius: '8px',
+                  textAlign: 'center',
+                  border: theme === 'light' ? '1px solid #d1fae5' : '1px solid rgba(255, 255, 255, 0.05)'
+                }}>
+                  <div style={{ fontSize: '0.62rem', color: theme === 'light' ? '#64748b' : '#94a3b8' }}>Morte Acid.</div>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 800, color: theme === 'light' ? '#0f172a' : '#f1f5f9' }}>
+                    R$ {(insurance.coverageAmountMA || 100000).toLocaleString('pt-BR')}
+                  </div>
+                </div>
+
+                <div style={{
+                  background: theme === 'light' ? '#ffffff' : 'rgba(255, 255, 255, 0.04)',
+                  padding: '6px',
+                  borderRadius: '8px',
+                  textAlign: 'center',
+                  border: theme === 'light' ? '1px solid #d1fae5' : '1px solid rgba(255, 255, 255, 0.05)'
+                }}>
+                  <div style={{ fontSize: '0.62rem', color: theme === 'light' ? '#64748b' : '#94a3b8' }}>Invalidez Perm.</div>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 800, color: theme === 'light' ? '#0f172a' : '#f1f5f9' }}>
+                    R$ {(insurance.coverageAmountIPA || 100000).toLocaleString('pt-BR')}
+                  </div>
+                </div>
+
+                <div style={{
+                  background: theme === 'light' ? '#ffffff' : 'rgba(255, 255, 255, 0.04)',
+                  padding: '6px',
+                  borderRadius: '8px',
+                  textAlign: 'center',
+                  border: theme === 'light' ? '1px solid #d1fae5' : '1px solid rgba(255, 255, 255, 0.05)'
+                }}>
+                  <div style={{ fontSize: '0.62rem', color: theme === 'light' ? '#64748b' : '#94a3b8' }}>Desp. Médicas</div>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 800, color: theme === 'light' ? '#0f172a' : '#f1f5f9' }}>
+                    R$ {(insurance.coverageAmountDMHO || 10000).toLocaleString('pt-BR')}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Suporte 24h da Seguradora */}
+            {insurance.emergencyHotline && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '0.7rem',
+                color: theme === 'light' ? '#065f46' : '#6ee7b7',
+                paddingTop: '2px'
+              }}>
+                <PhoneCall size={13} />
+                <span>Central de Sinistro 24h: <strong>{insurance.emergencyHotline}</strong></span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Link para Termos & LGPD */}
         {onOpenTerms && (
