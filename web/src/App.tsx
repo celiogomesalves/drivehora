@@ -884,6 +884,21 @@ export function App() {
   const handleSelectDriverForBooking = (driver: DriverPublicProfile) => {
     setSelectedDirectDriver(driver);
     setClientSubTab('request');
+    const driverFirstName = driver.displayName.trim().split(' ')[0];
+    if (origin.trim() && destination.trim()) {
+      showConfirm(
+        `Deseja solicitar a corrida agora direcionada para ${driverFirstName}?`,
+        () => {
+          handleRequestRide();
+        }
+      );
+    } else {
+      showToast(`Motorista ${driverFirstName} selecionado! Preencha a partida e o destino para chamá-lo.`, 'info');
+      setTimeout(() => {
+        const originInput = document.querySelector('input[placeholder*="Paulista"]') as HTMLInputElement;
+        if (originInput) originInput.focus();
+      }, 300);
+    }
   };
 
   const [prioritizeFavorites, setPrioritizeFavorites] = useState(true);
@@ -1616,8 +1631,10 @@ export function App() {
   };
 
   // Solicitar corrida como cliente
-  const handleRequestRide = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleRequestRide = async (e?: React.FormEvent | React.MouseEvent) => {
+    if (e && typeof e.preventDefault === 'function') {
+      e.preventDefault();
+    }
     if (!origin.trim() || !destination.trim()) {
       showAlert('Por favor, informe o ponto de partida e o destino da corrida.', 'warning', 'Dados Incompletos');
       return;
@@ -1698,19 +1715,24 @@ export function App() {
     }
 
     // Exigência cadastral do passageiro (CPF obrigatório para emissão de gateway de pagamento)
-    const cleanCpf = (clientProfile?.cpf || '').replace(/\D/g, '');
-    if (!clientProfile || cleanCpf.length !== 11) {
-      showAlert(
-        'Para sua segurança e conformidade com os gateways de pagamento (Pix/Cartão), é obrigatório completar seu cadastro informando seu CPF antes de solicitar corridas.',
-        'warning',
-        'Cadastro Pendente'
-      );
-      setClientSubTab('profile');
-      return;
+    // Administradores são liberados para realização de testes do sistema
+    if (!isUserAdmin) {
+      const cleanCpf = (clientProfile?.cpf || '').replace(/\D/g, '');
+      if (!clientProfile || cleanCpf.length !== 11) {
+        showAlert(
+          'Para sua segurança e conformidade com os gateways de pagamento (Pix/Cartão), é obrigatório completar seu cadastro informando seu CPF antes de solicitar corridas.',
+          'warning',
+          'Cadastro Pendente'
+        );
+        showToast('Complete seu CPF no perfil antes de solicitar corridas.', 'warning');
+        setClientSubTab('profile');
+        return;
+      }
     }
 
     setIsRequesting(true);
-    const rideId = 'ride_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+    try {
+      const rideId = 'ride_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
     const clientId = currentUser?.id || ('client_' + Math.random().toString(36).substring(2, 6));
 
     // Cálculo com abatimento de créditos disponíveis
@@ -1849,7 +1871,14 @@ export function App() {
     }
 
     await fetchRides();
-    setIsRequesting(false);
+      showToast('Solicitação enviada com sucesso! Conectando com motoristas...', 'success');
+    } catch (err: any) {
+      console.error('Erro ao processar solicitação de corrida:', err);
+      showAlert(`Houve uma falha ao solicitar a corrida: ${err?.message || err}`, 'error', 'Erro na Solicitação');
+      showToast('Erro ao processar solicitação de corrida.', 'error');
+    } finally {
+      setIsRequesting(false);
+    }
   };
 
   // Cancelar corrida pelo passageiro
@@ -2793,50 +2822,7 @@ export function App() {
                 </button>
               )}
 
-                            {/* Central de Notificações com Badge Contador */}
-              <button
-                type="button"
-                onClick={() => setIsNotificationsOpen(true)}
-                title="Central de Notificações"
-                style={{
-                  position: 'relative',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: '34px',
-                  height: '34px',
-                  borderRadius: '50%',
-                  background: theme === 'light' ? '#f1f5f9' : 'rgba(255, 255, 255, 0.08)',
-                  border: `1px solid ${theme === 'light' ? '#cbd5e1' : 'rgba(255, 255, 255, 0.15)'}`,
-                  color: theme === 'light' ? '#0f172a' : '#f8fafc',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  flexShrink: 0
-                }}
-              >
-                <Bell size={16} />
-                {unreadNotificationsCount > 0 && (
-                  <span style={{
-                    position: 'absolute',
-                    top: '-3px',
-                    right: '-3px',
-                    background: '#ef4444',
-                    color: '#ffffff',
-                    fontSize: '0.62rem',
-                    fontWeight: 800,
-                    width: '18px',
-                    height: '18px',
-                    borderRadius: '50%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    border: `2px solid ${theme === 'light' ? '#ffffff' : '#050810'}`,
-                    boxShadow: '0 2px 4px rgba(239, 68, 68, 0.5)'
-                  }}>
-                    {unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount}
-                  </span>
-                )}
-              </button>
+              
 
               <div className="user-header-card">
                 <div style={{
@@ -2957,6 +2943,35 @@ export function App() {
             >
               <Share2 size={14} />
               <span>Compartilhar</span>
+            </button>
+
+            {/* Central de Notificações ao lado de Compartilhar */}
+            <button
+              type="button"
+              onClick={() => setIsNotificationsOpen(true)}
+              className="header-tab-btn"
+              title="Central de Notificações"
+              style={{
+                position: 'relative',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <Bell size={14} />
+              <span>Notificações</span>
+              {unreadNotificationsCount > 0 && (
+                <span style={{
+                  background: '#ef4444',
+                  color: '#ffffff',
+                  fontSize: '0.65rem',
+                  fontWeight: 800,
+                  padding: '1px 6px',
+                  borderRadius: '10px'
+                }}>
+                  {unreadNotificationsCount}
+                </span>
+              )}
             </button>
 
             {/* Saldo Discreto do Passageiro com Toggle de Ocultar/Exibir (Eye) */}
@@ -4807,7 +4822,6 @@ export function App() {
 
                     <button
                       type="submit"
-                      onClick={(e) => handleRequestRide(e)}
                       disabled={isRequesting || !gatewayOperational}
                       className="btn-primary"
                       style={{

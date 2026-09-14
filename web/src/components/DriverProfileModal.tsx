@@ -144,27 +144,26 @@ export function DriverProfileModal({
         </div>
 
         {/* Informações Principais do Motorista */}
-        <div style={{ padding: '0 24px 24px 24px', position: 'relative' }}>
-          {/* Card com Foto e Nome (sem colisão nem sobreposição) */}
+        <div style={{ padding: '16px 20px 20px 20px', position: 'relative' }}>
+          {/* Card com Foto e Nome (sem colisão nem sobreposição com o banner) */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '16px',
-            marginTop: '-35px',
-            marginBottom: '18px'
+            gap: '14px',
+            marginBottom: '16px'
           }}>
             <div style={{
-              width: '80px',
-              height: '80px',
-              borderRadius: '20px',
+              width: '72px',
+              height: '72px',
+              borderRadius: '18px',
               background: '#0f172a',
-              border: isLight ? '3px solid #ffffff' : '3px solid #0f172a',
-              boxShadow: '0 8px 20px rgba(0, 0, 0, 0.35)',
+              border: isLight ? '2px solid #e2e8f0' : '2px solid rgba(255, 255, 255, 0.15)',
+              boxShadow: '0 6px 16px rgba(0, 0, 0, 0.2)',
               overflow: 'hidden',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: '2rem',
+              fontSize: '1.8rem',
               color: '#fff',
               flexShrink: 0
             }}>
@@ -179,34 +178,32 @@ export function DriverProfileModal({
               )}
             </div>
 
-            <div style={{ flex: 1, minWidth: 0, paddingTop: '28px' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <h3 style={{
-                  fontSize: '1.2rem',
+                  fontSize: '1.05rem',
                   fontWeight: 800,
                   margin: 0,
                   color: isLight ? '#0f172a' : '#ffffff',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap'
                 }}>
-                  {driver.displayName}
+                  {driver.displayName ? driver.displayName.trim().split(/\s+/).slice(0, 2).join(' ') : 'Motorista'}
                 </h3>
-                <CheckCircle2 size={18} color="#10b981" style={{ flexShrink: 0 }} />
+                <CheckCircle2 size={16} color="#10b981" style={{ flexShrink: 0 }} />
               </div>
 
               <p style={{
-                fontSize: '0.8rem',
+                fontSize: '0.78rem',
                 color: isLight ? '#64748b' : '#94a3b8',
-                margin: '3px 0 6px',
+                margin: '2px 0 5px',
                 fontWeight: 500
               }}>
                 {driver.memberSince || 'Membro'} • Categoria Executiva
               </p>
               
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.8rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#f59e0b', fontWeight: 800 }}>
-                  <Star size={15} fill="#f59e0b" />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.78rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '3px', color: '#f59e0b', fontWeight: 800 }}>
+                  <Star size={14} fill="#f59e0b" />
                   <span>{driver.rating ? Number(driver.rating).toFixed(1) : '5.0'}</span>
                 </div>
                 <span style={{ color: isLight ? '#cbd5e1' : '#475569' }}>•</span>

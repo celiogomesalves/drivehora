@@ -53,24 +53,24 @@ export function NotificationsCenterModal({
   const formatTimeAgo = (timestamp: number) => {
     const diff = Date.now() - timestamp;
     const mins = Math.floor(diff / 60000);
-    if (mins < 1) return 'Agora mesmo';
-    if (mins < 60) return `Há ${mins} min`;
+    if (mins < 1) return 'Agora';
+    if (mins < 60) return `${mins} min`;
     const hours = Math.floor(mins / 60);
-    if (hours < 24) return `Há ${hours} h`;
+    if (hours < 24) return `${hours}h`;
     const days = Math.floor(hours / 24);
-    return `Há ${days} d`;
+    return `${days}d`;
   };
 
   const getIcon = (type?: string) => {
     switch (type) {
       case 'ride':
-        return <Car size={18} color="#3b82f6" />;
+        return <Car size={16} color="#3b82f6" />;
       case 'alert':
-        return <ShieldAlert size={18} color="#ef4444" />;
+        return <ShieldAlert size={16} color="#ef4444" />;
       case 'promo':
-        return <Sparkles size={18} color="#f59e0b" />;
+        return <Sparkles size={16} color="#f59e0b" />;
       default:
-        return <Radio size={18} color="#10b981" />;
+        return <Radio size={16} color="#10b981" />;
     }
   };
 
@@ -87,57 +87,56 @@ export function NotificationsCenterModal({
       alignItems: 'center',
       justifyContent: 'center',
       zIndex: 9999,
-      padding: '16px'
+      padding: '12px'
     }}>
       <div 
-        className="glass-panel"
         style={{
           width: '100%',
-          maxWidth: '520px',
-          maxHeight: '85vh',
+          maxWidth: '480px',
+          maxHeight: '90vh',
           display: 'flex',
           flexDirection: 'column',
-          borderRadius: '24px',
+          borderRadius: '20px',
           padding: '0',
           overflow: 'hidden',
           background: isLight ? '#ffffff' : '#0f172a',
           color: isLight ? '#0f172a' : '#f8fafc',
           border: isLight ? '1px solid #e2e8f0' : '1px solid rgba(255, 255, 255, 0.12)',
-          boxShadow: isLight ? '0 20px 45px rgba(0, 0, 0, 0.15)' : '0 25px 50px -12px rgba(0, 0, 0, 0.75)'
+          boxShadow: isLight ? '0 20px 45px rgba(0, 0, 0, 0.12)' : '0 25px 50px -12px rgba(0, 0, 0, 0.75)'
         }}
       >
-        {/* Cabeçalho */}
+        {/* Cabeçalho Limpo */}
         <div style={{
-          padding: '20px 24px',
+          padding: '16px 20px',
           borderBottom: isLight ? '1px solid #f1f5f9' : '1px solid rgba(255, 255, 255, 0.08)',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          background: isLight ? '#f8fafc' : 'rgba(30, 41, 59, 0.5)'
+          background: isLight ? '#f8fafc' : 'rgba(30, 41, 59, 0.4)'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <div style={{
-              width: '38px',
-              height: '38px',
-              borderRadius: '12px',
+              width: '34px',
+              height: '34px',
+              borderRadius: '10px',
               background: 'linear-gradient(135deg, #6366f1, #3b82f6)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               color: '#fff',
-              boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)'
+              flexShrink: 0
             }}>
-              <Bell size={20} />
+              <Bell size={18} />
             </div>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>Central de Notificações</h3>
+                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800 }}>Notificações</h3>
                 {unreadCount > 0 && (
                   <span style={{
-                    fontSize: '0.75rem',
+                    fontSize: '0.7rem',
                     fontWeight: 700,
-                    padding: '2px 8px',
-                    borderRadius: '12px',
+                    padding: '1px 7px',
+                    borderRadius: '10px',
                     background: '#ef4444',
                     color: '#ffffff'
                   }}>
@@ -145,8 +144,8 @@ export function NotificationsCenterModal({
                   </span>
                 )}
               </div>
-              <p style={{ margin: '2px 0 0', fontSize: '0.78rem', color: isLight ? '#64748b' : '#94a3b8' }}>
-                Avisos do sistema, corridas e comunicados
+              <p style={{ margin: '1px 0 0', fontSize: '0.72rem', color: isLight ? '#64748b' : '#94a3b8' }}>
+                Avisos do sistema e corridas
               </p>
             </div>
           </div>
@@ -155,11 +154,11 @@ export function NotificationsCenterModal({
             type="button"
             onClick={onClose}
             style={{
-              background: isLight ? '#e2e8f0' : 'rgba(255, 255, 255, 0.1)',
+              background: isLight ? '#f1f5f9' : 'rgba(255, 255, 255, 0.08)',
               border: 'none',
               borderRadius: '50%',
-              width: '34px',
-              height: '34px',
+              width: '32px',
+              height: '32px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -167,26 +166,26 @@ export function NotificationsCenterModal({
               color: isLight ? '#334155' : '#ffffff'
             }}
           >
-            <X size={18} />
+            <X size={16} />
           </button>
         </div>
 
-        {/* Banner para Ativar Notificações no Dispositivo (Muito útil em celulares onde Notification.requestPermission exige toque explícito) */}
+        {/* Banner de Ativação de Notificações Mobile (compacto e direto) */}
         {pushPermission !== 'granted' && onEnablePush && (
           <div style={{
-            padding: '12px 20px',
+            padding: '10px 16px',
             background: isLight ? '#eff6ff' : 'rgba(59, 130, 246, 0.12)',
             borderBottom: isLight ? '1px solid #dbeafe' : '1px solid rgba(59, 130, 246, 0.25)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            gap: '12px'
+            gap: '10px'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <Volume2 size={20} color="#3b82f6" style={{ flexShrink: 0 }} />
-              <div style={{ fontSize: '0.78rem', lineHeight: 1.3, color: isLight ? '#1e3a8a' : '#bfdbfe' }}>
-                <strong>Receber alertas no celular:</strong> Ative as notificações push para não perder avisos importantes mesmo com o app minimizado.
-              </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+              <Volume2 size={16} color="#3b82f6" style={{ flexShrink: 0 }} />
+              <span style={{ fontSize: '0.75rem', color: isLight ? '#1e3a8a' : '#bfdbfe', lineHeight: 1.3 }}>
+                Ative as notificações push no celular para receber chamados em tempo real.
+              </span>
             </div>
             <button
               type="button"
@@ -195,13 +194,13 @@ export function NotificationsCenterModal({
                 background: '#3b82f6',
                 border: 'none',
                 color: '#ffffff',
-                padding: '6px 14px',
+                padding: '5px 12px',
                 borderRadius: '8px',
-                fontSize: '0.78rem',
+                fontSize: '0.75rem',
                 fontWeight: 700,
                 cursor: 'pointer',
                 whiteSpace: 'nowrap',
-                boxShadow: '0 2px 8px rgba(59, 130, 246, 0.4)'
+                flexShrink: 0
               }}
             >
               Ativar
@@ -209,39 +208,43 @@ export function NotificationsCenterModal({
           </div>
         )}
 
-        {/* Barra de Ações Rápidas (Marcar todas lidas / Excluir todas) */}
+        {/* Barra de Ações - Layout Impecável sem Quebras de Texto */}
         {notifications.length > 0 && (
           <div style={{
-            padding: '10px 20px',
+            padding: '8px 16px',
             borderBottom: isLight ? '1px solid #f1f5f9' : '1px solid rgba(255, 255, 255, 0.06)',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            fontSize: '0.78rem'
+            gap: '8px',
+            background: isLight ? '#ffffff' : 'transparent'
           }}>
-            <span style={{ color: isLight ? '#64748b' : '#94a3b8' }}>
-              Total: {notifications.length} notificaç{notifications.length > 1 ? 'ões' : 'ão'}
+            <span style={{ fontSize: '0.75rem', color: isLight ? '#64748b' : '#94a3b8', whiteSpace: 'nowrap' }}>
+              {notifications.length} {notifications.length > 1 ? 'notificações' : 'notificação'}
             </span>
 
-            <div style={{ display: 'flex', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
               {unreadCount > 0 && (
                 <button
                   type="button"
                   onClick={onMarkAllAsRead}
                   style={{
-                    background: 'transparent',
-                    border: 'none',
+                    background: isLight ? '#f1f5f9' : 'rgba(255, 255, 255, 0.06)',
+                    border: isLight ? '1px solid #e2e8f0' : '1px solid rgba(255, 255, 255, 0.1)',
+                    padding: '4px 10px',
+                    borderRadius: '8px',
                     color: '#3b82f6',
                     cursor: 'pointer',
-                    display: 'flex',
+                    display: 'inline-flex',
                     alignItems: 'center',
-                    gap: '5px',
-                    fontWeight: 600,
-                    fontSize: '0.78rem'
+                    gap: '4px',
+                    fontWeight: 700,
+                    fontSize: '0.72rem',
+                    whiteSpace: 'nowrap'
                   }}
                 >
-                  <CheckCheck size={15} />
-                  <span>Marcar todas lidas</span>
+                  <CheckCheck size={13} />
+                  <span>Ler todas</span>
                 </button>
               )}
 
@@ -249,19 +252,22 @@ export function NotificationsCenterModal({
                 type="button"
                 onClick={onClearAll}
                 style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: isLight ? '#ef4444' : '#f87171',
+                  background: isLight ? '#fef2f2' : 'rgba(239, 68, 68, 0.1)',
+                  border: isLight ? '1px solid #fee2e2' : '1px solid rgba(239, 68, 68, 0.25)',
+                  padding: '4px 10px',
+                  borderRadius: '8px',
+                  color: '#ef4444',
                   cursor: 'pointer',
-                  display: 'flex',
+                  display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '5px',
-                  fontWeight: 600,
-                  fontSize: '0.78rem'
+                  gap: '4px',
+                  fontWeight: 700,
+                  fontSize: '0.72rem',
+                  whiteSpace: 'nowrap'
                 }}
               >
-                <Trash2 size={14} />
-                <span>Excluir todas</span>
+                <Trash2 size={13} />
+                <span>Limpar</span>
               </button>
             </div>
           </div>
@@ -271,11 +277,11 @@ export function NotificationsCenterModal({
         <div style={{
           flex: 1,
           overflowY: 'auto',
-          padding: '12px 16px',
+          padding: '10px 14px',
           display: 'flex',
           flexDirection: 'column',
-          gap: '10px',
-          minHeight: '260px',
+          gap: '8px',
+          minHeight: '220px',
           maxHeight: '52vh'
         }}>
           {notifications.length === 0 ? (
@@ -285,15 +291,15 @@ export function NotificationsCenterModal({
               alignItems: 'center',
               justifyContent: 'center',
               height: '100%',
-              minHeight: '220px',
+              minHeight: '200px',
               color: isLight ? '#94a3b8' : '#64748b',
-              gap: '10px',
+              gap: '8px',
               textAlign: 'center'
             }}>
-              <Bell size={36} opacity={0.4} />
+              <Bell size={32} opacity={0.4} />
               <div>
-                <p style={{ margin: 0, fontWeight: 700, fontSize: '0.95rem' }}>Nenhuma notificação por aqui</p>
-                <span style={{ fontSize: '0.78rem' }}>Você está em dia com todos os alertas e comunicados!</span>
+                <p style={{ margin: 0, fontWeight: 700, fontSize: '0.9rem' }}>Nenhuma notificação</p>
+                <span style={{ fontSize: '0.75rem' }}>Você está em dia com todos os alertas!</span>
               </div>
             </div>
           ) : (
@@ -301,57 +307,57 @@ export function NotificationsCenterModal({
               <div
                 key={item.id}
                 style={{
-                  padding: '14px 16px',
-                  borderRadius: '16px',
+                  padding: '12px 14px',
+                  borderRadius: '14px',
                   background: item.read 
                     ? (isLight ? '#f8fafc' : 'rgba(255, 255, 255, 0.03)')
-                    : (isLight ? '#f1f5f9' : 'rgba(99, 102, 241, 0.12)'),
+                    : (isLight ? '#eff6ff' : 'rgba(99, 102, 241, 0.12)'),
                   border: item.read
                     ? (isLight ? '1px solid #e2e8f0' : '1px solid rgba(255, 255, 255, 0.06)')
-                    : (isLight ? '1px solid #cbd5e1' : '1px solid rgba(99, 102, 241, 0.35)'),
+                    : (isLight ? '1px solid #bfdbfe' : '1px solid rgba(99, 102, 241, 0.35)'),
                   display: 'flex',
-                  gap: '12px',
+                  gap: '10px',
                   alignItems: 'flex-start',
-                  position: 'relative',
-                  transition: 'background 0.2s ease'
+                  position: 'relative'
                 }}
               >
                 <div style={{
-                  padding: '8px',
-                  borderRadius: '10px',
+                  padding: '7px',
+                  borderRadius: '8px',
                   background: isLight ? '#ffffff' : 'rgba(255, 255, 255, 0.08)',
-                  boxShadow: isLight ? '0 1px 3px rgba(0,0,0,0.06)' : 'none',
+                  boxShadow: isLight ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
                   flexShrink: 0
                 }}>
                   {getIcon(item.type)}
                 </div>
 
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px', marginBottom: '4px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
                     <h4 style={{
                       margin: 0,
-                      fontSize: '0.9rem',
+                      fontSize: '0.85rem',
                       fontWeight: item.read ? 600 : 800,
-                      color: isLight ? '#0f172a' : '#f8fafc'
+                      color: isLight ? '#0f172a' : '#f8fafc',
+                      lineHeight: 1.3
                     }}>
                       {item.title}
                     </h4>
-                    <span style={{ fontSize: '0.7rem', color: isLight ? '#94a3b8' : '#64748b', whiteSpace: 'nowrap' }}>
+                    <span style={{ fontSize: '0.68rem', color: isLight ? '#94a3b8' : '#64748b', whiteSpace: 'nowrap' }}>
                       {formatTimeAgo(item.timestamp)}
                     </span>
                   </div>
 
                   <p style={{
-                    margin: 0,
-                    fontSize: '0.82rem',
-                    lineHeight: '1.45',
+                    margin: '3px 0 0',
+                    fontSize: '0.78rem',
+                    lineHeight: '1.4',
                     color: isLight ? '#334155' : '#cbd5e1',
                     wordBreak: 'break-word'
                   }}>
                     {item.body}
                   </p>
 
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '8px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
                     {!item.read && (
                       <button
                         type="button"
@@ -360,16 +366,18 @@ export function NotificationsCenterModal({
                           background: 'transparent',
                           border: 'none',
                           color: '#3b82f6',
-                          fontSize: '0.72rem',
+                          fontSize: '0.7rem',
                           fontWeight: 700,
                           cursor: 'pointer',
-                          display: 'flex',
+                          display: 'inline-flex',
                           alignItems: 'center',
-                          gap: '3px'
+                          gap: '3px',
+                          whiteSpace: 'nowrap',
+                          padding: 0
                         }}
                       >
-                        <Check size={12} />
-                        <span>Marcar como lida</span>
+                        <Check size={11} />
+                        <span>Lida</span>
                       </button>
                     )}
 
@@ -380,15 +388,17 @@ export function NotificationsCenterModal({
                         background: 'transparent',
                         border: 'none',
                         color: isLight ? '#94a3b8' : '#64748b',
-                        fontSize: '0.72rem',
+                        fontSize: '0.7rem',
                         cursor: 'pointer',
-                        display: 'flex',
+                        display: 'inline-flex',
                         alignItems: 'center',
-                        gap: '3px'
+                        gap: '3px',
+                        whiteSpace: 'nowrap',
+                        padding: 0
                       }}
-                      title="Excluir notificação"
+                      title="Excluir"
                     >
-                      <Trash2 size={12} />
+                      <Trash2 size={11} />
                       <span>Excluir</span>
                     </button>
                   </div>
@@ -400,7 +410,7 @@ export function NotificationsCenterModal({
 
         {/* Rodapé */}
         <div style={{
-          padding: '12px 20px',
+          padding: '10px 16px',
           borderTop: isLight ? '1px solid #f1f5f9' : '1px solid rgba(255, 255, 255, 0.08)',
           display: 'flex',
           justifyContent: 'flex-end',
@@ -410,13 +420,13 @@ export function NotificationsCenterModal({
             type="button"
             onClick={onClose}
             style={{
-              padding: '8px 18px',
-              borderRadius: '10px',
+              padding: '6px 16px',
+              borderRadius: '8px',
               border: isLight ? '1px solid #cbd5e1' : '1px solid rgba(255, 255, 255, 0.15)',
               background: isLight ? '#ffffff' : 'rgba(255, 255, 255, 0.05)',
               color: isLight ? '#0f172a' : '#ffffff',
               fontWeight: 600,
-              fontSize: '0.82rem',
+              fontSize: '0.8rem',
               cursor: 'pointer'
             }}
           >
