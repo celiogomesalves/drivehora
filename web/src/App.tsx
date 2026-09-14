@@ -188,27 +188,58 @@ export function App() {
   };
 
   const handleEnablePushViaUserGesture = async () => {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      showAlert('Seu navegador não possui suporte a notificações push nativas.', 'info', 'Não Suportado');
+      return;
+    }
+
+    // Se o usuário ou o Chrome já tiver bloqueado as notificações anteriormente
+    if (Notification.permission === 'denied') {
+      showAlert(
+        'As notificações estão bloqueadas nas configurações do seu navegador para o DriveHora.\n\nPara liberar no seu celular:\n1. Toque no ícone 🔒 (ao lado do link do site no topo do navegador)\n2. Toque em "Permissões" (ou "Configurações do site")\n3. Altere "Notificações" para "Permitir"\n4. Recarregue a página e pronto!',
+        'warning',
+        'Notificações Bloqueadas no Chrome'
+      );
+      setPushPermission('denied');
+      return;
+    }
+
     try {
-      const settings = getSystemSettings();
-      const token = await requestWebPushToken(settings.firebase?.vapidKey);
-      if (token && currentUser?.id) {
-        await dbSaveUserDeviceToken(
-          currentUser.id,
-          token,
-          currentUser.role,
-          currentUser.fullName || (currentUser as any).name || 'Usuário DriveHora',
-          currentUser.email
+      // Solicita a permissão nativa
+      const permission = await Notification.requestPermission();
+      setPushPermission(permission);
+
+      if (permission === 'denied') {
+        showAlert(
+          'A permissão de notificações não foi concedida pelo navegador.\n\nPara autorizar:\n1. Toque no ícone 🔒 ao lado do endereço do site\n2. Em Permissões > Notificações, selecione "Permitir"',
+          'warning',
+          'Permissão Negada'
         );
-        showToast('Notificações push ativadas com sucesso neste aparelho!', 'success');
-      } else if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-        showToast('Permissão de notificações concedida com sucesso!', 'success');
-      } else {
-        showToast('Permissão de notificação não autorizada pelo navegador.', 'warning');
+        return;
       }
-      if (typeof window !== 'undefined' && 'Notification' in window) {
-        setPushPermission(Notification.permission);
+
+      if (permission === 'granted') {
+        showToast('Permissão de notificações concedida com sucesso!', 'success');
+        
+        try {
+          const settings = getSystemSettings();
+          const token = await requestWebPushToken(settings.firebase?.vapidKey);
+          if (token && currentUser?.id) {
+            await dbSaveUserDeviceToken(
+              currentUser.id,
+              token,
+              currentUser.role,
+              currentUser.fullName || (currentUser as any).name || 'Usuário DriveHora',
+              currentUser.email
+            );
+            showToast('Aparelho conectado para notificações em segundo plano!', 'success');
+          }
+        } catch (fcmErr) {
+          console.warn('Erro ao obter token FCM (mas permissão local concedida):', fcmErr);
+        }
       }
     } catch (err: any) {
+      console.error('Erro ao ativar notificações:', err);
       showToast(`Erro ao ativar notificações: ${err?.message || err}`, 'error');
     }
   };
@@ -2940,9 +2971,10 @@ export function App() {
                 background: activeTab === 'mobile' ? '#f59e0b' : 'transparent',
                 color: activeTab === 'mobile' ? '#000' : undefined
               }}
+              title="Compartilhar aplicativo"
             >
               <Share2 size={14} />
-              <span>Compartilhar</span>
+              <span className="hide-on-mobile">Compartilhar</span>
             </button>
 
             {/* Central de Notificações ao lado de Compartilhar */}
@@ -2959,7 +2991,7 @@ export function App() {
               }}
             >
               <Bell size={14} />
-              <span>Notificações</span>
+              <span className="hide-on-mobile">Notificações</span>
               {unreadNotificationsCount > 0 && (
                 <span style={{
                   background: '#ef4444',

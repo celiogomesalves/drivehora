@@ -174,24 +174,34 @@ export function NotificationsCenterModal({
         {pushPermission !== 'granted' && onEnablePush && (
           <div style={{
             padding: '10px 16px',
-            background: isLight ? '#eff6ff' : 'rgba(59, 130, 246, 0.12)',
-            borderBottom: isLight ? '1px solid #dbeafe' : '1px solid rgba(59, 130, 246, 0.25)',
+            background: pushPermission === 'denied'
+              ? (isLight ? '#fffbeb' : 'rgba(245, 158, 11, 0.12)')
+              : (isLight ? '#eff6ff' : 'rgba(59, 130, 246, 0.12)'),
+            borderBottom: pushPermission === 'denied'
+              ? (isLight ? '1px solid #fef3c7' : '1px solid rgba(245, 158, 11, 0.25)')
+              : (isLight ? '1px solid #dbeafe' : '1px solid rgba(59, 130, 246, 0.25)'),
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             gap: '10px'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-              <Volume2 size={16} color="#3b82f6" style={{ flexShrink: 0 }} />
-              <span style={{ fontSize: '0.75rem', color: isLight ? '#1e3a8a' : '#bfdbfe', lineHeight: 1.3 }}>
-                Ative as notificações push no celular para receber chamados em tempo real.
+              <Volume2 size={16} color={pushPermission === 'denied' ? '#f59e0b' : '#3b82f6'} style={{ flexShrink: 0 }} />
+              <span style={{ 
+                fontSize: '0.75rem', 
+                color: pushPermission === 'denied' ? (isLight ? '#92400e' : '#fde68a') : (isLight ? '#1e3a8a' : '#bfdbfe'), 
+                lineHeight: 1.3 
+              }}>
+                {pushPermission === 'denied'
+                  ? 'Notificações bloqueadas no Chrome. Toque ao lado para ver como liberar.'
+                  : 'Ative as notificações push no celular para receber chamados em tempo real.'}
               </span>
             </div>
             <button
               type="button"
               onClick={onEnablePush}
               style={{
-                background: '#3b82f6',
+                background: pushPermission === 'denied' ? '#f59e0b' : '#3b82f6',
                 border: 'none',
                 color: '#ffffff',
                 padding: '5px 12px',
@@ -203,7 +213,7 @@ export function NotificationsCenterModal({
                 flexShrink: 0
               }}
             >
-              Ativar
+              {pushPermission === 'denied' ? 'Como Liberar' : 'Ativar'}
             </button>
           </div>
         )}
