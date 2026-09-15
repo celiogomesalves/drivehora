@@ -1,8 +1,8 @@
 // Vercel Serverless Function: Central de Configuração Global do Supabase
 
 let inMemoryConfig = {
-  url: 'https://yhtbrrvgrlsgobyaynfx.supabase.co',
-  key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlodGJycnZncmxzZ29ieWF5bmZ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk0MjM5MTEsImV4cCI6MjEwNDk5OTkxMX0.OFCSbEVCTue2gfANfcbNIYzbkniiGL01qqaKwyJQ8gw'
+  url: 'https://dnebvxvzlsudndjybaoe.supabase.co',
+  key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRuZWJ2eHZ6bHN1ZG5kanliYW9lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0NTA2NjIsImV4cCI6MjEwNDAyNjY2Mn0.LZXJEozYDXVHV9UiUg4y275f-ZA0hZgzTbfExBKcq38'
 };
 
 export default function handler(req, res) {
