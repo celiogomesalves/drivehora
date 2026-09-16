@@ -363,9 +363,20 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
   ) => {
     const file = e.target.files?.[0];
     if (file) {
+      if (file.size > 15 * 1024 * 1024) {
+        setErrorMessage('O arquivo selecionado excede o limite de 15MB. Escolha um documento ou foto menor.');
+        return;
+      }
+      setErrorMessage(null);
       setFileName(file.name);
       try {
-        if (file.type.startsWith('image/') || /\.(jpe?g|png|webp|heic)$/i.test(file.name)) {
+        if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            setUrl((reader.result as string) || '');
+          };
+          reader.readAsDataURL(file);
+        } else if (file.type.startsWith('image/') || /\.(jpe?g|png|webp|heic|bmp|gif)$/i.test(file.name)) {
           const compressed = await compressImageFile(file);
           setUrl(compressed);
         } else {
@@ -1400,7 +1411,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
             <div className={`driver-doc-card ${cnhUrl ? 'attached' : ''}`}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <strong style={{ fontSize: '0.95rem' }}>🪪 Foto da CNH Aberta</strong>
+                  <strong style={{ fontSize: '0.95rem' }}>🪪 CNH (Carteira de Habilitação)</strong>
                   {cnhUrl ? (
                     <span style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 700 }}>✅ Anexada</span>
                   ) : (
@@ -1408,7 +1419,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
                   )}
                 </div>
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                  {cnhFileName || 'Foto nítida da CNH aberta com EAR'}
+                  {cnhFileName || 'Foto nítida da galeria ou arquivo PDF (com EAR)'}
                 </p>
               </div>
 
@@ -1416,7 +1427,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
                 {cnhUrl && (
                   <button
                     type="button"
-                    onClick={() => setPreviewDoc({ title: 'Foto da CNH', url: cnhUrl })}
+                    onClick={() => setPreviewDoc({ title: 'CNH - Carteira de Habilitação', url: cnhUrl })}
                     className="btn-outline"
                     style={{ fontSize: '0.75rem', padding: '6px 12px' }}
                   >
@@ -1425,10 +1436,10 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
                 )}
                 {!isApproved && (
                   <label className="btn-primary" style={{ fontSize: '0.75rem', padding: '8px 14px', cursor: 'pointer' }}>
-                    <UploadCloud size={14} /> {cnhUrl ? 'Trocar Foto' : 'Anexar CNH'}
+                    <UploadCloud size={14} /> {cnhUrl ? 'Trocar CNH' : 'Anexar Foto ou PDF'}
                     <input
                       type="file"
-                      accept="image/*"
+                      accept="image/*,application/pdf,.pdf"
                       onChange={(e) => handleFileUpload(e, setCnhFileName, setCnhUrl)}
                       style={{ display: 'none' }}
                     />
@@ -1441,7 +1452,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
             <div className={`driver-doc-card ${crlvUrl ? 'attached' : ''}`}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <strong style={{ fontSize: '0.95rem' }}>🚗 Foto do Documento do Veículo (CRLV)</strong>
+                  <strong style={{ fontSize: '0.95rem' }}>🚗 Documento do Veículo (CRLV)</strong>
                   {crlvUrl ? (
                     <span style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 700 }}>✅ Anexado</span>
                   ) : (
@@ -1449,7 +1460,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
                   )}
                 </div>
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                  {crlvFileName || `Documento do carro (Placa: ${vehiclePlate})`}
+                  {crlvFileName || `Documento do carro (Foto da galeria ou PDF)`}
                 </p>
               </div>
 
@@ -1466,10 +1477,10 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
                 )}
                 {!isApproved && (
                   <label className="btn-primary" style={{ fontSize: '0.75rem', padding: '8px 14px', cursor: 'pointer' }}>
-                    <UploadCloud size={14} /> {crlvUrl ? 'Trocar Doc' : 'Anexar CRLV'}
+                    <UploadCloud size={14} /> {crlvUrl ? 'Trocar CRLV' : 'Anexar Foto ou PDF'}
                     <input
                       type="file"
-                      accept="image/*,.pdf"
+                      accept="image/*,application/pdf,.pdf"
                       onChange={(e) => handleFileUpload(e, setCrlvFileName, setCrlvUrl)}
                       style={{ display: 'none' }}
                     />
@@ -1491,7 +1502,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
                     )}
                   </div>
                   <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                    {selfieFileName || 'Foto nítida do seu rosto em local bem iluminado'}
+                    {selfieFileName || 'Foto nítida da galeria ou capturada pela câmera'}
                   </p>
                 </div>
 
@@ -1514,16 +1525,16 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
                       className="btn-outline"
                       style={{ fontSize: '0.75rem', padding: '8px 12px', borderColor: '#6366f1', color: '#818cf8' }}
                     >
-                      <Camera size={14} /> Tirar Foto Agora
+                      <Camera size={14} /> Câmera ao Vivo
                     </button>
                   )}
 
                   {!isApproved && (
                     <label className="btn-primary" style={{ fontSize: '0.75rem', padding: '8px 14px', cursor: 'pointer' }}>
-                      <UploadCloud size={14} /> {selfieUrl ? 'Trocar Foto' : 'Carregar dos Arquivos'}
+                      <UploadCloud size={14} /> {selfieUrl ? 'Trocar Foto' : 'Galeria / Arquivo'}
                       <input
                         type="file"
-                        accept="image/*"
+                        accept="image/*,application/pdf,.pdf"
                         onChange={(e) => handleFileUpload(e, setSelfieFileName, setSelfieUrl)}
                         style={{ display: 'none' }}
                       />
@@ -1776,14 +1787,31 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
                 <X size={20} />
               </button>
             </div>
-            <div style={{ padding: '20px', display: 'flex', justifyContent: 'center', background: '#0b0f19' }}>
-              <img
-                src={previewDoc.url}
-                alt={previewDoc.title}
-                style={{ maxWidth: '100%', maxHeight: '60vh', objectFit: 'contain', borderRadius: '8px' }}
-              />
+            <div style={{ padding: '20px', display: 'flex', justifyContent: 'center', background: '#0b0f19', minHeight: '280px' }}>
+              {previewDoc.url.startsWith('data:application/pdf') || previewDoc.url.toLowerCase().includes('.pdf') ? (
+                <iframe
+                  src={previewDoc.url}
+                  title={previewDoc.title}
+                  style={{ width: '100%', height: '65vh', border: 'none', borderRadius: '8px', background: '#fff' }}
+                />
+              ) : (
+                <img
+                  src={previewDoc.url}
+                  alt={previewDoc.title}
+                  style={{ maxWidth: '100%', maxHeight: '60vh', objectFit: 'contain', borderRadius: '8px' }}
+                />
+              )}
             </div>
-            <div style={{ padding: '14px 20px', display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid rgba(255, 255, 255, 0.1)' }}>
+            <div style={{ padding: '14px 20px', display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid rgba(255, 255, 255, 0.1)' }}>
+              <a
+                href={previewDoc.url}
+                target="_blank"
+                rel="noreferrer"
+                className="btn-outline"
+                style={{ fontSize: '0.8rem', padding: '8px 16px', textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+              >
+                Abrir em Nova Aba
+              </a>
               <button
                 type="button"
                 onClick={() => setPreviewDoc(null)}

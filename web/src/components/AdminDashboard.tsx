@@ -4668,17 +4668,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               justifyContent: 'center',
               background: '#0b0f19'
             }}>
-              <img
-                src={previewDoc.url}
-                alt={previewDoc.title}
-                style={{
-                  maxWidth: '100%',
-                  maxHeight: '65vh',
-                  objectFit: 'contain',
-                  borderRadius: '10px',
-                  boxShadow: '0 8px 30px rgba(0, 0, 0, 0.5)'
-                }}
-              />
+              {previewDoc.url.startsWith('data:application/pdf') || previewDoc.url.toLowerCase().includes('.pdf') ? (
+                <iframe
+                  src={previewDoc.url}
+                  title={previewDoc.title}
+                  style={{ width: '100%', height: '65vh', border: 'none', borderRadius: '8px', background: '#fff' }}
+                />
+              ) : (
+                <img
+                  src={previewDoc.url}
+                  alt={previewDoc.title}
+                  style={{
+                    maxWidth: '100%',
+                    maxHeight: '65vh',
+                    objectFit: 'contain',
+                    borderRadius: '10px',
+                    boxShadow: '0 8px 30px rgba(0, 0, 0, 0.5)'
+                  }}
+                />
+              )}
             </div>
 
             <div style={{
