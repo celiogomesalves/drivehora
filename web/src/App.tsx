@@ -318,12 +318,11 @@ export function App() {
       const saved = localStorage.getItem('drivehora_current_user');
       if (!saved) return 'client';
       const parsed = JSON.parse(saved);
-      if (isSuperAdminEmail(parsed.email) || parsed.role === 'admin' || parsed.isAdmin) return 'admin';
       if (savedTab && ['client', 'driver', 'admin'].includes(savedTab)) {
-        if (parsed.role === 'driver' && (savedTab === 'driver' || savedTab === 'client')) return savedTab as any;
-        if (parsed.role === 'client') return 'client';
+        return savedTab as any;
       }
       if (parsed.role === 'driver') return 'driver';
+      if (parsed.role === 'admin') return 'admin';
       return 'client';
     } catch {
       return 'client';
@@ -2586,14 +2585,16 @@ export function App() {
             const isAdmin = isSuperAdminEmail(user.email) || user.role === 'admin' || user.isAdmin;
             if (isAdmin) {
               user.isAdmin = true;
-              setActiveTab('admin');
-            } else if (user.role === 'driver') {
+            }
+            if (user.role === 'driver') {
               setActiveTab('driver');
+            } else if (user.role === 'admin') {
+              setActiveTab('admin');
             } else {
               setActiveTab('client');
             }
             setCurrentUser(user);
-            setIsLoadingProfile(!isAdmin);
+            setIsLoadingProfile(false);
           }}
         />
         {forcedLogoutNotice && (

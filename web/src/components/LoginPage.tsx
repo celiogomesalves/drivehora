@@ -91,7 +91,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, theme = 'd
       id: userId,
       email: cleanEmail,
       fullName: (fullName.trim() || existingProfile?.fullName) || (isAdmin ? 'Administrador DriveHora' : selectedRole === 'client' ? 'Passageiro DriveHora' : 'Motorista Parceiro'),
-      role: isAdmin ? 'admin' : selectedRole,
+      role: selectedRole === 'client' ? 'client' : (existingProfile?.role || (isAdmin ? 'driver' : selectedRole)),
       phone: (phone.trim() ? formatPhone(phone) : existingProfile?.phone) || '',
       isAdmin: isAdmin,
       createdAt: existingProfile?.createdAt || new Date().toISOString(),

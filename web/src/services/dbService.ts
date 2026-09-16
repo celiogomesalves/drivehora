@@ -1393,9 +1393,25 @@ export const dbGetAllClients = async (): Promise<ClientProfile[]> => {
       const seenUserIds = new Set<string>();
 
       (profilesRes.data || []).forEach((p: any) => {
-        // Exibir se for client ou se tiver cadastro de passageiro
+        // Ignorar perfis de serviço interno do sistema (Device Tokens Hub, System Settings, etc.)
+        if (
+          !p.id ||
+          p.id === 'app_global_device_tokens' ||
+          p.id === 'app_global_system_settings' ||
+          p.id.startsWith('app_global_') ||
+          p.email?.endsWith('@drivehora.app')
+        ) {
+          return;
+        }
+
         const c = clientMap.get(p.id);
         const d = driverMap.get(p.id);
+
+        // Se for motorista puro sem cadastro de cliente, não poluir a listagem de passageiros
+        if (p.role === 'driver' && !c) {
+          return;
+        }
+
         seenUserIds.add(p.id);
 
         let resolvedName = p.full_name || c?.full_name || d?.driver_name || d?.full_name;
