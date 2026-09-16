@@ -1,7 +1,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-export const DEFAULT_SUPABASE_URL = 'https://dnebvxvzlsudndjybaoe.supabase.co';
-export const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRuZWJ2eHZ6bHN1ZG5kanliYW9lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0NTA2NjIsImV4cCI6MjEwNDAyNjY2Mn0.LZXJEozYDXVHV9UiUg4y275f-ZA0hZgzTbfExBKcq38';
+export const DEFAULT_SUPABASE_URL = 'https://yhtbrrvgrlsgobyaynfx.supabase.co';
+export const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlodGJycnZncmxzZ29ieWF5bmZ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk0MjM5MTEsImV4cCI6MjEwNDk5OTkxMX0.OFCSbEVCTue2gfANfcbNIYzbkniiGL01qqaKwyJQ8gw';
 
 // Variáveis globais em cache (Nativo com fallback padrão de produção)
 let globalUrl = import.meta.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
