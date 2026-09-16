@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { DriverProfile, ClientProfile, DriverVerificationStatus } from '../types/auth';
 import { 
   Users, Car, DollarSign, ShieldCheck, CheckCircle2, 
@@ -10,6 +10,7 @@ import {
   Smartphone, Copy, CheckCheck, SendHorizontal
 } from 'lucide-react';
 import { formatCurrency, formatCurrencyInput, parseCurrencyInput, formatPhone, formatCpf, formatPlate } from '../utils/formatters';
+import { formatCep, fetchAddressByCep } from '../services/cepService';
 import { 
   dbGetAllDrivers, 
   dbGetAllClients, 
@@ -161,6 +162,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     state: ''
   });
   const [isSavingClientEdit, setIsSavingClientEdit] = useState(false);
+  const [isLoadingClientCep, setIsLoadingClientCep] = useState(false);
+  const clientNumberInputRef = useRef<HTMLInputElement>(null);
 
   // Estados para Exclusão e Gerenciamento de Passageiros pelo Admin
   const [clientToDelete, setClientToDelete] = useState<ClientProfile | null>(null);
@@ -545,7 +548,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       fullName: c.fullName || '',
       cpf: formatCpf(c.cpf || ''),
       phone: formatPhone(c.phone || ''),
-      cep: c.cep || '',
+      cep: formatCep(c.cep || ''),
       street: c.street || '',
       number: c.number || '',
       complement: c.complement || '',
@@ -553,6 +556,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       city: c.city || '',
       state: c.state || ''
     });
+  };
+
+  const handleAdminClientCepChange = async (value: string) => {
+    const formatted = formatCep(value);
+    setEditClientForm(prev => ({ ...prev, cep: formatted }));
+
+    const clean = formatted.replace(/\D/g, '');
+    if (clean.length === 8) {
+      setIsLoadingClientCep(true);
+      const result = await fetchAddressByCep(clean);
+      setIsLoadingClientCep(false);
+      if (result) {
+        setEditClientForm(prev => ({
+          ...prev,
+          street: result.logradouro || prev.street,
+          neighborhood: result.bairro || prev.neighborhood,
+          city: result.localidade || prev.city,
+          state: result.uf || prev.state
+        }));
+        setTimeout(() => {
+          clientNumberInputRef.current?.focus();
+        }, 80);
+      }
+    }
   };
 
   const handleSaveClientEdit = async () => {
@@ -5133,17 +5160,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '12px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                    CEP
-                  </label>
-                  <input
-                    type="text"
-                    value={editClientForm.cep}
-                    onChange={(e) => setEditClientForm(prev => ({ ...prev, cep: e.target.value }))}
-                    placeholder="00000-000"
-                    className="input-field"
-                    style={{ width: '100%' }}
-                  />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                    <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                      CEP
+                    </label>
+                    {isLoadingClientCep && (
+                      <span style={{ fontSize: '0.68rem', color: '#38bdf8', fontWeight: 600 }}>
+                        Buscando...
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type="text"
+                      maxLength={9}
+                      value={editClientForm.cep}
+                      onChange={(e) => handleAdminClientCepChange(e.target.value)}
+                      placeholder="00000-000"
+                      className="input-field"
+                      style={{ width: '100%' }}
+                    />
+                    {isLoadingClientCep && (
+                      <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)' }}>
+                        <RefreshCw size={13} className="animate-spin" color="#38bdf8" />
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
@@ -5166,6 +5208,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     Número
                   </label>
                   <input
+                    ref={clientNumberInputRef}
                     type="text"
                     value={editClientForm.number}
                     onChange={(e) => setEditClientForm(prev => ({ ...prev, number: e.target.value }))}

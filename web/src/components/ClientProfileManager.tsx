@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { User, CheckCircle2, AlertCircle, Save, MapPin, FileText, Lock, X } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { User, CheckCircle2, AlertCircle, Save, MapPin, FileText, Lock, X, RefreshCw } from 'lucide-react';
 import type { UserProfile, ClientProfile } from '../types/auth';
 import { formatCep, fetchAddressByCep } from '../services/cepService';
 import { formatPhone, formatCpf, validateCpf, validatePhone } from '../utils/formatters';
@@ -36,17 +36,20 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
   const [state, setState] = useState(initialProfile?.state || '');
 
   const [isLoadingCep, setIsLoadingCep] = useState(false);
+  const [cepNotFound, setCepNotFound] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successNotice, setSuccessNotice] = useState(false);
+
+  const numberInputRef = useRef<HTMLInputElement>(null);
 
   // Modal de solicitação de alteração de dados
   const [showChangeRequest, setShowChangeRequest] = useState(false);
   const [changeRequestText, setChangeRequestText] = useState('');
   const [changeRequestSent, setChangeRequestSent] = useState(false);
 
-  // Passageiro com cadastro homologado ou que já realizou corrida tem a edição bloqueada
-  const isLocked = Boolean((isApproved || hasCompletedRides || initialProfile?.isProfileComplete) && !isUserAdmin);
+  // Apenas Nome e CPF são protegidos contra alteração direta após homologação; Endereço e Telefone são sempre editáveis
+  const isIdentityLocked = Boolean((isApproved || hasCompletedRides || initialProfile?.isProfileComplete) && !isUserAdmin);
 
   useEffect(() => {
     if (initialProfile) {
@@ -66,7 +69,7 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
   }, [initialProfile, user.fullName]);
 
   const handleCepChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (isLocked) return;
+    setCepNotFound(false);
     const formatted = formatCep(e.target.value);
     setCep(formatted);
 
@@ -80,13 +83,19 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
         setNeighborhood(result.bairro || '');
         setCity(result.localidade || '');
         setState(result.uf || '');
+        setCepNotFound(false);
+        // Foco automático no número após autocompletar
+        setTimeout(() => {
+          numberInputRef.current?.focus();
+        }, 80);
+      } else {
+        setCepNotFound(true);
       }
     }
   };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isLocked) return;
     setErrorMessage(null);
 
     // 1. Validação de Nome
@@ -183,8 +192,8 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
         )}
       </div>
 
-      {/* Banner de Cadastro Homologado e Protegido (Edição Bloqueada) */}
-      {isLocked && (
+      {/* Banner de Cadastro Homologado (Nome e CPF Protegidos, Endereço Editável) */}
+      {isIdentityLocked && (
         <div style={{
           background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(5, 150, 105, 0.08))',
           border: '1px solid rgba(16, 185, 129, 0.35)',
@@ -207,10 +216,10 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
             </div>
             <div>
               <p style={{ fontSize: '0.86rem', fontWeight: 800, color: '#10b981', margin: 0 }}>
-                Cadastro Homologado e Protegido
+                Cadastro Homologado • Endereço Editável
               </p>
               <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '2px 0 0' }}>
-                Dados protegidos por segurança. Para alterar CPF, nome ou telefone, solicite ao suporte.
+                Endereço e celular podem ser atualizados livremente. Nome e CPF são mantidos por segurança fiscal.
               </p>
             </div>
           </div>
@@ -228,7 +237,7 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
             }}
           >
             <FileText size={13} />
-            <span>Solicitar Alteração</span>
+            <span>Alterar Nome/CPF</span>
           </button>
         </div>
       )}
@@ -285,7 +294,7 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
               <input
                 type="text"
                 required
-                disabled={isLocked}
+                disabled={isIdentityLocked}
                 placeholder="Ex: Carlos Eduardo Silva"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
@@ -293,7 +302,7 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
                 style={{
                   width: '100%',
                   fontSize: '0.82rem',
-                  ...(isLocked ? { opacity: 0.75, cursor: 'not-allowed', background: 'rgba(255, 255, 255, 0.02)' } : {})
+                  ...(isIdentityLocked ? { opacity: 0.75, cursor: 'not-allowed', background: 'rgba(255, 255, 255, 0.02)' } : {})
                 }}
               />
             </div>
@@ -306,7 +315,7 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
                 <input
                   type="text"
                   required
-                  disabled={isLocked}
+                  disabled={isIdentityLocked}
                   placeholder="000.000.000-00"
                   maxLength={14}
                   value={cpf}
@@ -316,7 +325,7 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
                     width: '100%',
                     fontSize: '0.82rem',
                     borderColor: cpf.length === 14 ? (isCpfValid ? '#10b981' : '#ef4444') : undefined,
-                    ...(isLocked ? { opacity: 0.75, cursor: 'not-allowed', background: 'rgba(255, 255, 255, 0.02)' } : {})
+                    ...(isIdentityLocked ? { opacity: 0.75, cursor: 'not-allowed', background: 'rgba(255, 255, 255, 0.02)' } : {})
                   }}
                 />
                 {cpf.length === 14 && (
@@ -343,7 +352,6 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
                 <input
                   type="text"
                   required
-                  disabled={isLocked}
                   placeholder="(11) 98765-4321"
                   maxLength={15}
                   value={phone}
@@ -352,8 +360,7 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
                   style={{
                     width: '100%',
                     fontSize: '0.82rem',
-                    borderColor: phone.length >= 14 ? (isPhoneValid ? '#10b981' : '#ef4444') : undefined,
-                    ...(isLocked ? { opacity: 0.75, cursor: 'not-allowed', background: 'rgba(255, 255, 255, 0.02)' } : {})
+                    borderColor: phone.length >= 14 ? (isPhoneValid ? '#10b981' : '#ef4444') : undefined
                   }}
                 />
                 {phone.length >= 14 && (
@@ -391,18 +398,25 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
         <div className="profile-section-card">
           <div className="profile-section-title">
             <MapPin size={14} color="#38bdf8" />
-            <span>2. Endereço Residencial</span>
+            <span>2. Endereço Residencial (Busca Automática por CEP)</span>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
             <div>
-              <label className="profile-field-label">
-                CEP
-              </label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                <label className="profile-field-label" style={{ marginBottom: 0 }}>
+                  CEP *
+                </label>
+                {isLoadingCep && (
+                  <span style={{ fontSize: '0.7rem', color: '#38bdf8', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <RefreshCw size={11} className="animate-spin" />
+                    Buscando endereço...
+                  </span>
+                )}
+              </div>
               <div style={{ position: 'relative' }}>
                 <input
                   type="text"
-                  disabled={isLocked}
                   placeholder="00000-000"
                   maxLength={9}
                   value={cep}
@@ -411,15 +425,20 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
                   style={{
                     width: '100%',
                     fontSize: '0.82rem',
-                    ...(isLocked ? { opacity: 0.75, cursor: 'not-allowed', background: 'rgba(255, 255, 255, 0.02)' } : {})
+                    borderColor: cepNotFound ? '#ef4444' : undefined
                   }}
                 />
                 {isLoadingCep && (
-                  <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.68rem', color: '#38bdf8' }}>
-                    Buscando...
+                  <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)' }}>
+                    <RefreshCw size={14} className="animate-spin" color="#38bdf8" />
                   </span>
                 )}
               </div>
+              {cepNotFound && (
+                <p style={{ margin: '4px 0 0', fontSize: '0.7rem', color: '#ef4444' }}>
+                  CEP não encontrado. Preencha os campos abaixo manualmente.
+                </p>
+              )}
             </div>
 
             <div style={{ gridColumn: 'span 2' }}>
@@ -428,15 +447,13 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
               </label>
               <input
                 type="text"
-                disabled={isLocked}
                 placeholder="Nome da sua rua ou avenida"
                 value={street}
                 onChange={(e) => setStreet(e.target.value)}
                 className="input-field"
                 style={{
                   width: '100%',
-                  fontSize: '0.82rem',
-                  ...(isLocked ? { opacity: 0.75, cursor: 'not-allowed', background: 'rgba(255, 255, 255, 0.02)' } : {})
+                  fontSize: '0.82rem'
                 }}
               />
             </div>
@@ -446,16 +463,15 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
                 Número
               </label>
               <input
+                ref={numberInputRef}
                 type="text"
-                disabled={isLocked}
                 placeholder="Ex: 123"
                 value={number}
                 onChange={(e) => setNumber(e.target.value)}
                 className="input-field"
                 style={{
                   width: '100%',
-                  fontSize: '0.82rem',
-                  ...(isLocked ? { opacity: 0.75, cursor: 'not-allowed', background: 'rgba(255, 255, 255, 0.02)' } : {})
+                  fontSize: '0.82rem'
                 }}
               />
             </div>
@@ -466,15 +482,13 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
               </label>
               <input
                 type="text"
-                disabled={isLocked}
                 placeholder="Apto, Bloco..."
                 value={complement}
                 onChange={(e) => setComplement(e.target.value)}
                 className="input-field"
                 style={{
                   width: '100%',
-                  fontSize: '0.82rem',
-                  ...(isLocked ? { opacity: 0.75, cursor: 'not-allowed', background: 'rgba(255, 255, 255, 0.02)' } : {})
+                  fontSize: '0.82rem'
                 }}
               />
             </div>
@@ -485,15 +499,13 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
               </label>
               <input
                 type="text"
-                disabled={isLocked}
                 placeholder="Seu bairro"
                 value={neighborhood}
                 onChange={(e) => setNeighborhood(e.target.value)}
                 className="input-field"
                 style={{
                   width: '100%',
-                  fontSize: '0.82rem',
-                  ...(isLocked ? { opacity: 0.75, cursor: 'not-allowed', background: 'rgba(255, 255, 255, 0.02)' } : {})
+                  fontSize: '0.82rem'
                 }}
               />
             </div>
@@ -504,15 +516,13 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
               </label>
               <input
                 type="text"
-                disabled={isLocked}
                 placeholder="Sua cidade"
                 value={city}
                 onChange={(e) => setCity(e.target.value)}
                 className="input-field"
                 style={{
                   width: '100%',
-                  fontSize: '0.82rem',
-                  ...(isLocked ? { opacity: 0.75, cursor: 'not-allowed', background: 'rgba(255, 255, 255, 0.02)' } : {})
+                  fontSize: '0.82rem'
                 }}
               />
             </div>
@@ -523,7 +533,6 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
               </label>
               <input
                 type="text"
-                disabled={isLocked}
                 maxLength={2}
                 placeholder="UF"
                 value={state}
@@ -531,8 +540,7 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
                 className="input-field"
                 style={{
                   width: '100%',
-                  fontSize: '0.82rem',
-                  ...(isLocked ? { opacity: 0.75, cursor: 'not-allowed', background: 'rgba(255, 255, 255, 0.02)' } : {})
+                  fontSize: '0.82rem'
                 }}
               />
             </div>
@@ -541,53 +549,40 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
 
         {/* Rodapé de Ações */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px', flexWrap: 'wrap', gap: '10px' }}>
-          {isLocked ? (
-            <>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#10b981', fontSize: '0.78rem', fontWeight: 600 }}>
-                <Lock size={14} />
-                <span>Edição bloqueada — Cadastro validado</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => { setShowChangeRequest(true); setChangeRequestSent(false); setChangeRequestText(''); }}
-                className="btn-outline"
-                style={{
-                  padding: '8px 16px',
-                  fontSize: '0.82rem',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  borderRadius: '8px',
-                  borderColor: 'rgba(16, 185, 129, 0.4)',
-                  color: '#10b981',
-                  whiteSpace: 'nowrap'
-                }}
-              >
-                <FileText size={14} />
-                <span>Solicitar Alteração ao Suporte</span>
-              </button>
-            </>
-          ) : (
-            <div style={{ marginLeft: 'auto' }}>
-              <button
-                type="submit"
-                disabled={isSaving || !isCpfValid || !isPhoneValid}
-                className="btn-primary"
-                style={{
-                  padding: '9px 22px',
-                  fontSize: '0.85rem',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  borderRadius: '8px',
-                  whiteSpace: 'nowrap'
-                }}
-              >
-                <Save size={15} />
-                <span>{isSaving ? 'Salvando Dados...' : 'Salvar Dados Cadastrais'}</span>
-              </button>
+          {isIdentityLocked ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#10b981', fontSize: '0.78rem', fontWeight: 600 }}>
+              <Lock size={14} />
+              <span>Nome e CPF protegidos • Endereço editável</span>
             </div>
-          )}
+          ) : <div />}
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button
+              type="submit"
+              disabled={isSaving || !isCpfValid || !isPhoneValid}
+              className="btn-primary"
+              style={{
+                padding: '9px 22px',
+                fontSize: '0.85rem',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                borderRadius: '8px',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              {isSaving ? (
+                <>
+                  <RefreshCw size={14} className="animate-spin" />
+                  <span>Salvando Dados...</span>
+                </>
+              ) : (
+                <>
+                  <Save size={15} />
+                  <span>Salvar Dados Cadastrais</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </form>
 

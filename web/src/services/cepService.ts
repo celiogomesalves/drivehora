@@ -18,14 +18,50 @@ export const fetchAddressByCep = async (cep: string): Promise<CepResult | null> 
   const cleanCep = cep.replace(/\D/g, '');
   if (cleanCep.length !== 8) return null;
 
+  // 1. Tentar ViaCEP com timeout
   try {
-    const res = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
-    if (!res.ok) return null;
-    const data: CepResult = await res.json();
-    if (data.erro) return null;
-    return data;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3500);
+    const res = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`, { signal: controller.signal });
+    clearTimeout(timer);
+    if (res.ok) {
+      const data = await res.json();
+      if (!data.erro) {
+        return {
+          cep: data.cep || cleanCep,
+          logradouro: data.logradouro || '',
+          complemento: data.complemento || '',
+          bairro: data.bairro || '',
+          localidade: data.localidade || '',
+          uf: data.uf || ''
+        };
+      }
+    }
   } catch (error) {
-    console.error('Erro ao consultar ViaCEP:', error);
-    return null;
+    console.warn('ViaCEP indisponível ou timeout, tentando BrasilAPI como fallback...', error);
   }
+
+  // 2. Fallback resiliente com BrasilAPI
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3500);
+    const res = await fetch(`https://brasilapi.com.br/api/cep/v1/${cleanCep}`, { signal: controller.signal });
+    clearTimeout(timer);
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        cep: data.cep || cleanCep,
+        logradouro: data.street || '',
+        complemento: '',
+        bairro: data.neighborhood || '',
+        localidade: data.city || '',
+        uf: data.state || ''
+      };
+    }
+  } catch (error) {
+    console.error('Falha ao consultar BrasilAPI:', error);
+  }
+
+  return null;
 };
+
