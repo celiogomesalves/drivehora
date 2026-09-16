@@ -341,6 +341,7 @@ export const dbSaveClientProfile = async (
       full_name: resolvedFullName,
       role: current?.role || 'client',
       phone: resolvedPhone,
+      avatar_url: client.profilePhotoUrl || undefined,
       updated_at: new Date().toISOString()
     }), 8000);
 
@@ -361,7 +362,8 @@ export const dbSaveClientProfile = async (
       neighborhood: client.neighborhood || '',
       city: client.city || '',
       state: client.state || '',
-      is_profile_complete: true
+      is_profile_complete: true,
+      profile_photo_url: client.profilePhotoUrl || undefined
     }), 8000);
 
     if (cRes?.error) {
@@ -432,7 +434,8 @@ export const dbGetClientProfile = async (userId: string, email?: string): Promis
           neighborhood: clientData?.neighborhood || '',
           city: clientData?.city || '',
           state: clientData?.state || '',
-          isProfileComplete: Boolean(clientData?.is_profile_complete || (clientData?.cpf && clientData?.street))
+          isProfileComplete: Boolean(clientData?.is_profile_complete || (clientData?.cpf && clientData?.street)),
+          profilePhotoUrl: clientData?.profile_photo_url || profileData?.avatar_url || undefined
         };
 
         try {
@@ -514,6 +517,7 @@ export const dbSaveDriverProfile = async (
       cnh_url: driver.cnhUrl,
       crlv_url: driver.crlvUrl,
       selfie_url: driver.selfieUrl,
+      profile_photo_url: driver.profilePhotoUrl,
       verification_status: driver.verificationStatus,
       rating: driver.rating,
       total_rides: driver.totalRides
@@ -659,6 +663,7 @@ export const dbGetDriverProfile = async (userId: string, email?: string): Promis
           cnhUrl: res.data.cnh_url,
           crlvUrl: res.data.crlv_url,
           selfieUrl: res.data.selfie_url,
+          profilePhotoUrl: res.data.profile_photo_url || undefined,
           verificationStatus: dataVerificationStatus(res.data.verification_status),
           rating: Number(res.data.rating) || 5.0,
           totalRides: Number(res.data.total_rides) || 0,
@@ -1333,6 +1338,7 @@ export const dbGetAllDrivers = async (): Promise<DriverProfile[]> => {
           cnhUrl: d.cnh_url,
           crlvUrl: d.crlv_url,
           selfieUrl: d.selfie_url,
+          profilePhotoUrl: d.profile_photo_url || undefined,
           verificationStatus: dataVerificationStatus(d.verification_status),
           rating: resolvedRating,
           totalRides: totalCompleted,
@@ -1506,6 +1512,7 @@ export const dbAdminUpdateDriverProfile = async (
       if (driver.vehiclePlate !== undefined) updateData.vehicle_plate = driver.vehiclePlate;
       if (driver.vehicleColor !== undefined) updateData.vehicle_color = driver.vehicleColor;
       if (driver.verificationStatus !== undefined) updateData.verification_status = driver.verificationStatus;
+      if (driver.profilePhotoUrl !== undefined) updateData.profile_photo_url = driver.profilePhotoUrl;
 
       await sb.from('drivers').update(updateData).or(`id.eq.${driver.id},user_id.eq.${driver.userId}`);
 
@@ -1515,6 +1522,7 @@ export const dbAdminUpdateDriverProfile = async (
         if (driver.cpf) clientUpdate.cpf = driver.cpf;
         if (driver.phone) clientUpdate.phone = driver.phone;
         if (resolvedName) clientUpdate.full_name = resolvedName;
+        if (driver.profilePhotoUrl) clientUpdate.profile_photo_url = driver.profilePhotoUrl;
         await sb.from('clients').update(clientUpdate).eq('user_id', driver.userId);
       } catch (e) {}
     }
@@ -2043,8 +2051,9 @@ export const dbGetDriverPublicProfile = async (
     id: driver.id,
     userId: driver.userId,
     displayName: driver.fullName || driver.driverName || 'Motorista Parceiro',
-    avatarUrl: driver.selfieUrl || undefined,
+    avatarUrl: driver.profilePhotoUrl || driver.selfieUrl || undefined,
     selfieUrl: driver.selfieUrl || undefined,
+    profilePhotoUrl: driver.profilePhotoUrl || undefined,
     verificationStatus: driver.verificationStatus,
     isVerified: driver.verificationStatus === 'approved',
     rating: driver.rating || 5.0,
@@ -2080,8 +2089,9 @@ export const dbGetFavoriteDrivers = async (clientId: string): Promise<DriverPubl
         id: driver.id,
         userId: driver.userId,
         displayName: driver.fullName || driver.driverName || 'Motorista Parceiro',
-        avatarUrl: driver.selfieUrl || undefined,
+        avatarUrl: driver.profilePhotoUrl || driver.selfieUrl || undefined,
         selfieUrl: driver.selfieUrl || undefined,
+        profilePhotoUrl: driver.profilePhotoUrl || undefined,
         verificationStatus: driver.verificationStatus,
         isVerified: driver.verificationStatus === 'approved',
         rating: driver.rating || 5.0,

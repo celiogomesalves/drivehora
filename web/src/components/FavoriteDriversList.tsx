@@ -179,8 +179,8 @@ export function FavoriteDriversList({
                     color: '#fff',
                     flexShrink: 0
                   }}>
-                    {driver.selfieUrl ? (
-                      <img src={driver.selfieUrl} alt={driver.displayName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    {(driver.profilePhotoUrl || driver.avatarUrl || driver.selfieUrl) ? (
+                      <img src={driver.profilePhotoUrl || driver.avatarUrl || driver.selfieUrl} alt={driver.displayName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     ) : (
                       '🚗'
                     )}

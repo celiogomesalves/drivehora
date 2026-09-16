@@ -225,6 +225,10 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
   const [selfieFileName, setSelfieFileName] = useState<string>(draft?.selfieFileName || (initialProfile?.selfieUrl ? 'selfie_biometria.jpg' : ''));
   const [selfieUrl, setSelfieUrl] = useState<string>(initialProfile?.selfieUrl || '');
 
+  // Foto de Perfil Pública (exibida aos passageiros)
+  const [profilePhotoUrl, setProfilePhotoUrl] = useState<string>(draft?.profilePhotoUrl || initialProfile?.profilePhotoUrl || '');
+  const profilePhotoInputRef = useRef<HTMLInputElement>(null);
+
   // Câmera ao Vivo para Selfie
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -277,6 +281,9 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
         setSelfieUrl(initialProfile.selfieUrl);
         setSelfieFileName('selfie_biometria.jpg');
       }
+      if (initialProfile.profilePhotoUrl) {
+        setProfilePhotoUrl(initialProfile.profilePhotoUrl);
+      }
     } else if (user.fullName) {
       setFullName(user.fullName);
     }
@@ -304,11 +311,12 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
           bio,
           cnhFileName,
           crlvFileName,
-          selfieFileName
+          selfieFileName,
+          profilePhotoUrl
         })
       );
     } catch (e) {}
-  }, [step, fullName, cpf, phone, cnhNumber, cnhCategory, vehicleBrand, vehicleModel, vehicleYear, vehiclePlate, vehicleColor, vehicleCategory, selectedAmenities, bio, cnhFileName, crlvFileName, selfieFileName, user.id]);
+  }, [step, fullName, cpf, phone, cnhNumber, cnhCategory, vehicleBrand, vehicleModel, vehicleYear, vehiclePlate, vehicleColor, vehicleCategory, selectedAmenities, bio, cnhFileName, crlvFileName, selfieFileName, profilePhotoUrl, user.id]);
 
   // Câmera ao Vivo
   const startLiveCamera = async () => {
@@ -424,6 +432,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
       cnhUrl: cnhUrl || undefined,
       crlvUrl: crlvUrl || undefined,
       selfieUrl: selfieUrl || undefined,
+      profilePhotoUrl: profilePhotoUrl || undefined,
       verificationStatus: status,
       rating: initialProfile?.rating || 5.0,
       totalRides: initialProfile?.totalRides || 0
@@ -466,6 +475,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
           cnhUrl: cnhUrl || undefined,
           crlvUrl: crlvUrl || undefined,
           selfieUrl: selfieUrl || undefined,
+          profilePhotoUrl: profilePhotoUrl || undefined,
           verificationStatus,
           rating: initialProfile?.rating || 5.0,
           totalRides: initialProfile?.totalRides || 0
@@ -615,6 +625,7 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
         cnhUrl,
         crlvUrl,
         selfieUrl,
+        profilePhotoUrl: profilePhotoUrl || undefined,
         verificationStatus: 'approved',
         rating: 5.0,
         totalRides: 0
@@ -781,6 +792,81 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
           </div>
 
           <form onSubmit={isApproved ? e => e.preventDefault() : handleStep1Submit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {/* Foto de Perfil Pública do Motorista */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '16px',
+              padding: '14px 16px',
+              background: 'rgba(99, 102, 241, 0.08)',
+              border: '1px solid rgba(99, 102, 241, 0.25)',
+              borderRadius: '14px',
+              marginBottom: '6px'
+            }}>
+              <div
+                onClick={() => profilePhotoInputRef.current?.click()}
+                style={{
+                  width: '64px',
+                  height: '64px',
+                  borderRadius: '50%',
+                  background: (profilePhotoUrl || selfieUrl) ? 'transparent' : 'linear-gradient(135deg, #6366f1, #4f46e5)',
+                  border: '2px solid rgba(99, 102, 241, 0.5)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  overflow: 'hidden',
+                  flexShrink: 0,
+                  position: 'relative'
+                }}
+                title="Clique para alterar sua foto de perfil pública"
+              >
+                {(profilePhotoUrl || selfieUrl) ? (
+                  <img src={profilePhotoUrl || selfieUrl} alt="Foto de perfil" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  <Camera size={24} color="#fff" />
+                )}
+                <div style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  height: '22px',
+                  background: 'rgba(0,0,0,0.6)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <Camera size={12} color="#fff" />
+                </div>
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#fff' }}>
+                  Foto de Perfil Pública
+                </div>
+                <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                  {(profilePhotoUrl || selfieUrl) ? 'Toque no avatar para alterar a foto exibida aos passageiros' : 'Adicione sua foto de apresentação para os passageiros'}
+                </div>
+              </div>
+              <input
+                ref={profilePhotoInputRef}
+                type="file"
+                accept="image/*"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    try {
+                      const compressed = await compressImageFile(file);
+                      setProfilePhotoUrl(compressed);
+                    } catch (err) {
+                      console.error('Erro ao processar foto de perfil:', err);
+                    }
+                  }
+                }}
+                style={{ display: 'none' }}
+              />
+            </div>
+
             <div className="input-group">
               <label>Nome Completo do Motorista *</label>
               <input
@@ -1787,20 +1873,64 @@ export const DriverOnboarding: React.FC<DriverOnboardingProps> = ({
                 <X size={20} />
               </button>
             </div>
-            <div style={{ padding: '20px', display: 'flex', justifyContent: 'center', background: '#0b0f19', minHeight: '280px' }}>
-              {previewDoc.url.startsWith('data:application/pdf') || previewDoc.url.toLowerCase().includes('.pdf') ? (
-                <iframe
-                  src={previewDoc.url}
-                  title={previewDoc.title}
-                  style={{ width: '100%', height: '65vh', border: 'none', borderRadius: '8px', background: '#fff' }}
-                />
-              ) : (
-                <img
-                  src={previewDoc.url}
-                  alt={previewDoc.title}
-                  style={{ maxWidth: '100%', maxHeight: '60vh', objectFit: 'contain', borderRadius: '8px' }}
-                />
-              )}
+            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#0b0f19', minHeight: '280px' }}>
+              {(() => {
+                const isPdf = previewDoc.url.startsWith('data:application/pdf') || previewDoc.url.toLowerCase().includes('.pdf');
+                if (isPdf) {
+                  let pdfSrc = previewDoc.url;
+                  if (previewDoc.url.startsWith('data:application/pdf;base64,')) {
+                    try {
+                      const base64Data = previewDoc.url.split(',')[1];
+                      const binaryStr = atob(base64Data);
+                      const bytesArr = new Uint8Array(binaryStr.length);
+                      for (let i = 0; i < binaryStr.length; i++) bytesArr[i] = binaryStr.charCodeAt(i);
+                      const blobObj = new Blob([bytesArr], { type: 'application/pdf' });
+                      pdfSrc = URL.createObjectURL(blobObj);
+                    } catch (e) {
+                      console.warn('Erro ao converter PDF base64:', e);
+                    }
+                  }
+                  return (
+                    <>
+                      <object
+                        data={pdfSrc}
+                        type="application/pdf"
+                        style={{ width: '100%', height: '65vh', border: 'none', borderRadius: '8px', background: '#fff' }}
+                      >
+                        <iframe
+                          src={pdfSrc}
+                          title={previewDoc.title}
+                          style={{ width: '100%', height: '65vh', border: 'none', borderRadius: '8px', background: '#fff' }}
+                        />
+                      </object>
+                      <a
+                        href={pdfSrc}
+                        download={`${previewDoc.title.replace(/\s+/g, '_')}.pdf`}
+                        className="btn-outline"
+                        style={{
+                          marginTop: '12px',
+                          fontSize: '0.8rem',
+                          padding: '8px 18px',
+                          textDecoration: 'none',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}
+                      >
+                        📥 Baixar PDF
+                      </a>
+                    </>
+                  );
+                } else {
+                  return (
+                    <img
+                      src={previewDoc.url}
+                      alt={previewDoc.title}
+                      style={{ maxWidth: '100%', maxHeight: '60vh', objectFit: 'contain', borderRadius: '8px' }}
+                    />
+                  );
+                }
+              })()}
             </div>
             <div style={{ padding: '14px 20px', display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid rgba(255, 255, 255, 0.1)' }}>
               <a

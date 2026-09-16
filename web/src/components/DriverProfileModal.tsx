@@ -22,6 +22,8 @@ export function DriverProfileModal({
 }: DriverProfileModalProps) {
   const [isFavoriting, setIsFavoriting] = useState(false);
   const [isFav, setIsFav] = useState(driver?.isFavorite || false);
+  const [showPhotoZoom, setShowPhotoZoom] = useState(false);
+  const [zoomScale, setZoomScale] = useState(1);
 
   if (!driver) return null;
 
@@ -169,9 +171,11 @@ export function DriverProfileModal({
             }}>
               {driver.selfieUrl ? (
                 <img 
-                  src={driver.selfieUrl} 
+                  src={driver.profilePhotoUrl || driver.selfieUrl} 
                   alt={driver.displayName} 
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'pointer' }}
+                  onClick={() => setShowPhotoZoom(true)}
+                  title="Clique para ampliar"
                 />
               ) : (
                 '🚗'
@@ -381,6 +385,72 @@ export function DriverProfileModal({
           )}
         </div>
       </div>
+
+      {/* MODAL DE ZOOM NA FOTO */}
+      {showPhotoZoom && (driver.profilePhotoUrl || driver.selfieUrl) && (
+        <div
+          onClick={() => { setShowPhotoZoom(false); setZoomScale(1); }}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.92)',
+            backdropFilter: 'blur(12px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000,
+            cursor: 'zoom-out',
+            padding: '20px'
+          }}
+        >
+          <div style={{ position: 'absolute', top: '16px', right: '16px', display: 'flex', gap: '8px', zIndex: 2001 }}>
+            <button
+              onClick={(e) => { e.stopPropagation(); setZoomScale(s => Math.min(s + 0.5, 4)); }}
+              style={{ background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', borderRadius: '50%', width: '40px', height: '40px', fontSize: '1.2rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >+</button>
+            <button
+              onClick={(e) => { e.stopPropagation(); setZoomScale(s => Math.max(s - 0.5, 0.5)); }}
+              style={{ background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', borderRadius: '50%', width: '40px', height: '40px', fontSize: '1.2rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >−</button>
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowPhotoZoom(false); setZoomScale(1); }}
+              style={{ background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', borderRadius: '50%', width: '40px', height: '40px', fontSize: '1.2rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            ><X size={20} /></button>
+          </div>
+          <img
+            src={driver.profilePhotoUrl || driver.selfieUrl}
+            alt={driver.displayName}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxWidth: '90vw',
+              maxHeight: '85vh',
+              objectFit: 'contain',
+              borderRadius: '12px',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
+              transform: `scale(${zoomScale})`,
+              transition: 'transform 0.3s ease',
+              cursor: zoomScale > 1 ? 'grab' : 'zoom-in'
+            }}
+          />
+          <div style={{
+            position: 'absolute',
+            bottom: '20px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: 'rgba(0,0,0,0.6)',
+            borderRadius: '20px',
+            padding: '6px 16px',
+            fontSize: '0.8rem',
+            color: '#fff',
+            fontWeight: 600
+          }}>
+            {driver.displayName} • Toque fora para fechar
+          </div>
+        </div>
+      )}
     </div>
   );
 }

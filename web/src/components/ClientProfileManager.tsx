@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, CheckCircle2, AlertCircle, Save, MapPin, FileText, Lock, X, RefreshCw } from 'lucide-react';
+import { User, CheckCircle2, AlertCircle, Save, MapPin, FileText, Lock, X, RefreshCw, Camera } from 'lucide-react';
 import type { UserProfile, ClientProfile } from '../types/auth';
 import { formatCep, fetchAddressByCep } from '../services/cepService';
 import { formatPhone, formatCpf, validateCpf, validatePhone } from '../utils/formatters';
@@ -47,6 +47,10 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
   const [showChangeRequest, setShowChangeRequest] = useState(false);
   const [changeRequestText, setChangeRequestText] = useState('');
   const [changeRequestSent, setChangeRequestSent] = useState(false);
+
+  // Foto de perfil do passageiro
+  const [profilePhotoUrl, setProfilePhotoUrl] = useState<string>(initialProfile?.profilePhotoUrl || '');
+  const profilePhotoInputRef = useRef<HTMLInputElement>(null);
 
   // Apenas Nome e CPF são protegidos contra alteração direta após homologação; Endereço e Telefone são sempre editáveis
   const isIdentityLocked = Boolean((isApproved || hasCompletedRides || initialProfile?.isProfileComplete) && !isUserAdmin);
@@ -131,7 +135,8 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
         neighborhood: neighborhood.trim(),
         city: city.trim(),
         state: state.trim().toUpperCase(),
-        isProfileComplete: true
+        isProfileComplete: true,
+        profilePhotoUrl: profilePhotoUrl || undefined
       };
 
       await dbSaveClientProfile(updatedClientProfile, user);
@@ -190,6 +195,97 @@ export const ClientProfileManager: React.FC<ClientProfileManagerProps> = ({
             👑 Painel Admin (Edição Livre)
           </span>
         )}
+      </div>
+
+      {/* Foto de Perfil do Passageiro */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '16px',
+        marginBottom: '18px',
+        padding: '14px 16px',
+        background: 'rgba(99, 102, 241, 0.06)',
+        border: '1px solid rgba(99, 102, 241, 0.2)',
+        borderRadius: '14px'
+      }}>
+        <div
+          onClick={() => profilePhotoInputRef.current?.click()}
+          style={{
+            width: '64px',
+            height: '64px',
+            borderRadius: '50%',
+            background: profilePhotoUrl ? 'transparent' : 'linear-gradient(135deg, #6366f1, #4f46e5)',
+            border: '2px solid rgba(99, 102, 241, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            overflow: 'hidden',
+            flexShrink: 0,
+            position: 'relative',
+            transition: 'transform 0.2s ease'
+          }}
+          title="Clique para alterar sua foto de perfil"
+        >
+          {profilePhotoUrl ? (
+            <img src={profilePhotoUrl} alt="Foto de perfil" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          ) : (
+            <Camera size={24} color="#fff" />
+          )}
+          <div style={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: '22px',
+            background: 'rgba(0,0,0,0.55)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            <Camera size={12} color="#fff" />
+          </div>
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-primary, #fff)' }}>
+            Foto de Perfil
+          </div>
+          <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary, #94a3b8)', marginTop: '2px' }}>
+            {profilePhotoUrl ? 'Toque para alterar sua foto' : 'Adicione uma foto para facilitar sua identificação'}
+          </div>
+        </div>
+        <input
+          ref={profilePhotoInputRef}
+          type="file"
+          accept="image/*"
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+              const img = new Image();
+              img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const maxSize = 400;
+                let w = img.width;
+                let h = img.height;
+                if (w > maxSize || h > maxSize) {
+                  if (w > h) { h = Math.round((h / w) * maxSize); w = maxSize; }
+                  else { w = Math.round((w / h) * maxSize); h = maxSize; }
+                }
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext('2d');
+                ctx?.drawImage(img, 0, 0, w, h);
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+                setProfilePhotoUrl(dataUrl);
+              };
+              img.src = ev.target?.result as string;
+            };
+            reader.readAsDataURL(file);
+          }}
+        />
       </div>
 
       {/* Banner de Cadastro Homologado (Nome e CPF Protegidos, Endereço Editável) */}

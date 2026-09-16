@@ -55,8 +55,8 @@ export function NearbyDriversMap({
       ];
 
       drivers.forEach((driver, idx) => {
-        const offsetLat = (Math.sin(idx * 1.7) * 0.008) + (idx % 2 === 0 ? 0.003 : -0.004);
-        const offsetLng = (Math.cos(idx * 1.7) * 0.009) + (idx % 2 === 0 ? -0.003 : 0.004);
+        const offsetLat = (Math.sin(idx * 1.7) * 0.001) + (idx % 2 === 0 ? 0.0004 : -0.0005);
+        const offsetLng = (Math.cos(idx * 1.7) * 0.0012) + (idx % 2 === 0 ? -0.0004 : 0.0005);
         const driverLat = (driver.currentLat && !isNaN(driver.currentLat)) ? driver.currentLat : (loc.latitude + offsetLat);
         const driverLng = (driver.currentLng && !isNaN(driver.currentLng)) ? driver.currentLng : (loc.longitude + offsetLng);
         points.push([driverLat, driverLng]);
@@ -180,7 +180,7 @@ export function NearbyDriversMap({
 
     const interval = setInterval(() => {
       loadDrivers();
-    }, 4000);
+    }, 3000);
 
     return () => {
       unsubscribe();
@@ -292,8 +292,8 @@ export function NearbyDriversMap({
       currentDriverIds.add(driverId);
 
       const hasExactGps = Boolean(driver.currentLat && driver.currentLng);
-      const offsetLat = (Math.sin(idx * 1.7) * 0.008) + (idx % 2 === 0 ? 0.003 : -0.004);
-      const offsetLng = (Math.cos(idx * 1.7) * 0.009) + (idx % 2 === 0 ? -0.003 : 0.004);
+      const offsetLat = (Math.sin(idx * 1.7) * 0.001) + (idx % 2 === 0 ? 0.0004 : -0.0005);
+      const offsetLng = (Math.cos(idx * 1.7) * 0.0012) + (idx % 2 === 0 ? -0.0004 : 0.0005);
 
       const driverLat = (driver.currentLat && !isNaN(driver.currentLat)) ? driver.currentLat : (userLocation.latitude + offsetLat);
       const driverLng = (driver.currentLng && !isNaN(driver.currentLng)) ? driver.currentLng : (userLocation.longitude + offsetLng);
@@ -314,8 +314,11 @@ export function NearbyDriversMap({
             </span>
             <span style="font-size: 11px; font-weight: bold; color: #10b981;">~${dist} km</span>
           </div>
-          <div style="font-size: 14px; font-weight: 800; color: #0f172a; margin-bottom: 3px; display: flex; align-items: center; gap: 4px;">
-            👤 ${driverFullName}
+          <div style="font-size: 14px; font-weight: 800; color: #0f172a; margin-bottom: 5px; display: flex; align-items: center; gap: 8px;">
+            ${(driver.profilePhotoUrl || driver.selfieUrl) 
+              ? `<img src="${driver.profilePhotoUrl || driver.selfieUrl}" style="width: 26px; height: 26px; border-radius: 50%; object-fit: cover; border: 1.5px solid #10b981; flex-shrink: 0;" />` 
+              : '<span>👤</span>'}
+            <span>${driverFullName}</span>
           </div>
           <div style="font-size: 12px; font-weight: 600; color: #334155; margin-bottom: 2px;">
             🚗 ${driver.vehicleBrand || 'Veículo'} ${driver.vehicleModel || 'Particular'}

@@ -50,6 +50,7 @@ export interface ClientProfile {
   deletedAt?: string;
   deletionType?: 'partial' | 'definitive';
   createdAt?: string;
+  profilePhotoUrl?: string;
 }
 
 export type DriverVerificationStatus = 'pending_docs' | 'under_review' | 'approved' | 'rejected' | 'suspended';
@@ -85,6 +86,7 @@ export interface DriverProfile {
   acceptsCash?: boolean;
   hasCardMachine?: boolean;
   pixKey?: string;
+  profilePhotoUrl?: string;
 }
 
 export interface DriverPublicProfile {
@@ -93,6 +95,7 @@ export interface DriverPublicProfile {
   displayName: string;
   avatarUrl?: string;
   selfieUrl?: string;
+  profilePhotoUrl?: string;
   verificationStatus: DriverVerificationStatus;
   isVerified: boolean;
   rating: number;

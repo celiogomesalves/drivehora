@@ -46,6 +46,8 @@ export const ActiveRidePanel: React.FC<ActiveRidePanelProps> = ({
   const [showSosModal, setShowSosModal] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [now, setNow] = useState(Date.now());
+  const [zoomPhotoUrl, setZoomPhotoUrl] = useState<string | null>(null);
+  const [zoomScale, setZoomScale] = useState(1);
 
   // Atualizador do relógio a cada segundo durante a corrida
   useEffect(() => {
@@ -476,18 +478,35 @@ export const ActiveRidePanel: React.FC<ActiveRidePanelProps> = ({
             gap: '14px'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{
-                width: '44px',
-                height: '44px',
-                borderRadius: '12px',
-                background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
-                color: '#fff',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0
-              }}>
-                <Car size={22} />
+              <div 
+                onClick={() => {
+                  const photoUrl = (driverInfo as any)?.profilePhotoUrl || driverInfo?.selfieUrl || (driverInfo as any)?.avatarUrl;
+                  if (photoUrl) setZoomPhotoUrl(photoUrl);
+                }}
+                style={{
+                  width: '44px',
+                  height: '44px',
+                  borderRadius: '12px',
+                  background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
+                  color: '#fff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                  overflow: 'hidden',
+                  cursor: ((driverInfo as any)?.profilePhotoUrl || driverInfo?.selfieUrl || (driverInfo as any)?.avatarUrl) ? 'pointer' : 'default'
+                }}
+                title="Clique para ampliar a foto"
+              >
+                {((driverInfo as any)?.profilePhotoUrl || driverInfo?.selfieUrl || (driverInfo as any)?.avatarUrl) ? (
+                  <img 
+                    src={(driverInfo as any)?.profilePhotoUrl || driverInfo?.selfieUrl || (driverInfo as any)?.avatarUrl} 
+                    alt={ride.driverName || 'Motorista'}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                ) : (
+                  <Car size={22} />
+                )}
               </div>
 
               <div>
@@ -1238,6 +1257,72 @@ export const ActiveRidePanel: React.FC<ActiveRidePanelProps> = ({
             >
               Fechar
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE ZOOM NA FOTO DO MOTORISTA / PASSAGEIRO */}
+      {zoomPhotoUrl && (
+        <div
+          onClick={() => { setZoomPhotoUrl(null); setZoomScale(1); }}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.92)',
+            backdropFilter: 'blur(12px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            cursor: 'zoom-out',
+            padding: '20px'
+          }}
+        >
+          <div style={{ position: 'absolute', top: '16px', right: '16px', display: 'flex', gap: '8px', zIndex: 10000 }}>
+            <button
+              onClick={(e) => { e.stopPropagation(); setZoomScale(s => Math.min(s + 0.5, 4)); }}
+              style={{ background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', borderRadius: '50%', width: '40px', height: '40px', fontSize: '1.2rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >+</button>
+            <button
+              onClick={(e) => { e.stopPropagation(); setZoomScale(s => Math.max(s - 0.5, 0.5)); }}
+              style={{ background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', borderRadius: '50%', width: '40px', height: '40px', fontSize: '1.2rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >−</button>
+            <button
+              onClick={(e) => { e.stopPropagation(); setZoomPhotoUrl(null); setZoomScale(1); }}
+              style={{ background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', borderRadius: '50%', width: '40px', height: '40px', fontSize: '1.2rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            ><X size={20} /></button>
+          </div>
+          <img
+            src={zoomPhotoUrl}
+            alt="Foto ampliada"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxWidth: '90vw',
+              maxHeight: '85vh',
+              objectFit: 'contain',
+              borderRadius: '12px',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
+              transform: `scale(${zoomScale})`,
+              transition: 'transform 0.3s ease',
+              cursor: zoomScale > 1 ? 'grab' : 'zoom-in'
+            }}
+          />
+          <div style={{
+            position: 'absolute',
+            bottom: '20px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: 'rgba(0,0,0,0.6)',
+            borderRadius: '20px',
+            padding: '6px 16px',
+            fontSize: '0.8rem',
+            color: '#fff',
+            fontWeight: 600
+          }}>
+            {ride.driverName || 'Motorista'} • Toque fora para fechar
           </div>
         </div>
       )}

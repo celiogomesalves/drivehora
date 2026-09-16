@@ -35,7 +35,7 @@ export const getCurrentPosition = (): Promise<Coordinates> => {
       {
         enableHighAccuracy: true,
         timeout: 10000,
-        maximumAge: 30000
+        maximumAge: 5000
       }
     );
   });

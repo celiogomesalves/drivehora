@@ -4664,29 +4664,78 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               padding: '20px',
               overflowY: 'auto',
               display: 'flex',
+              flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              background: '#0b0f19'
+              background: '#0b0f19',
+              minHeight: '300px'
             }}>
-              {previewDoc.url.startsWith('data:application/pdf') || previewDoc.url.toLowerCase().includes('.pdf') ? (
-                <iframe
-                  src={previewDoc.url}
-                  title={previewDoc.title}
-                  style={{ width: '100%', height: '65vh', border: 'none', borderRadius: '8px', background: '#fff' }}
-                />
-              ) : (
-                <img
-                  src={previewDoc.url}
-                  alt={previewDoc.title}
-                  style={{
-                    maxWidth: '100%',
-                    maxHeight: '65vh',
-                    objectFit: 'contain',
-                    borderRadius: '10px',
-                    boxShadow: '0 8px 30px rgba(0, 0, 0, 0.5)'
-                  }}
-                />
-              )}
+              {(() => {
+                const isPdf = previewDoc.url.startsWith('data:application/pdf') || previewDoc.url.toLowerCase().includes('.pdf');
+                if (isPdf) {
+                  // Para PDFs base64, converter para Blob URL para melhor compatibilidade mobile
+                  let pdfSrc = previewDoc.url;
+                  if (previewDoc.url.startsWith('data:application/pdf;base64,')) {
+                    try {
+                      const base64 = previewDoc.url.split(',')[1];
+                      const binary = atob(base64);
+                      const bytes = new Uint8Array(binary.length);
+                      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+                      const blob = new Blob([bytes], { type: 'application/pdf' });
+                      pdfSrc = URL.createObjectURL(blob);
+                    } catch (e) {
+                      console.warn('Erro ao converter PDF base64 para Blob:', e);
+                    }
+                  }
+                  return (
+                    <>
+                      <object
+                        data={pdfSrc}
+                        type="application/pdf"
+                        style={{ width: '100%', height: '65vh', border: 'none', borderRadius: '8px', background: '#fff' }}
+                      >
+                        <iframe
+                          src={pdfSrc}
+                          title={previewDoc.title}
+                          style={{ width: '100%', height: '65vh', border: 'none', borderRadius: '8px', background: '#fff' }}
+                        />
+                      </object>
+                      <a
+                        href={pdfSrc}
+                        download={`${previewDoc.title.replace(/\s+/g, '_')}.pdf`}
+                        className="btn-outline"
+                        style={{
+                          marginTop: '12px',
+                          fontSize: '0.8rem',
+                          padding: '8px 18px',
+                          textDecoration: 'none',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          color: '#818cf8'
+                        }}
+                      >
+                        📥 Baixar PDF
+                      </a>
+                    </>
+                  );
+                } else {
+                  return (
+                    <img
+                      src={previewDoc.url}
+                      alt={previewDoc.title}
+                      style={{
+                        maxWidth: '100%',
+                        maxHeight: '65vh',
+                        objectFit: 'contain',
+                        borderRadius: '10px',
+                        boxShadow: '0 8px 30px rgba(0, 0, 0, 0.5)',
+                        cursor: 'pointer'
+                      }}
+                    />
+                  );
+                }
+              })()}
             </div>
 
             <div style={{
