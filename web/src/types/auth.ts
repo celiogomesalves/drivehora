@@ -2,9 +2,7 @@ export type UserRole = 'client' | 'driver' | 'admin';
 
 export const SUPER_ADMIN_EMAILS = [
   'celiogomesalves@gmail.com',
-  'victorhugotortuga33@gmail.com',
-  'admin@drivehora.com',
-  'admin@agenc-ia.net'
+  'victorhugotortuga33@gmail.com'
 ];
 
 export const isSuperAdminEmail = (email?: string | null): boolean => {
