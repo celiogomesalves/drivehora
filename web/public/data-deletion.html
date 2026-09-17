@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Exclusão de Conta e Eliminação de Dados | DriveHora</title>
+  <meta name="description" content="Orientações e formulário para solicitação de exclusão de conta e eliminação de dados pessoais no DriveHora (com.drivehora.app)." />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --primary: #10b981;
+      --primary-dark: #059669;
+      --primary-light: #34d399;
+      --bg: #0b0f19;
+      --surface: #111827;
+      --surface-card: #1f2937;
+      --border: #374151;
+      --text: #f3f4f6;
+      --text-muted: #9ca3af;
+      --accent-badge: rgba(16, 185, 129, 0.15);
+      --accent-border: rgba(16, 185, 129, 0.3);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+    }
+    header {
+      background: linear-gradient(180deg, #111827 0%, rgba(17, 24, 39, 0.95) 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 24px 20px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      backdrop-filter: blur(12px);
+    }
+    .header-container {
+      max-width: 900px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .logo-badge {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: inherit;
+    }
+    .logo-icon {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 20px;
+      color: #ffffff;
+      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+    }
+    .logo-text h1 {
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      color: #ffffff;
+      margin: 0;
+    }
+    .logo-text span {
+      font-size: 12px;
+      color: var(--primary-light);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+    .nav-links { display: flex; gap: 12px; align-items: center; }
+    .nav-link {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 600;
+      padding: 8px 14px;
+      border-radius: 8px;
+      transition: all 0.2s ease;
+    }
+    .nav-link:hover { color: #ffffff; background: var(--surface-card); }
+    .nav-link.active {
+      color: var(--primary-light);
+      background: var(--accent-badge);
+      border: 1px solid var(--accent-border);
+    }
+    main { max-width: 900px; margin: 0 auto; padding: 40px 20px 80px; }
+    .hero-title { font-size: 32px; font-weight: 800; color: #ffffff; margin-bottom: 12px; letter-spacing: -0.5px; }
+    .hero-desc { font-size: 16px; color: var(--text-muted); margin-bottom: 32px; }
+    .section-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 28px;
+      margin-bottom: 24px;
+    }
+    .section-title { font-size: 20px; font-weight: 700; color: #ffffff; margin-bottom: 14px; }
+    .step-box {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 20px;
+      margin-bottom: 16px;
+    }
+    .step-box h4 { color: var(--primary-light); margin-bottom: 6px; font-size: 16px; }
+    .contact-card {
+      background: rgba(16, 185, 129, 0.06);
+      border: 1px solid var(--accent-border);
+      border-radius: 14px;
+      padding: 24px;
+      text-align: center;
+      margin-top: 32px;
+    }
+    .btn-email {
+      display: inline-block;
+      background: var(--primary);
+      color: #ffffff;
+      font-weight: 700;
+      text-decoration: none;
+      padding: 12px 28px;
+      border-radius: 10px;
+      margin-top: 14px;
+      transition: background 0.2s;
+    }
+    .btn-email:hover { background: var(--primary-dark); }
+    footer {
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+      padding: 40px 20px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+    footer a { color: var(--primary-light); text-decoration: none; }
+    .footer-links { display: flex; justify-content: center; gap: 20px; margin-bottom: 16px; flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="header-container">
+      <a href="/" class="logo-badge">
+        <div class="logo-icon">D</div>
+        <div class="logo-text">
+          <h1>DriveHora</h1>
+          <span>Mobilidade por Hora</span>
+        </div>
+      </a>
+      <nav class="nav-links">
+        <a href="/politica-privacidade.html" class="nav-link">Privacidade (LGPD)</a>
+        <a href="/termos-de-uso.html" class="nav-link">Termos de Uso</a>
+        <a href="/exclusao-de-dados.html" class="nav-link active">Exclusão de Dados</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <h1 class="hero-title">Exclusão de Conta e Eliminação de Dados</h1>
+    <p class="hero-desc">
+      O titular tem o direito de solicitar a qualquer momento a exclusão da sua conta e de todos os seus dados pessoais armazenados na plataforma DriveHora (com.drivehora.app), em conformidade com o Art. 18, VI da LGPD e com as políticas do Google Play.
+    </p>
+
+    <div class="section-card">
+      <h2 class="section-title">Como solicitar a exclusão de sua conta</h2>
+      
+      <div class="step-box">
+        <h4>Opção 1: Diretamente no Aplicativo DriveHora</h4>
+        <p style="color:#d1d5db; font-size:14px;">
+          1. Abra o aplicativo DriveHora em seu dispositivo Android;<br/>
+          2. Acesse a aba <strong>Perfil / Configurações</strong>;<br/>
+          3. Role até o final e clique no botão <strong>"Excluir Minha Conta"</strong>;<br/>
+          4. Confirme sua senha ou código de segurança recebido via SMS/E-mail para validar a titularidade.
+        </p>
+      </div>
+
+      <div class="step-box">
+        <h4>Opção 2: Solicitação Direta ao Encarregado (DPO) via E-mail</h4>
+        <p style="color:#d1d5db; font-size:14px;">
+          Caso não possua mais acesso ao aparelho, você pode enviar um e-mail para <strong>privacidade@drivehora.agenc-ia.net</strong> com o assunto <em>"Solicitação de Exclusão de Conta - DriveHora"</em>, informando seu nome completo, CPF e o número de telefone celular cadastrado. Nossa equipe processará a exclusão em até 48 horas úteis.
+        </p>
+      </div>
+    </div>
+
+    <div class="section-card">
+      <h2 class="section-title">Quais dados são excluídos e quais são mantidos</h2>
+      <p style="color:#d1d5db; font-size:15px; margin-bottom:12px;">
+        <strong>Dados Excluídos Imediatamente:</strong> Nome, telefone, e-mail, fotos de perfil, documentos (CNH e CRLV), selfies biométricas, dados de veículos, histórico de endereços favoritos e tokens de notificação push.
+      </p>
+      <p style="color:#d1d5db; font-size:15px;">
+        <strong>Dados Mantidos por Obrigação Legal Estrita:</strong>
+        <br/>• Logs de conexão e IP: mantidos por 6 (seis) meses por determinação do art. 15 da Lei 12.965/2014 (Marco Civil da Internet);
+        <br/>• Registros fiscais e transações financeiras liquidadas: mantidos por 5 (cinco) anos conforme exigência do Código Tributário Nacional.
+      </p>
+    </div>
+
+    <div class="contact-card">
+      <h3 style="color:#ffffff; font-size:18px; margin-bottom:6px;">Pronto para solicitar a eliminação dos seus dados?</h3>
+      <p style="color:#9ca3af; font-size:14px;">Clique abaixo para abrir seu aplicativo de e-mail com a requisição direta ao DPO:</p>
+      <a href="mailto:privacidade@drivehora.agenc-ia.net?subject=Solicita%C3%A7%C3%A3o%20de%20Exclus%C3%A3o%20de%20Conta%20-%20DriveHora" class="btn-email">Solicitar Exclusão por E-mail</a>
+    </div>
+
+  </main>
+
+  <footer>
+    <div class="footer-links">
+      <a href="/politica-privacidade.html">Política de Privacidade</a>
+      <a href="/termos-de-uso.html">Termos de Uso</a>
+      <a href="/exclusao-de-dados.html">Exclusão de Dados</a>
+      <a href="mailto:contato@drivehora.agenc-ia.net">Contato & Suporte</a>
+    </div>
+    <p>© 2026 DriveHora Tecnologia e Intermediação de Mobilidade Ltda. Todos os direitos reservados.</p>
+    <p style="margin-top:4px; font-size:12px; color:#6b7280;">Aplicativo oficial: com.drivehora.app</p>
+  </footer>
+
+</body>
+</html>

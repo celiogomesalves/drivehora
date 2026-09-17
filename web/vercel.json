@@ -2,7 +2,32 @@
   "framework": "vite",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "cleanUrls": true,
   "rewrites": [
+    {
+      "source": "/politica-privacidade",
+      "destination": "/politica-privacidade.html"
+    },
+    {
+      "source": "/privacy",
+      "destination": "/politica-privacidade.html"
+    },
+    {
+      "source": "/termos-de-uso",
+      "destination": "/termos-de-uso.html"
+    },
+    {
+      "source": "/terms",
+      "destination": "/termos-de-uso.html"
+    },
+    {
+      "source": "/exclusao-de-dados",
+      "destination": "/exclusao-de-dados.html"
+    },
+    {
+      "source": "/data-deletion",
+      "destination": "/exclusao-de-dados.html"
+    },
     {
       "source": "/((?!api/|.*\\.[\\w]+$).*)",
       "destination": "/index.html"
