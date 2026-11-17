@@ -54,11 +54,9 @@ export function NearbyDriversMap({
         [loc.latitude, loc.longitude]
       ];
 
-      drivers.forEach((driver, idx) => {
-        const offsetLat = (Math.sin(idx * 1.7) * 0.001) + (idx % 2 === 0 ? 0.0004 : -0.0005);
-        const offsetLng = (Math.cos(idx * 1.7) * 0.0012) + (idx % 2 === 0 ? -0.0004 : 0.0005);
-        const driverLat = (driver.currentLat && !isNaN(driver.currentLat)) ? driver.currentLat : (loc.latitude + offsetLat);
-        const driverLng = (driver.currentLng && !isNaN(driver.currentLng)) ? driver.currentLng : (loc.longitude + offsetLng);
+      drivers.forEach((driver) => {
+        const driverLat = (driver.currentLat && !isNaN(driver.currentLat)) ? Number(driver.currentLat) : loc.latitude;
+        const driverLng = (driver.currentLng && !isNaN(driver.currentLng)) ? Number(driver.currentLng) : loc.longitude;
         points.push([driverLat, driverLng]);
       });
 
@@ -292,11 +290,9 @@ export function NearbyDriversMap({
       currentDriverIds.add(driverId);
 
       const hasExactGps = Boolean(driver.currentLat && driver.currentLng);
-      const offsetLat = (Math.sin(idx * 1.7) * 0.001) + (idx % 2 === 0 ? 0.0004 : -0.0005);
-      const offsetLng = (Math.cos(idx * 1.7) * 0.0012) + (idx % 2 === 0 ? -0.0004 : 0.0005);
-
-      const driverLat = (driver.currentLat && !isNaN(driver.currentLat)) ? driver.currentLat : (userLocation.latitude + offsetLat);
-      const driverLng = (driver.currentLng && !isNaN(driver.currentLng)) ? driver.currentLng : (userLocation.longitude + offsetLng);
+      // Coordenadas métricas reais sem dispersão artificial ou offsets aproximados
+      const driverLat = (driver.currentLat && !isNaN(driver.currentLat)) ? Number(driver.currentLat) : userLocation.latitude;
+      const driverLng = (driver.currentLng && !isNaN(driver.currentLng)) ? Number(driver.currentLng) : userLocation.longitude;
 
       const dist = calculateDistanceKm(userLocation, { latitude: driverLat, longitude: driverLng });
       const etaMin = Math.max(1, Math.round(Number(dist) * 2.2));

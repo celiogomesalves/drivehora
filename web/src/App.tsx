@@ -2351,17 +2351,17 @@ export function App() {
           dbUpdateDriverLocation(currentUser.id, { latitude, longitude });
         },
         () => {},
-        { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 }
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
       );
     }
 
-    // Intervalo de segurança a cada 5 segundos
+    // Intervalo de segurança com polling de alta precisão a cada 2,5 segundos
     const interval = setInterval(async () => {
       try {
         const coords = await getCurrentPosition();
         dbUpdateDriverLocation(currentUser.id, coords);
       } catch (e) {}
-    }, 5000);
+    }, 2500);
 
     return () => {
       if (watchId !== null) navigator.geolocation.clearWatch(watchId);

@@ -243,11 +243,11 @@ export function LiveRideTrackerMap({ ride }: LiveRideTrackerMapProps) {
     }
 
     // C) Marcador do Motorista (Carro com Brilho Dinâmico e Posicionamento Exato em Tempo Real)
-    // Se o motorista chegou ao embarque, a posição física é exatamente no embarque
-    const effectiveDriverCoords = isArrived && originLat && originLng
-      ? { lat: originLat, lng: originLng }
-      : realDriverCoords
+    // Prioridade máxima: coordenada GPS REAL transmitida pelo aparelho do motorista com precisão métrica
+    const effectiveDriverCoords = realDriverCoords
       ? realDriverCoords
+      : isArrived && originLat && originLng
+      ? { lat: originLat, lng: originLng }
       : originLat && originLng
       ? { lat: originLat, lng: originLng }
       : null;
