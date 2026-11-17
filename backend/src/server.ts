@@ -392,6 +392,90 @@ app.post(["/notifications/topic", "/api/notifications/topic"], async (req, res) 
   }
 });
 
+// ========================================================
+// NOVOS ENDPOINTS: ANTECEDENTES CRIMINAIS, SEGURO E APPWRITE
+// ========================================================
+import { BackgroundCheckService } from "./backgroundCheckService";
+import { InsuranceService } from "./insuranceService";
+import { sendAppwriteTemplateEmail } from "./emailService";
+
+// 1. Executar checagem de antecedentes criminais do motorista
+app.post(["/drivers/background-check", "/api/drivers/background-check"], async (req, res) => {
+  try {
+    const { driverId, cpf, driverName, driverEmail, certificateUrl } = req.body;
+    if (!driverId || !cpf) {
+      return res.status(400).json({ error: "Informe driverId e cpf" });
+    }
+
+    const result = await BackgroundCheckService.runCheck({
+      driverId,
+      cpf,
+      driverName: driverName || "Motorista Parceiro",
+      driverEmail,
+      certificateUrl
+    });
+
+    return res.json({ ok: true, data: result });
+  } catch (err: any) {
+    console.error("Erro no background check:", err);
+    return res.status(500).json({ error: "Falha na validação de antecedentes", detail: err?.message });
+  }
+});
+
+// 2. Emitir Bilhete do Seguro APP para uma Corrida
+app.post(["/rides/:id/insurance-certificate", "/api/rides/:id/insurance-certificate"], async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { clientName, clientEmail, driverName, hours, hourlyRate, totalAmount } = req.body;
+
+    const certificate = await InsuranceService.issueRideCertificate({
+      rideId: id,
+      clientName: clientName || "Passageiro",
+      clientEmail,
+      driverName: driverName || "Motorista Parceiro",
+      hours: Number(hours || 1),
+      hourlyRate: Number(hourlyRate || 50),
+      totalAmount: Number(totalAmount || 50)
+    });
+
+    return res.json({ ok: true, certificate });
+  } catch (err: any) {
+    console.error("Erro ao emitir certificado de seguro:", err);
+    return res.status(500).json({ error: "Falha ao emitir bilhete de seguro", detail: err?.message });
+  }
+});
+
+// 3. Obter dados da Apólice Coletiva Ativa
+app.get(["/insurance/policy", "/api/insurance/policy"], async (_, res) => {
+  try {
+    const policy = await InsuranceService.getActivePolicy();
+    return res.json({ ok: true, policy });
+  } catch (err: any) {
+    return res.status(500).json({ error: "Falha ao obter apólice", detail: err?.message });
+  }
+});
+
+// 4. Disparo de Email via Templates do Appwrite
+app.post(["/notifications/email-template", "/api/notifications/email-template"], async (req, res) => {
+  try {
+    const { templateKey, toEmail, variables } = req.body;
+    if (!templateKey || !toEmail) {
+      return res.status(400).json({ error: "Informe templateKey e toEmail" });
+    }
+
+    const result = await sendAppwriteTemplateEmail({
+      templateKey,
+      toEmail,
+      variables: variables || {}
+    });
+
+    return res.json({ ok: true, result });
+  } catch (err: any) {
+    console.error("Erro ao disparar template de email:", err);
+    return res.status(500).json({ error: "Falha no envio do email", detail: err?.message });
+  }
+});
+
 const PORT = Number(process.env.PORT || 3000);
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 DriveHora API rodando em http://localhost:${PORT} e acessível na rede local em porta ${PORT}`);
