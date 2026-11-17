@@ -162,7 +162,8 @@ const DEFAULT_SETTINGS: SystemSettings = {
   }
 };
 
-import { getSupabase } from '../supabase';
+import { appwriteDatabases, APPWRITE_DATABASE_ID, APPWRITE_COLLECTIONS } from '../appwrite';
+import { ID, Query } from 'appwrite';
 
 const STORAGE_KEY = 'drivehora_system_settings_v1';
 const DB_SETTINGS_KEY = 'global_platform_settings';
@@ -240,106 +241,46 @@ export const getSystemSettings = (): SystemSettings => {
 };
 
 /**
- * Busca configurações diretamente do Supabase e sincroniza o cache local
+ * Busca configurações diretamente do Appwrite e sincroniza o cache local
  */
 export const fetchSystemSettingsFromDb = async (): Promise<SystemSettings> => {
   const local = getSystemSettings();
   try {
-    const sb = getSupabase();
-    if (!sb) return local;
+    const res = await appwriteDatabases.listDocuments(
+      APPWRITE_DATABASE_ID,
+      APPWRITE_COLLECTIONS.APP_SETTINGS,
+      [Query.equal('settings_key', DB_SETTINGS_KEY)]
+    );
 
-    let dbConfig: any = null;
-
-    // 1. Tenta buscar da tabela principal system_settings
-    try {
-      const { data, error } = await sb
-        .from('system_settings')
-        .select('value')
-        .eq('key', DB_SETTINGS_KEY)
-        .maybeSingle();
-
-      if (!error && data?.value) {
-        dbConfig = data.value;
-      }
-    } catch (err) {
-      console.warn('system_settings select aviso:', err);
-    }
-
-    // 2. Fallback resiliente: busca da tabela profiles (liberada para anon sem bloqueio de RLS)
-    if (!dbConfig) {
-      try {
-        const { data: profData, error: profErr } = await sb
-          .from('profiles')
-          .select('active_session_token')
-          .eq('id', 'app_global_system_settings')
-          .maybeSingle();
-
-        if (!profErr && profData?.active_session_token) {
-          dbConfig = JSON.parse(profData.active_session_token);
-        }
-      } catch (err) {
-        console.warn('profiles fallback select aviso:', err);
+    if (res.documents.length > 0) {
+      const doc = res.documents[0] as any;
+      if (doc.settings_json) {
+        const parsed = JSON.parse(doc.settings_json);
+        const merged: SystemSettings = {
+          ...local,
+          ...parsed,
+          branding: { ...local.branding, ...(parsed.branding || {}) },
+          firebase: { ...local.firebase, ...(parsed.firebase || {}) },
+          notificationRules: { ...local.notificationRules, ...(parsed.notificationRules || {}) },
+          paymentGateway: { ...local.paymentGateway, ...(parsed.paymentGateway || {}) },
+          rates: { ...local.rates, ...(parsed.rates || {}) },
+          insurance: { ...local.insurance, ...(parsed.insurance || {}) }
+        };
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+        } catch {}
+        return merged;
       }
     }
-
-    // Se não encontrou nenhuma configuração na nuvem ainda:
-    if (!dbConfig) {
-      // Se o local já tem chaves salvas (ex: admin já preencheu localmente), envia para a nuvem
-      if (local.paymentGateway?.secretKey || local.paymentGateway?.publicKey) {
-        await saveSystemSettingsToDb(local);
-      }
-      return local;
-    }
-
-    const merged: SystemSettings = {
-      ...DEFAULT_SETTINGS,
-      ...dbConfig,
-      firebase: {
-        projectId: dbConfig.firebase?.projectId?.trim() || DEFAULT_SETTINGS.firebase.projectId,
-        apiKey: dbConfig.firebase?.apiKey?.trim() || DEFAULT_SETTINGS.firebase.apiKey,
-        authDomain: dbConfig.firebase?.authDomain?.trim() || DEFAULT_SETTINGS.firebase.authDomain,
-        messagingSenderId: dbConfig.firebase?.messagingSenderId?.trim() || DEFAULT_SETTINGS.firebase.messagingSenderId,
-        appId: dbConfig.firebase?.appId?.trim() || DEFAULT_SETTINGS.firebase.appId,
-        vapidKey: dbConfig.firebase?.vapidKey?.trim() || DEFAULT_SETTINGS.firebase.vapidKey,
-        serverKey: dbConfig.firebase?.serverKey?.trim() || DEFAULT_SETTINGS.firebase.serverKey,
-        enabled: dbConfig.firebase?.enabled !== undefined ? dbConfig.firebase.enabled : DEFAULT_SETTINGS.firebase.enabled
-      },
-      notificationRules: { ...DEFAULT_SETTINGS.notificationRules, ...(dbConfig.notificationRules || {}) },
-      paymentGateway: { ...DEFAULT_SETTINGS.paymentGateway, ...(dbConfig.paymentGateway || {}) },
-      rates: { ...DEFAULT_SETTINGS.rates, ...(dbConfig.rates || {}) },
-      appUrl: dbConfig.appUrl?.trim() || DEFAULT_SETTINGS.appUrl,
-      vehicleCategories: (dbConfig.vehicleCategories && dbConfig.vehicleCategories.length > 0) 
-        ? dbConfig.vehicleCategories 
-        : DEFAULT_VEHICLE_CATEGORIES,
-      branding: {
-        logoOption: (() => {
-          const dedicated = typeof window !== 'undefined' ? localStorage.getItem('drivehora_selected_logo_option') : null;
-          if (dedicated === '1' || dedicated === '2' || dedicated === '3') return Number(dedicated) as 1 | 2 | 3;
-          if (dedicated === 'custom') return 'custom';
-          if (dbConfig.branding?.logoOption) return dbConfig.branding.logoOption;
-          if (local.branding?.logoOption) return local.branding.logoOption;
-          return DEFAULT_SETTINGS.branding.logoOption;
-        })(),
-        customLogoUrl: dbConfig.branding?.customLogoUrl || local.branding?.customLogoUrl || undefined,
-        newRideSound: dbConfig.branding?.newRideSound || local.branding?.newRideSound || DEFAULT_SETTINGS.branding.newRideSound,
-        acceptedSound: 'accepted_a',
-        inProgressSound: 'in_progress_a',
-        finishedSound: 'finished_a',
-        timeAlertSound: 'time_alert'
-      },
-      insurance: { ...DEFAULT_SETTINGS.insurance, ...(dbConfig.insurance || local.insurance || {}) }
-    };
-
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
-    return merged;
+    return local;
   } catch (e) {
-    console.warn('Erro ao buscar configurações no Supabase:', e);
+    console.warn('[Settings] Erro ao buscar configurações no Appwrite:', e);
     return local;
   }
 };
 
 /**
- * Salva as configurações localmente no cache e na nuvem no Supabase
+ * Salva as configurações localmente no cache e na nuvem no Appwrite
  */
 export const saveSystemSettings = async (settings: SystemSettings): Promise<void> => {
   try {
@@ -355,39 +296,33 @@ export const saveSystemSettings = async (settings: SystemSettings): Promise<void
 
 export const saveSystemSettingsToDb = async (settings: SystemSettings): Promise<void> => {
   try {
-    const sb = getSupabase();
-    if (!sb) return;
+    const res = await appwriteDatabases.listDocuments(
+      APPWRITE_DATABASE_ID,
+      APPWRITE_COLLECTIONS.APP_SETTINGS,
+      [Query.equal('settings_key', DB_SETTINGS_KEY)]
+    );
 
-    // 1. Tenta gravar na tabela system_settings
-    try {
-      await sb
-        .from('system_settings')
-        .upsert({
-          key: DB_SETTINGS_KEY,
-          value: settings,
-          updated_at: new Date().toISOString()
-        });
-    } catch (e) {
-      console.warn('system_settings upsert aviso:', e);
-    }
+    const payload = {
+      settings_key: DB_SETTINGS_KEY,
+      settings_json: JSON.stringify(settings)
+    };
 
-    // 2. Grava simultaneamente na tabela profiles com ID reservado (garante sincronização global mesmo com RLS ativo)
-    try {
-      await sb
-        .from('profiles')
-        .upsert({
-          id: 'app_global_system_settings',
-          role: 'admin',
-          email: 'settings@drivehora.app',
-          phone: '00000000000',
-          full_name: 'DriveHora Settings',
-          active_session_token: JSON.stringify(settings),
-          updated_at: new Date().toISOString()
-        });
-    } catch (e) {
-      console.warn('profiles fallback upsert aviso:', e);
+    if (res.documents.length > 0) {
+      await appwriteDatabases.updateDocument(
+        APPWRITE_DATABASE_ID,
+        APPWRITE_COLLECTIONS.APP_SETTINGS,
+        res.documents[0].$id,
+        payload
+      );
+    } else {
+      await appwriteDatabases.createDocument(
+        APPWRITE_DATABASE_ID,
+        APPWRITE_COLLECTIONS.APP_SETTINGS,
+        ID.unique(),
+        payload
+      );
     }
   } catch (e) {
-    console.warn('Aviso: Não foi possível sincronizar com o banco Supabase:', e);
+    console.warn('[Settings] Falha ao sincronizar configurações no Appwrite:', e);
   }
 };
